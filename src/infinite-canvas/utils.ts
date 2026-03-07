@@ -46,9 +46,12 @@ export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneDa
   const planes: PlaneData[] = [];
   const seed = hashString(`${cx},${cy},${cz}`);
   const ITEMS_PER_CHUNK = 3;
-  // Per-chunk phase offset spreads chunks relative to each other;
-  // the slot step guarantees images within a chunk are evenly spaced in depth.
-  const chunkPhase = seededRandom(seed) * DEPTH_FADE_END;
+  // Golden ratio sequence on chunk coordinates: maximises the minimum gap
+  // between any two chunk phases across the entire visible grid, eliminating
+  // cross-chunk depth collisions that random phases can't prevent.
+  const GOLDEN_RATIO = 0.6180339887498949;
+  const chunkSeq = (cx + 10) * 400 + (cy + 10) * 20 + (cz + 10);
+  const chunkPhase = ((chunkSeq * GOLDEN_RATIO) % 1) * DEPTH_FADE_END;
   const slotStep = DEPTH_FADE_END / ITEMS_PER_CHUNK;
 
   for (let i = 0; i < ITEMS_PER_CHUNK; i++) {
