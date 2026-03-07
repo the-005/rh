@@ -85,7 +85,7 @@ function MediaPlane({
   // Using a hash of world position gives a stable, pseudo-random value in [0, DEPTH_FADE_END).
   const initialZOffset =
     Math.abs(Math.sin(position.x * 127.1 + position.y * 311.7 + position.z * 74.7)) * DEPTH_FADE_END;
-  const localState = React.useRef({ opacity: 0, frame: 0, ready: false, zOffset: initialZOffset });
+  const localState = React.useRef({ opacity: 0, ready: false, zOffset: initialZOffset });
 
   const [texture, setTexture] = React.useState<THREE.Texture | null>(null);
   const [isReady, setIsReady] = React.useState(false);
@@ -110,11 +110,6 @@ function MediaPlane({
     const effectiveZ = INITIAL_CAMERA_Z - state.zOffset;
     mesh.position.z = effectiveZ;
 
-    state.frame = (state.frame + 1) & 1;
-
-    if (state.opacity < INVIS_THRESHOLD && !mesh.visible && state.frame === 0) {
-      return;
-    }
 
     const cam = cameraGridRef.current;
     const dist = Math.max(Math.abs(chunkCx - cam.cx), Math.abs(chunkCy - cam.cy), Math.abs(chunkCz - cam.cz));
@@ -140,7 +135,7 @@ function MediaPlane({
 
     const target = Math.min(gridFade, depthFade * depthFade);
 
-    state.opacity = target < INVIS_THRESHOLD && state.opacity < INVIS_THRESHOLD ? 0 : lerp(state.opacity, target, 0.18);
+    state.opacity = target < INVIS_THRESHOLD && state.opacity < INVIS_THRESHOLD ? 0 : lerp(state.opacity, target, 0.1);
 
     const isFullyOpaque = state.opacity > 0.99;
     material.opacity = isFullyOpaque ? 1 : state.opacity;
