@@ -20,7 +20,7 @@ import {
 } from "./constants";
 import styles from "./style.module.css";
 import { getTexture } from "./texture-manager";
-import type { ChunkData, InfiniteCanvasProps, MediaItem, PlaneData, SplitCanvasRole, SplitCanvasSharedRefs } from "./types";
+import type { ChunkData, InfiniteCanvasProps, MediaItem, PlaneData } from "./types";
 import { generateChunkPlanesCached, getChunkUpdateThrottleMs, shouldThrottleUpdate } from "./utils";
 
 const PLANE_GEOMETRY = new THREE.PlaneGeometry(1, 1);
@@ -44,10 +44,7 @@ type KeyboardKeys = {
 };
 
 const getTouchDistance = (touches: Touch[]) => {
-  if (touches.length < 2) {
-    return 0;
-  }
-
+  if (touches.length < 2) return 0;
   const [t1, t2] = touches;
   const dx = t1.clientX - t2.clientX;
   const dy = t1.clientY - t2.clientY;
@@ -60,6 +57,8 @@ type CameraGridState = {
   cz: number;
   camZ: number;
   camX: number;
+  /** Per-frame Z velocity applied to image depth offsets (not camera). */
+  scrollDelta: number;
 };
 
 function MediaPlane({
@@ -70,7 +69,6 @@ function MediaPlane({
   chunkCy,
   chunkCz,
   cameraGridRef,
-  side,
 }: {
   position: THREE.Vector3;
   scale: THREE.Vector3;
@@ -79,11 +77,10 @@ function MediaPlane({
   chunkCy: number;
   chunkCz: number;
   cameraGridRef: React.RefObject<CameraGridState>;
-  side?: "left" | "right";
 }) {
   const meshRef = React.useRef<THREE.Mesh>(null);
   const materialRef = React.useRef<THREE.MeshBasicMaterial>(null);
-  const localState = React.useRef({ opacity: 0, frame: 0, ready: false });
+  const localState = React.useRef({ opacity: 0, frame: 0, ready: false, zOffset: 0 });
 
   const [texture, setTexture] = React.useState<THREE.Texture | null>(null);
   const [isReady, setIsReady] = React.useState(false);
@@ -93,21 +90,22 @@ function MediaPlane({
     const mesh = meshRef.current;
     const state = localState.current;
 
-    if (!material || !mesh) {
-      return;
+    if (!material || !mesh) return;
+
+    // Per-image depth bias: accumulate Z offset based on scroll and screen-space side.
+    // Panning never changes zOffset, so crossing the center causes no scale jump.
+    const { scrollDelta, camX } = cameraGridRef.current;
+    if (Math.abs(scrollDelta) > 0.00001) {
+      const isRight = position.x >= camX;
+      state.zOffset = clamp(
+        state.zOffset + scrollDelta * (isRight ? 1 : -1),
+        -(DEPTH_FADE_END + 50),
+        INITIAL_CAMERA_Z - 2,
+      );
     }
 
-    // Side enforcement: hide planes on the wrong half of the split screen
-    if (side) {
-      const isRightOfCamera = position.x >= cameraGridRef.current.camX;
-      const isWrongSide = side === "left" ? isRightOfCamera : !isRightOfCamera;
-      if (isWrongSide) {
-        state.opacity = 0;
-        material.opacity = 0;
-        mesh.visible = false;
-        return;
-      }
-    }
+    const effectiveZ = position.z + state.zOffset;
+    mesh.position.z = effectiveZ;
 
     state.frame = (state.frame + 1) & 1;
 
@@ -117,7 +115,7 @@ function MediaPlane({
 
     const cam = cameraGridRef.current;
     const dist = Math.max(Math.abs(chunkCx - cam.cx), Math.abs(chunkCy - cam.cy), Math.abs(chunkCz - cam.cz));
-    const absDepth = Math.abs(position.z - cam.camZ);
+    const absDepth = Math.abs(effectiveZ - INITIAL_CAMERA_Z);
 
     if (absDepth > DEPTH_FADE_END + 50) {
       state.opacity = 0;
@@ -145,17 +143,14 @@ function MediaPlane({
     mesh.visible = state.opacity > INVIS_THRESHOLD;
   });
 
-  // Calculate display scale from media dimensions (from manifest)
   const displayScale = React.useMemo(() => {
     if (media.width && media.height) {
       const aspect = media.width / media.height;
       return new THREE.Vector3(scale.y * aspect, scale.y, 1);
     }
-
     return scale;
   }, [media.width, media.height, scale]);
 
-  // Load texture with onLoad callback
   React.useEffect(() => {
     const state = localState.current;
     state.ready = false;
@@ -163,7 +158,6 @@ function MediaPlane({
     setIsReady(false);
 
     const material = materialRef.current;
-
     if (material) {
       material.opacity = 0;
       material.depthWrite = false;
@@ -174,19 +168,15 @@ function MediaPlane({
       state.ready = true;
       setIsReady(true);
     });
-
     setTexture(tex);
   }, [media]);
 
-  // Apply texture when ready
   React.useEffect(() => {
     const material = materialRef.current;
     const mesh = meshRef.current;
     const state = localState.current;
 
-    if (!material || !mesh || !texture || !isReady || !state.ready) {
-      return;
-    }
+    if (!material || !mesh || !texture || !isReady || !state.ready) return;
 
     material.map = texture;
     material.opacity = state.opacity;
@@ -194,9 +184,7 @@ function MediaPlane({
     mesh.scale.copy(displayScale);
   }, [displayScale, texture, isReady]);
 
-  if (!texture || !isReady) {
-    return null;
-  }
+  if (!texture || !isReady) return null;
 
   return (
     <mesh ref={meshRef} position={position} scale={displayScale} visible={false} geometry={PLANE_GEOMETRY}>
@@ -211,14 +199,12 @@ function Chunk({
   cz,
   media,
   cameraGridRef,
-  side,
 }: {
   cx: number;
   cy: number;
   cz: number;
   media: MediaItem[];
   cameraGridRef: React.RefObject<CameraGridState>;
-  side?: "left" | "right";
 }) {
   const [planes, setPlanes] = React.useState<PlaneData[] | null>(null);
 
@@ -228,7 +214,6 @@ function Chunk({
 
     if (typeof requestIdleCallback !== "undefined") {
       const id = requestIdleCallback(run, { timeout: 100 });
-
       return () => {
         canceled = true;
         cancelIdleCallback(id);
@@ -242,18 +227,13 @@ function Chunk({
     };
   }, [cx, cy, cz]);
 
-  if (!planes) {
-    return null;
-  }
+  if (!planes) return null;
 
   return (
     <group>
       {planes.map((plane) => {
         const mediaItem = media[plane.mediaIndex % media.length];
-
-        if (!mediaItem) {
-          return null;
-        }
+        if (!mediaItem) return null;
 
         return (
           <MediaPlane
@@ -265,7 +245,6 @@ function Chunk({
             chunkCy={cy}
             chunkCz={cz}
             cameraGridRef={cameraGridRef}
-            side={side}
           />
         );
       })}
@@ -305,28 +284,20 @@ const createInitialState = (camZ: number): ControllerState => ({
   pendingChunk: null,
 });
 
-function SceneController({
-  media,
-  onTextureProgress,
-  splitRole,
-  splitRefs,
-  zoomSign = 1,
-  side,
-}: {
-  media: MediaItem[];
-  onTextureProgress?: (progress: number) => void;
-  splitRole?: SplitCanvasRole;
-  splitRefs?: SplitCanvasSharedRefs;
-  zoomSign?: 1 | -1;
-  side?: "left" | "right";
-}) {
+function SceneController({ media, onTextureProgress }: { media: MediaItem[]; onTextureProgress?: (progress: number) => void }) {
   const { camera, gl } = useThree();
   const isTouchDevice = useIsTouchDevice();
   const [, getKeys] = useKeyboardControls<keyof KeyboardKeys>();
 
   const state = React.useRef<ControllerState>(createInitialState(INITIAL_CAMERA_Z));
-  const cameraGridRef = React.useRef<CameraGridState>({ cx: 0, cy: 0, cz: 0, camZ: camera.position.z, camX: camera.position.x });
-  const lastConsumedScrollRef = React.useRef(0);
+  const cameraGridRef = React.useRef<CameraGridState>({
+    cx: 0,
+    cy: 0,
+    cz: 0,
+    camZ: INITIAL_CAMERA_Z,
+    camX: 0,
+    scrollDelta: 0,
+  });
 
   const [chunks, setChunks] = React.useState<ChunkData[]>([]);
 
@@ -335,7 +306,6 @@ function SceneController({
 
   React.useEffect(() => {
     const rounded = Math.round(progress);
-
     if (rounded > maxProgress.current) {
       maxProgress.current = rounded;
       onTextureProgress?.(rounded);
@@ -347,11 +317,6 @@ function SceneController({
     const s = state.current;
     canvas.style.cursor = "grab";
 
-    if (splitRole === "secondary") {
-      // Secondary has no input listeners; cursor is managed each frame from dragRef
-      return;
-    }
-
     const setCursor = (cursor: string) => {
       canvas.style.cursor = cursor;
     };
@@ -360,27 +325,23 @@ function SceneController({
       s.isDragging = true;
       s.lastMouse = { x: e.clientX, y: e.clientY };
       setCursor("grabbing");
-      if (splitRefs) splitRefs.dragRef.current.isDragging = true;
     };
 
     const onMouseUp = () => {
       s.isDragging = false;
       setCursor("grab");
-      if (splitRefs) splitRefs.dragRef.current.isDragging = false;
     };
 
     const onMouseLeave = () => {
       s.mouse = { x: 0, y: 0 };
       s.isDragging = false;
       setCursor("grab");
-      if (splitRefs) splitRefs.dragRef.current.isDragging = false;
     };
 
     const onMouseMove = (e: MouseEvent) => {
-      const rect = canvas.getBoundingClientRect();
       s.mouse = {
-        x: ((e.clientX - rect.left) / rect.width) * 2 - 1,
-        y: -((e.clientY - rect.top) / rect.height) * 2 + 1,
+        x: (e.clientX / window.innerWidth) * 2 - 1,
+        y: -(e.clientY / window.innerHeight) * 2 + 1,
       };
 
       if (s.isDragging) {
@@ -390,12 +351,16 @@ function SceneController({
       }
     };
 
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      s.scrollAccum += e.deltaY * 0.006;
+    };
+
     const onTouchStart = (e: TouchEvent) => {
       e.preventDefault();
       s.lastTouches = Array.from(e.touches) as Touch[];
       s.lastTouchDist = getTouchDistance(s.lastTouches);
       setCursor("grabbing");
-      if (splitRefs) splitRefs.dragRef.current.isDragging = true;
     };
 
     const onTouchMove = (e: TouchEvent) => {
@@ -405,18 +370,14 @@ function SceneController({
       if (touches.length === 1 && s.lastTouches.length >= 1) {
         const [touch] = touches;
         const [last] = s.lastTouches;
-
         if (touch && last) {
           s.targetVel.x -= (touch.clientX - last.clientX) * 0.02;
           s.targetVel.y += (touch.clientY - last.clientY) * 0.02;
         }
-      } else if (touches.length === 2 && !splitRefs) {
-        // In split mode the parent wrapper owns pinch-to-zoom
-        if (s.lastTouchDist > 0) {
-          const dist = getTouchDistance(touches);
-          s.scrollAccum += (s.lastTouchDist - dist) * 0.006;
-          s.lastTouchDist = dist;
-        }
+      } else if (touches.length === 2 && s.lastTouchDist > 0) {
+        const dist = getTouchDistance(touches);
+        s.scrollAccum += (s.lastTouchDist - dist) * 0.006;
+        s.lastTouchDist = dist;
       }
 
       s.lastTouches = touches;
@@ -426,23 +387,13 @@ function SceneController({
       s.lastTouches = Array.from(e.touches) as Touch[];
       s.lastTouchDist = getTouchDistance(s.lastTouches);
       setCursor("grab");
-      if (splitRefs) splitRefs.dragRef.current.isDragging = false;
     };
-
-    // In split mode, the parent wrapper div owns the wheel event
-    let onWheel: ((e: WheelEvent) => void) | null = null;
-    if (!splitRefs) {
-      onWheel = (e: WheelEvent) => {
-        e.preventDefault();
-        s.scrollAccum += e.deltaY * 0.006;
-      };
-      canvas.addEventListener("wheel", onWheel, { passive: false });
-    }
 
     canvas.addEventListener("mousedown", onMouseDown);
     window.addEventListener("mouseup", onMouseUp);
     window.addEventListener("mousemove", onMouseMove);
     canvas.addEventListener("mouseleave", onMouseLeave);
+    canvas.addEventListener("wheel", onWheel, { passive: false });
     canvas.addEventListener("touchstart", onTouchStart, { passive: false });
     canvas.addEventListener("touchmove", onTouchMove, { passive: false });
     canvas.addEventListener("touchend", onTouchEnd, { passive: false });
@@ -452,34 +403,26 @@ function SceneController({
       window.removeEventListener("mouseup", onMouseUp);
       window.removeEventListener("mousemove", onMouseMove);
       canvas.removeEventListener("mouseleave", onMouseLeave);
-      if (onWheel) canvas.removeEventListener("wheel", onWheel);
+      canvas.removeEventListener("wheel", onWheel);
       canvas.removeEventListener("touchstart", onTouchStart);
       canvas.removeEventListener("touchmove", onTouchMove);
       canvas.removeEventListener("touchend", onTouchEnd);
     };
-  }, [gl, splitRole, splitRefs]);
+  }, [gl]);
 
   useFrame(() => {
     const s = state.current;
     const now = performance.now();
 
-    // Keyboard input: primary only (secondary x/y comes from panRef, z from shared scroll)
-    if (splitRole !== "secondary") {
-      const { forward, backward, left, right, up, down } = getKeys();
-      if (forward) s.targetVel.z -= KEYBOARD_SPEED;
-      if (backward) s.targetVel.z += KEYBOARD_SPEED;
-      if (left) s.targetVel.x -= KEYBOARD_SPEED;
-      if (right) s.targetVel.x += KEYBOARD_SPEED;
-      if (down) s.targetVel.y -= KEYBOARD_SPEED;
-      if (up) s.targetVel.y += KEYBOARD_SPEED;
-    }
+    const { left, right, up, down } = getKeys();
+    if (left) s.targetVel.x -= KEYBOARD_SPEED;
+    if (right) s.targetVel.x += KEYBOARD_SPEED;
+    if (down) s.targetVel.y -= KEYBOARD_SPEED;
+    if (up) s.targetVel.y += KEYBOARD_SPEED;
 
-    // Consume scroll from shared ref (split mode) — applies zoomSign inversion
-    if (splitRefs) {
-      const delta = splitRefs.scrollRef.current.accumulated - lastConsumedScrollRef.current;
-      lastConsumedScrollRef.current = splitRefs.scrollRef.current.accumulated;
-      s.scrollAccum += delta * zoomSign;
-    }
+    // Z velocity driven by scroll — applied to image depth offsets, NOT camera Z
+    s.targetVel.z += s.scrollAccum;
+    s.scrollAccum *= 0.8;
 
     const isZooming = Math.abs(s.velocity.z) > 0.05;
     const zoomFactor = clamp(s.basePos.z / 50, 0.3, 2.0);
@@ -487,7 +430,7 @@ function SceneController({
     const driftLerp = isZooming ? 0.2 : 0.12;
 
     if (s.isDragging) {
-      // Freeze drift during drag - keep it at current value
+      // Freeze drift during drag
     } else if (isTouchDevice) {
       s.drift.x = lerp(s.drift.x, 0, driftLerp);
       s.drift.y = lerp(s.drift.y, 0, driftLerp);
@@ -495,9 +438,6 @@ function SceneController({
       s.drift.x = lerp(s.drift.x, s.mouse.x * driftAmount, driftLerp);
       s.drift.y = lerp(s.drift.y, s.mouse.y * driftAmount, driftLerp);
     }
-
-    s.targetVel.z += s.scrollAccum;
-    s.scrollAccum *= 0.8;
 
     s.targetVel.x = clamp(s.targetVel.x, -MAX_VELOCITY, MAX_VELOCITY);
     s.targetVel.y = clamp(s.targetVel.y, -MAX_VELOCITY, MAX_VELOCITY);
@@ -509,37 +449,27 @@ function SceneController({
 
     s.basePos.x += s.velocity.x;
     s.basePos.y += s.velocity.y;
-    s.basePos.z += s.velocity.z;
-
-    // Secondary: override X/Y pan from shared state (primary owns pan)
-    if (splitRole === "secondary" && splitRefs) {
-      s.basePos.x = splitRefs.panRef.current.x;
-      s.basePos.y = splitRefs.panRef.current.y;
-      s.drift.x = splitRefs.panRef.current.driftX;
-      s.drift.y = splitRefs.panRef.current.driftY;
-    }
-
-    camera.position.set(s.basePos.x + s.drift.x, s.basePos.y + s.drift.y, s.basePos.z);
-
-    // Primary: write X/Y pan to shared state
-    if (splitRole === "primary" && splitRefs) {
-      splitRefs.panRef.current = { x: s.basePos.x, y: s.basePos.y, driftX: s.drift.x, driftY: s.drift.y };
-    }
+    // s.basePos.z intentionally not updated — camera Z is fixed at INITIAL_CAMERA_Z
 
     s.targetVel.x *= VELOCITY_DECAY;
     s.targetVel.y *= VELOCITY_DECAY;
     s.targetVel.z *= VELOCITY_DECAY;
 
+    // Camera moves only in XY; Z is fixed so all images stay in the same depth reference frame
+    camera.position.set(s.basePos.x + s.drift.x, s.basePos.y + s.drift.y, INITIAL_CAMERA_Z);
+
     const cx = Math.floor(s.basePos.x / CHUNK_SIZE);
     const cy = Math.floor(s.basePos.y / CHUNK_SIZE);
-    const cz = Math.floor(s.basePos.z / CHUNK_SIZE);
+    const cz = Math.floor(INITIAL_CAMERA_Z / CHUNK_SIZE);
 
-    cameraGridRef.current = { cx, cy, cz, camZ: s.basePos.z, camX: s.basePos.x };
-
-    // Secondary: mirror cursor from shared drag state
-    if (splitRole === "secondary" && splitRefs) {
-      gl.domElement.style.cursor = splitRefs.dragRef.current.isDragging ? "grabbing" : "grab";
-    }
+    cameraGridRef.current = {
+      cx,
+      cy,
+      cz,
+      camZ: INITIAL_CAMERA_Z,
+      camX: s.basePos.x,
+      scrollDelta: s.velocity.z,
+    };
 
     const key = `${cx},${cy},${cz}`;
     if (key !== s.lastChunkKey) {
@@ -560,14 +490,14 @@ function SceneController({
           cx: ucx + o.dx,
           cy: ucy + o.dy,
           cz: ucz + o.dz,
-        }))
+        })),
       );
     }
   });
 
   React.useEffect(() => {
     const s = state.current;
-    s.basePos = { x: camera.position.x, y: camera.position.y, z: camera.position.z };
+    s.basePos = { x: camera.position.x, y: camera.position.y, z: INITIAL_CAMERA_Z };
 
     setChunks(
       CHUNK_OFFSETS.map((o) => ({
@@ -575,14 +505,14 @@ function SceneController({
         cx: o.dx,
         cy: o.dy,
         cz: o.dz,
-      }))
+      })),
     );
   }, [camera]);
 
   return (
     <>
       {chunks.map((chunk) => (
-        <Chunk key={chunk.key} cx={chunk.cx} cy={chunk.cy} cz={chunk.cz} media={media} cameraGridRef={cameraGridRef} side={side} />
+        <Chunk key={chunk.key} cx={chunk.cx} cy={chunk.cy} cz={chunk.cz} media={media} cameraGridRef={cameraGridRef} />
       ))}
     </>
   );
@@ -600,23 +530,20 @@ export function InfiniteCanvasScene({
   fogFar = 320,
   backgroundColor = "#ffffff",
   fogColor = "#ffffff",
-  splitRole,
-  splitRefs,
-  zoomSign = 1,
-  side,
 }: InfiniteCanvasProps) {
   const isTouchDevice = useIsTouchDevice();
   const dpr = Math.min(window.devicePixelRatio || 1, isTouchDevice ? 1.25 : 1.5);
 
-  if (!media.length) {
-    return null;
-  }
+  // Stable reference — prevents R3F from resetting camera position on every parent re-render
+  const cameraPos = React.useMemo<[number, number, number]>(() => [0, 0, INITIAL_CAMERA_Z], []);
+
+  if (!media.length) return null;
 
   return (
     <KeyboardControls map={KEYBOARD_MAP}>
       <div className={styles.container}>
         <Canvas
-          camera={{ position: [0, 0, INITIAL_CAMERA_Z], fov: cameraFov, near: cameraNear, far: cameraFar }}
+          camera={{ position: cameraPos, fov: cameraFov, near: cameraNear, far: cameraFar }}
           dpr={dpr}
           flat
           gl={{ antialias: false, powerPreference: "high-performance" }}
@@ -624,14 +551,7 @@ export function InfiniteCanvasScene({
         >
           <color attach="background" args={[backgroundColor]} />
           <fog attach="fog" args={[fogColor, fogNear, fogFar]} />
-          <SceneController
-            media={media}
-            onTextureProgress={onTextureProgress}
-            splitRole={splitRole}
-            splitRefs={splitRefs}
-            zoomSign={zoomSign}
-            side={side}
-          />
+          <SceneController media={media} onTextureProgress={onTextureProgress} />
           {showFps && <Stats className={styles.stats} />}
         </Canvas>
 
@@ -643,7 +563,7 @@ export function InfiniteCanvasScene({
               </>
             ) : (
               <>
-                <b>WASD</b> Move · <b>QE</b> Up/Down · <b>Scroll/Space</b> Zoom
+                <b>WASD</b> Move · <b>QE</b> Up/Down · <b>Scroll</b> Zoom
               </>
             )}
           </div>
