@@ -43,10 +43,10 @@ Media items are `{ url, width, height }`. To swap in your own photos, replace `p
 ### Key modules
 
 **`src/infinite-canvas/`** — the core 3D engine:
-- `scene.tsx` — three components: `InfiniteCanvasScene` (Canvas setup, fog, DPR), `SceneController` (input + chunk management), `Chunk` (spatial cell), `MediaPlane` (single image plane with fade)
+- `scene.tsx` — four components: `InfiniteCanvasScene` (Canvas setup, fog, DPR), `SceneController` (input + chunk management), `Chunk` (spatial cell), `MediaPlane` (single image plane with depth cycling + fade)
 - `constants.ts` — all tunable physics/render values. Edit here to change feel.
 - `texture-manager.ts` — texture loading/caching; calls `onTextureProgress`
-- `utils.ts` — plane generation (5 planes/chunk, sizes 12–20 units, seeded RNG from chunk coords), LRU plane cache (max 256 entries), chunk update throttle logic
+- `utils.ts` — plane generation (3 planes/chunk, sizes 12–20 units, seeded RNG from chunk coords), LRU plane cache (max 256 entries), chunk update throttle logic
 
 **`src/app/index.tsx`** — root `App`; wires manifest → `InfiniteCanvas` + `PageLoader` + `Frame`
 
@@ -56,11 +56,15 @@ Media items are `{ url, width, height }`. To swap in your own photos, replace `p
 
 ### Performance patterns
 
-**`cameraGridRef`**: Camera position in chunk-grid coordinates is stored in a `React.RefObject<CameraGridState>` and passed to every `MediaPlane`. Planes read it each frame in `useFrame` without causing React re-renders — critical for smooth animation.
+**`cameraGridRef`**: A `React.RefObject<CameraGridState>` shared with every `MediaPlane`. Contains chunk-grid coords (`cx/cy/cz`), `camX` (world-space camera X), and `scrollDelta` (per-frame Z velocity). Planes read it each frame in `useFrame` without React re-renders — critical for smooth animation.
 
 **Two-stage velocity**: Input accumulates into `targetVel`. Each frame, `velocity` is lerped toward `targetVel` (smoothing), then `targetVel` is multiplied by `VELOCITY_DECAY` (friction). `drift` is a separate parallax offset from mouse position, not part of velocity.
 
-**Chunk throttling**: Chunk list updates are throttled to 100 ms normally, 400–500 ms while zooming fast, to avoid thrashing during rapid Z-axis movement.
+**Depth cycling (scroll zoom effect)**: Scrolling drives `velocity.z` which moves each image through a `[0, DEPTH_FADE_END)` depth cycle rather than moving the camera. `effectiveZ = INITIAL_CAMERA_Z - zOffset`. Images left of camera zoom out on scroll-up; images right zoom in. The cycle uses opacity fade zones: `NEAR_FADE_END` (fade in near camera), fully visible to `DEPTH_FADE_START`, then fade out to `DEPTH_FADE_END` where the image wraps invisibly back to 0.
+
+**Depth phase assignment** (`PlaneData.depthPhase`): Each image's starting position in the depth cycle is pre-computed in `generateChunkPlanes`. Within a chunk, 3 images are assigned evenly-spaced slots (`DEPTH_FADE_END / 3 ≈ 87` units apart). The per-chunk phase offset uses a golden-ratio sequence on chunk coordinates — this maximises the minimum gap between phases of different chunks, preventing depth collisions.
+
+**Chunk throttling**: Chunk list updates are throttled to 100 ms normally, 400–500 ms while zooming fast, to avoid thrashing during rapid scroll.
 
 **React Compiler**: `babel-plugin-react-compiler` is active. Do not add manual `useMemo`/`useCallback` — the compiler handles memoization.
 
