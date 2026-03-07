@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-A photography portfolio website built as a 3D infinite pannable space — bootstrapped from [edoardolunardi/infinite-canvas](https://github.com/edoardolunardi/infinite-canvas). Uses React 19, Three.js, React Three Fiber, TypeScript, and Vite.
+A photography portfolio website built as a 3D infinite pannable space — bootstrapped from [edoardolunardi/infinite-canvas](https://github.com/edoardolunardi/infinite-canvas). Uses React 19 + React Compiler, Three.js, React Three Fiber, TypeScript, and Vite.
 
 ## Git workflow
 
-After every meaningful change: stage specific files, commit with a clear message, and push to `origin main`. This keeps GitHub as the always-current backup.
+After every meaningful change: stage specific files, commit with a clear message, and push to `origin main`.
 
 ```bash
 git add <files>
@@ -20,7 +20,7 @@ Repository: `https://github.com/the-005/rh`
 
 ## Commands
 
-Node 22 is required (see `.nvmrc`). Node is installed via Homebrew at `/opt/homebrew/opt/node@22/bin/` — prefix commands with `export PATH="/opt/homebrew/opt/node@22/bin:$PATH" &&` if `npm` is not in PATH.
+Node 22 is required (see `.nvmrc`). Node is installed via Homebrew — prefix commands with `export PATH="/opt/homebrew/opt/node@22/bin:$PATH" &&` if `npm` is not in PATH.
 
 ```bash
 npm run dev          # start dev server (network accessible)
@@ -31,35 +31,41 @@ npm run check:biome  # Biome lint only
 npm run format       # auto-format with Biome
 ```
 
-Linting/formatting is handled by **Biome** (not ESLint/Prettier). Config is in `biome.jsonc`.
+Linting/formatting is **Biome** (not ESLint/Prettier). Config in `biome.jsonc`.
 
 ## Architecture
 
 ### Data flow
 `src/artworks/manifest.json` → `App` → `InfiniteCanvas` → Three.js scene
 
-Media items are plain objects `{ url, width, height }`. To swap in your own photos, replace `public/artworks/` images and regenerate `src/artworks/manifest.json` (the script `scripts/download-artworks.ts` shows the manifest shape).
+Media items are `{ url, width, height }`. To swap in your own photos, replace `public/artworks/` images and update `src/artworks/manifest.json` to match (see `scripts/download-artworks.ts` for the manifest shape).
 
 ### Key modules
 
-**`src/infinite-canvas/`** — the core 3D engine (do not restructure lightly):
-- `scene.tsx` — three main components: `SceneController` (camera/input), `Chunk` (a cubic spatial cell), `MediaPlane` (a single image rendered as a 3D plane with fade-in)
-- `constants.ts` — all tunable physics/render values (`CHUNK_SIZE`, `RENDER_DISTANCE`, `MAX_VELOCITY`, etc.)
-- `texture-manager.ts` — texture loading/caching; reports progress via `onTextureProgress`
-- `types.ts` — shared types: `MediaItem`, `InfiniteCanvasProps`, `ChunkData`, `PlaneData`
-- `utils.ts` / `src/utils.ts` — small helpers
+**`src/infinite-canvas/`** — the core 3D engine:
+- `scene.tsx` — three components: `InfiniteCanvasScene` (Canvas setup, fog, DPR), `SceneController` (input + chunk management), `Chunk` (spatial cell), `MediaPlane` (single image plane with fade)
+- `constants.ts` — all tunable physics/render values. Edit here to change feel.
+- `texture-manager.ts` — texture loading/caching; calls `onTextureProgress`
+- `utils.ts` — plane generation (5 planes/chunk, sizes 12–20 units, seeded RNG from chunk coords), LRU plane cache (max 256 entries), chunk update throttle logic
 
-**`src/app/index.tsx`** — root `App` component; wires manifest → `InfiniteCanvas` + `PageLoader` + `Frame`
+**`src/app/index.tsx`** — root `App`; wires manifest → `InfiniteCanvas` + `PageLoader` + `Frame`
 
-**`src/frame/index.tsx`** — the HTML overlay header (title, nav links). This is where portfolio branding goes.
+**`src/frame/index.tsx`** — HTML overlay header. Replace content here for portfolio branding.
 
-**`src/loader/index.tsx`** — loading progress overlay, driven by texture-load progress (0–1).
+**`src/loader/index.tsx`** — loading progress overlay (0–1 driven by texture load).
 
-### Chunked streaming
-The 3D space is divided into cubic chunks (`CHUNK_SIZE = 110` units). `SceneController` tracks camera position in chunk coordinates and mounts/unmounts `Chunk` components within `RENDER_DISTANCE` chunks of the camera. Each `Chunk` uses `requestIdleCallback` to generate plane positions, then `MediaPlane` fades them in. Planes beyond `DEPTH_FADE_START`/`DEPTH_FADE_END` fade out.
+### Performance patterns
 
-### Controls
-Mouse drag / touch pan → camera drift with momentum (`VELOCITY_DECAY = 0.9`). Scroll / pinch → zoom. WASD + QE keyboard movement. All physics constants live in `constants.ts`.
+**`cameraGridRef`**: Camera position in chunk-grid coordinates is stored in a `React.RefObject<CameraGridState>` and passed to every `MediaPlane`. Planes read it each frame in `useFrame` without causing React re-renders — critical for smooth animation.
 
-### Path aliases
-`~/src/...` resolves to `src/` (configured in `vite.config.ts` and `tsconfig.app.json`).
+**Two-stage velocity**: Input accumulates into `targetVel`. Each frame, `velocity` is lerped toward `targetVel` (smoothing), then `targetVel` is multiplied by `VELOCITY_DECAY` (friction). `drift` is a separate parallax offset from mouse position, not part of velocity.
+
+**Chunk throttling**: Chunk list updates are throttled to 100 ms normally, 400–500 ms while zooming fast, to avoid thrashing during rapid Z-axis movement.
+
+**React Compiler**: `babel-plugin-react-compiler` is active. Do not add manual `useMemo`/`useCallback` — the compiler handles memoization.
+
+### Customization props on `InfiniteCanvasScene`
+`backgroundColor`, `fogColor`, `fogNear`, `fogFar`, `cameraFov`, `cameraNear`, `cameraFar`, `showFps` (debug), `showControls` (debug hint overlay).
+
+### Path alias
+`~` resolves to the repo root (configured in `vite.config.ts`). Imports look like `~/src/utils`.
