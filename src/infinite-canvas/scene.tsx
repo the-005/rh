@@ -81,7 +81,11 @@ function MediaPlane({
 }) {
   const meshRef = React.useRef<THREE.Mesh>(null);
   const materialRef = React.useRef<THREE.MeshBasicMaterial>(null);
-  const localState = React.useRef({ opacity: 0, frame: 0, ready: false, zOffset: 0 });
+  // Spread images evenly across the depth cycle at mount so wraps never coincide.
+  // Using a hash of world position gives a stable, pseudo-random value in [0, DEPTH_FADE_END).
+  const initialZOffset =
+    Math.abs(Math.sin(position.x * 127.1 + position.y * 311.7 + position.z * 74.7)) * DEPTH_FADE_END;
+  const localState = React.useRef({ opacity: 0, frame: 0, ready: false, zOffset: initialZOffset });
 
   const [texture, setTexture] = React.useState<THREE.Texture | null>(null);
   const [isReady, setIsReady] = React.useState(false);
@@ -93,26 +97,17 @@ function MediaPlane({
 
     if (!material || !mesh) return;
 
-    // Per-image depth bias: accumulate Z offset based on scroll and screen-space side.
-    // Left images zoom out on scroll-up, right images zoom in. Panning never changes
-    // zOffset so crossing the center causes no scale jump.
-    // Images wrap seamlessly when they pass through the camera or fade fully away.
+    // zOffset is the image's depth from the camera within [0, DEPTH_FADE_END).
+    // All images wrap at the same modulo boundary so they never converge in depth.
+    // Right images zoom in on scroll-up, left images zoom out.
     const { scrollDelta, camX } = cameraGridRef.current;
     if (Math.abs(scrollDelta) > 0.00001) {
       const isRight = position.x >= camX;
-      const newZOffset = state.zOffset + scrollDelta * (isRight ? -1 : 1);
-      const newEffectiveZ = position.z + newZOffset;
-      // Wrap at boundaries where image is already at opacity 0
-      if (newEffectiveZ >= INITIAL_CAMERA_Z) {
-        state.zOffset = newZOffset - DEPTH_FADE_END;
-      } else if (newEffectiveZ <= INITIAL_CAMERA_Z - DEPTH_FADE_END) {
-        state.zOffset = newZOffset + DEPTH_FADE_END;
-      } else {
-        state.zOffset = newZOffset;
-      }
+      const newZOffset = state.zOffset + scrollDelta * (isRight ? 1 : -1);
+      state.zOffset = ((newZOffset % DEPTH_FADE_END) + DEPTH_FADE_END) % DEPTH_FADE_END;
     }
 
-    const effectiveZ = position.z + state.zOffset;
+    const effectiveZ = INITIAL_CAMERA_Z - state.zOffset;
     mesh.position.z = effectiveZ;
 
     state.frame = (state.frame + 1) & 1;
@@ -123,7 +118,7 @@ function MediaPlane({
 
     const cam = cameraGridRef.current;
     const dist = Math.max(Math.abs(chunkCx - cam.cx), Math.abs(chunkCy - cam.cy), Math.abs(chunkCz - cam.cz));
-    const absDepth = Math.abs(effectiveZ - INITIAL_CAMERA_Z);
+    const absDepth = state.zOffset;
 
     if (absDepth > DEPTH_FADE_END + 50) {
       state.opacity = 0;
