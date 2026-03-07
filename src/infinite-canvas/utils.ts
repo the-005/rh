@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { hashString, seededRandom } from "~/src/utils";
-import { CHUNK_SIZE } from "./constants";
+import { CHUNK_SIZE, DEPTH_FADE_END } from "./constants";
 import type { PlaneData } from "./types";
 
 const MAX_PLANE_CACHE = 256;
@@ -45,9 +45,13 @@ export const getMediaDimensions = (media: HTMLImageElement | undefined) => {
 export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneData[] => {
   const planes: PlaneData[] = [];
   const seed = hashString(`${cx},${cy},${cz}`);
+  const ITEMS_PER_CHUNK = 3;
+  // Per-chunk phase offset spreads chunks relative to each other;
+  // the slot step guarantees images within a chunk are evenly spaced in depth.
+  const chunkPhase = seededRandom(seed) * DEPTH_FADE_END;
+  const slotStep = DEPTH_FADE_END / ITEMS_PER_CHUNK;
 
-  // ITEMS_PER_CHUNK = 5
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < ITEMS_PER_CHUNK; i++) {
     const s = seed + i * 1000;
     const r = (n: number) => seededRandom(s + n);
     const size = 12 + r(4) * 8;
@@ -61,6 +65,7 @@ export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneDa
       ),
       scale: new THREE.Vector3(size, size, 1),
       mediaIndex: Math.floor(r(5) * 1_000_000),
+      depthPhase: (chunkPhase + i * slotStep) % DEPTH_FADE_END,
     });
   }
 

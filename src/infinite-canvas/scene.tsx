@@ -66,6 +66,7 @@ function MediaPlane({
   position,
   scale,
   media,
+  depthPhase,
   chunkCx,
   chunkCy,
   chunkCz,
@@ -74,6 +75,7 @@ function MediaPlane({
   position: THREE.Vector3;
   scale: THREE.Vector3;
   media: MediaItem;
+  depthPhase: number;
   chunkCx: number;
   chunkCy: number;
   chunkCz: number;
@@ -81,11 +83,7 @@ function MediaPlane({
 }) {
   const meshRef = React.useRef<THREE.Mesh>(null);
   const materialRef = React.useRef<THREE.MeshBasicMaterial>(null);
-  // Spread images evenly across the depth cycle at mount so wraps never coincide.
-  // Using a hash of world position gives a stable, pseudo-random value in [0, DEPTH_FADE_END).
-  const initialZOffset =
-    Math.abs(Math.sin(position.x * 127.1 + position.y * 311.7 + position.z * 74.7)) * DEPTH_FADE_END;
-  const localState = React.useRef({ opacity: 0, ready: false, zOffset: initialZOffset });
+  const localState = React.useRef({ opacity: 0, ready: false, zOffset: depthPhase });
 
   const [texture, setTexture] = React.useState<THREE.Texture | null>(null);
   const [isReady, setIsReady] = React.useState(false);
@@ -241,6 +239,7 @@ function Chunk({
             position={plane.position}
             scale={plane.scale}
             media={mediaItem}
+            depthPhase={plane.depthPhase}
             chunkCx={cx}
             chunkCy={cy}
             chunkCz={cz}
