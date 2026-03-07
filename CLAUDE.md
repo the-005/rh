@@ -6,6 +6,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A photography portfolio website built as a 3D infinite pannable space — bootstrapped from [edoardolunardi/infinite-canvas](https://github.com/edoardolunardi/infinite-canvas). Uses React 19, Three.js, React Three Fiber, TypeScript, and Vite.
 
+## Git workflow
+
+After every meaningful change: stage specific files, commit with a clear message, and push to `origin main`. This keeps GitHub as the always-current backup.
+
+```bash
+git add <files>
+git commit -m "concise description of what and why"
+git push origin main
+```
+
+Repository: `https://github.com/the-005/rh`
+
 ## Commands
 
 Node 22 is required (see `.nvmrc`). Node is installed via Homebrew at `/opt/homebrew/opt/node@22/bin/` — prefix commands with `export PATH="/opt/homebrew/opt/node@22/bin:$PATH" &&` if `npm` is not in PATH.
