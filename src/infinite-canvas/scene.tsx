@@ -14,6 +14,7 @@ import {
   INVIS_THRESHOLD,
   KEYBOARD_SPEED,
   MAX_VELOCITY,
+  NEAR_FADE_END,
   RENDER_DISTANCE,
   VELOCITY_DECAY,
   VELOCITY_LERP,
@@ -93,15 +94,22 @@ function MediaPlane({
     if (!material || !mesh) return;
 
     // Per-image depth bias: accumulate Z offset based on scroll and screen-space side.
-    // Panning never changes zOffset, so crossing the center causes no scale jump.
+    // Left images zoom out on scroll-up, right images zoom in. Panning never changes
+    // zOffset so crossing the center causes no scale jump.
+    // Images wrap seamlessly when they pass through the camera or fade fully away.
     const { scrollDelta, camX } = cameraGridRef.current;
     if (Math.abs(scrollDelta) > 0.00001) {
       const isRight = position.x >= camX;
-      state.zOffset = clamp(
-        state.zOffset + scrollDelta * (isRight ? 1 : -1),
-        -(DEPTH_FADE_END + 50),
-        INITIAL_CAMERA_Z - 2,
-      );
+      const newZOffset = state.zOffset + scrollDelta * (isRight ? -1 : 1);
+      const newEffectiveZ = position.z + newZOffset;
+      // Wrap at boundaries where image is already at opacity 0
+      if (newEffectiveZ >= INITIAL_CAMERA_Z) {
+        state.zOffset = newZOffset - DEPTH_FADE_END;
+      } else if (newEffectiveZ <= INITIAL_CAMERA_Z - DEPTH_FADE_END) {
+        state.zOffset = newZOffset + DEPTH_FADE_END;
+      } else {
+        state.zOffset = newZOffset;
+      }
     }
 
     const effectiveZ = position.z + state.zOffset;
@@ -129,9 +137,11 @@ function MediaPlane({
       dist <= RENDER_DISTANCE ? 1 : Math.max(0, 1 - (dist - RENDER_DISTANCE) / Math.max(CHUNK_FADE_MARGIN, 0.0001));
 
     const depthFade =
-      absDepth <= DEPTH_FADE_START
-        ? 1
-        : Math.max(0, 1 - (absDepth - DEPTH_FADE_START) / Math.max(DEPTH_FADE_END - DEPTH_FADE_START, 0.0001));
+      absDepth <= NEAR_FADE_END
+        ? absDepth / NEAR_FADE_END
+        : absDepth <= DEPTH_FADE_START
+          ? 1
+          : Math.max(0, 1 - (absDepth - DEPTH_FADE_START) / Math.max(DEPTH_FADE_END - DEPTH_FADE_START, 0.0001));
 
     const target = Math.min(gridFade, depthFade * depthFade);
 
