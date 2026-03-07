@@ -16,3 +16,15 @@
   padding: 8px 16px;
   cursor: pointer;
 }
+
+.splitWrapper {
+  position: fixed;
+  inset: 0;
+  display: flex;
+}
+
+.splitPane {
+  width: 50%;
+  height: 100%;
+  position: relative;
+}

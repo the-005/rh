@@ -20,7 +20,7 @@ import {
 } from "./constants";
 import styles from "./style.module.css";
 import { getTexture } from "./texture-manager";
-import type { ChunkData, InfiniteCanvasProps, MediaItem, PlaneData } from "./types";
+import type { ChunkData, InfiniteCanvasProps, MediaItem, PlaneData, SplitCanvasRole, SplitCanvasSharedRefs } from "./types";
 import { generateChunkPlanesCached, getChunkUpdateThrottleMs, shouldThrottleUpdate } from "./utils";
 
 const PLANE_GEOMETRY = new THREE.PlaneGeometry(1, 1);
@@ -59,6 +59,7 @@ type CameraGridState = {
   cy: number;
   cz: number;
   camZ: number;
+  camX: number;
 };
 
 function MediaPlane({
@@ -69,6 +70,7 @@ function MediaPlane({
   chunkCy,
   chunkCz,
   cameraGridRef,
+  side,
 }: {
   position: THREE.Vector3;
   scale: THREE.Vector3;
@@ -77,6 +79,7 @@ function MediaPlane({
   chunkCy: number;
   chunkCz: number;
   cameraGridRef: React.RefObject<CameraGridState>;
+  side?: "left" | "right";
 }) {
   const meshRef = React.useRef<THREE.Mesh>(null);
   const materialRef = React.useRef<THREE.MeshBasicMaterial>(null);
@@ -92,6 +95,18 @@ function MediaPlane({
 
     if (!material || !mesh) {
       return;
+    }
+
+    // Side enforcement: hide planes on the wrong half of the split screen
+    if (side) {
+      const isRightOfCamera = position.x >= cameraGridRef.current.camX;
+      const isWrongSide = side === "left" ? isRightOfCamera : !isRightOfCamera;
+      if (isWrongSide) {
+        state.opacity = 0;
+        material.opacity = 0;
+        mesh.visible = false;
+        return;
+      }
     }
 
     state.frame = (state.frame + 1) & 1;
@@ -196,12 +211,14 @@ function Chunk({
   cz,
   media,
   cameraGridRef,
+  side,
 }: {
   cx: number;
   cy: number;
   cz: number;
   media: MediaItem[];
   cameraGridRef: React.RefObject<CameraGridState>;
+  side?: "left" | "right";
 }) {
   const [planes, setPlanes] = React.useState<PlaneData[] | null>(null);
 
@@ -248,6 +265,7 @@ function Chunk({
             chunkCy={cy}
             chunkCz={cz}
             cameraGridRef={cameraGridRef}
+            side={side}
           />
         );
       })}
@@ -287,13 +305,28 @@ const createInitialState = (camZ: number): ControllerState => ({
   pendingChunk: null,
 });
 
-function SceneController({ media, onTextureProgress }: { media: MediaItem[]; onTextureProgress?: (progress: number) => void }) {
+function SceneController({
+  media,
+  onTextureProgress,
+  splitRole,
+  splitRefs,
+  zoomSign = 1,
+  side,
+}: {
+  media: MediaItem[];
+  onTextureProgress?: (progress: number) => void;
+  splitRole?: SplitCanvasRole;
+  splitRefs?: SplitCanvasSharedRefs;
+  zoomSign?: 1 | -1;
+  side?: "left" | "right";
+}) {
   const { camera, gl } = useThree();
   const isTouchDevice = useIsTouchDevice();
   const [, getKeys] = useKeyboardControls<keyof KeyboardKeys>();
 
   const state = React.useRef<ControllerState>(createInitialState(INITIAL_CAMERA_Z));
-  const cameraGridRef = React.useRef<CameraGridState>({ cx: 0, cy: 0, cz: 0, camZ: camera.position.z });
+  const cameraGridRef = React.useRef<CameraGridState>({ cx: 0, cy: 0, cz: 0, camZ: camera.position.z, camX: camera.position.x });
+  const lastConsumedScrollRef = React.useRef(0);
 
   const [chunks, setChunks] = React.useState<ChunkData[]>([]);
 
@@ -314,32 +347,40 @@ function SceneController({ media, onTextureProgress }: { media: MediaItem[]; onT
     const s = state.current;
     canvas.style.cursor = "grab";
 
+    if (splitRole === "secondary") {
+      // Secondary has no input listeners; cursor is managed each frame from dragRef
+      return;
+    }
+
     const setCursor = (cursor: string) => {
       canvas.style.cursor = cursor;
     };
 
     const onMouseDown = (e: MouseEvent) => {
-      // Just start dragging - keep drift frozen at current value
       s.isDragging = true;
       s.lastMouse = { x: e.clientX, y: e.clientY };
       setCursor("grabbing");
+      if (splitRefs) splitRefs.dragRef.current.isDragging = true;
     };
 
     const onMouseUp = () => {
       s.isDragging = false;
       setCursor("grab");
+      if (splitRefs) splitRefs.dragRef.current.isDragging = false;
     };
 
     const onMouseLeave = () => {
       s.mouse = { x: 0, y: 0 };
       s.isDragging = false;
       setCursor("grab");
+      if (splitRefs) splitRefs.dragRef.current.isDragging = false;
     };
 
     const onMouseMove = (e: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect();
       s.mouse = {
-        x: (e.clientX / window.innerWidth) * 2 - 1,
-        y: -(e.clientY / window.innerHeight) * 2 + 1,
+        x: ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        y: -((e.clientY - rect.top) / rect.height) * 2 + 1,
       };
 
       if (s.isDragging) {
@@ -349,16 +390,12 @@ function SceneController({ media, onTextureProgress }: { media: MediaItem[]; onT
       }
     };
 
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      s.scrollAccum += e.deltaY * 0.006;
-    };
-
     const onTouchStart = (e: TouchEvent) => {
       e.preventDefault();
       s.lastTouches = Array.from(e.touches) as Touch[];
       s.lastTouchDist = getTouchDistance(s.lastTouches);
       setCursor("grabbing");
+      if (splitRefs) splitRefs.dragRef.current.isDragging = true;
     };
 
     const onTouchMove = (e: TouchEvent) => {
@@ -373,10 +410,13 @@ function SceneController({ media, onTextureProgress }: { media: MediaItem[]; onT
           s.targetVel.x -= (touch.clientX - last.clientX) * 0.02;
           s.targetVel.y += (touch.clientY - last.clientY) * 0.02;
         }
-      } else if (touches.length === 2 && s.lastTouchDist > 0) {
-        const dist = getTouchDistance(touches);
-        s.scrollAccum += (s.lastTouchDist - dist) * 0.006;
-        s.lastTouchDist = dist;
+      } else if (touches.length === 2 && !splitRefs) {
+        // In split mode the parent wrapper owns pinch-to-zoom
+        if (s.lastTouchDist > 0) {
+          const dist = getTouchDistance(touches);
+          s.scrollAccum += (s.lastTouchDist - dist) * 0.006;
+          s.lastTouchDist = dist;
+        }
       }
 
       s.lastTouches = touches;
@@ -386,13 +426,23 @@ function SceneController({ media, onTextureProgress }: { media: MediaItem[]; onT
       s.lastTouches = Array.from(e.touches) as Touch[];
       s.lastTouchDist = getTouchDistance(s.lastTouches);
       setCursor("grab");
+      if (splitRefs) splitRefs.dragRef.current.isDragging = false;
     };
+
+    // In split mode, the parent wrapper div owns the wheel event
+    let onWheel: ((e: WheelEvent) => void) | null = null;
+    if (!splitRefs) {
+      onWheel = (e: WheelEvent) => {
+        e.preventDefault();
+        s.scrollAccum += e.deltaY * 0.006;
+      };
+      canvas.addEventListener("wheel", onWheel, { passive: false });
+    }
 
     canvas.addEventListener("mousedown", onMouseDown);
     window.addEventListener("mouseup", onMouseUp);
     window.addEventListener("mousemove", onMouseMove);
     canvas.addEventListener("mouseleave", onMouseLeave);
-    canvas.addEventListener("wheel", onWheel, { passive: false });
     canvas.addEventListener("touchstart", onTouchStart, { passive: false });
     canvas.addEventListener("touchmove", onTouchMove, { passive: false });
     canvas.addEventListener("touchend", onTouchEnd, { passive: false });
@@ -402,24 +452,34 @@ function SceneController({ media, onTextureProgress }: { media: MediaItem[]; onT
       window.removeEventListener("mouseup", onMouseUp);
       window.removeEventListener("mousemove", onMouseMove);
       canvas.removeEventListener("mouseleave", onMouseLeave);
-      canvas.removeEventListener("wheel", onWheel);
+      if (onWheel) canvas.removeEventListener("wheel", onWheel);
       canvas.removeEventListener("touchstart", onTouchStart);
       canvas.removeEventListener("touchmove", onTouchMove);
       canvas.removeEventListener("touchend", onTouchEnd);
     };
-  }, [gl]);
+  }, [gl, splitRole, splitRefs]);
 
   useFrame(() => {
     const s = state.current;
     const now = performance.now();
 
-    const { forward, backward, left, right, up, down } = getKeys();
-    if (forward) s.targetVel.z -= KEYBOARD_SPEED;
-    if (backward) s.targetVel.z += KEYBOARD_SPEED;
-    if (left) s.targetVel.x -= KEYBOARD_SPEED;
-    if (right) s.targetVel.x += KEYBOARD_SPEED;
-    if (down) s.targetVel.y -= KEYBOARD_SPEED;
-    if (up) s.targetVel.y += KEYBOARD_SPEED;
+    // Keyboard input: primary only (secondary x/y comes from panRef, z from shared scroll)
+    if (splitRole !== "secondary") {
+      const { forward, backward, left, right, up, down } = getKeys();
+      if (forward) s.targetVel.z -= KEYBOARD_SPEED;
+      if (backward) s.targetVel.z += KEYBOARD_SPEED;
+      if (left) s.targetVel.x -= KEYBOARD_SPEED;
+      if (right) s.targetVel.x += KEYBOARD_SPEED;
+      if (down) s.targetVel.y -= KEYBOARD_SPEED;
+      if (up) s.targetVel.y += KEYBOARD_SPEED;
+    }
+
+    // Consume scroll from shared ref (split mode) — applies zoomSign inversion
+    if (splitRefs) {
+      const delta = splitRefs.scrollRef.current.accumulated - lastConsumedScrollRef.current;
+      lastConsumedScrollRef.current = splitRefs.scrollRef.current.accumulated;
+      s.scrollAccum += delta * zoomSign;
+    }
 
     const isZooming = Math.abs(s.velocity.z) > 0.05;
     const zoomFactor = clamp(s.basePos.z / 50, 0.3, 2.0);
@@ -451,7 +511,20 @@ function SceneController({ media, onTextureProgress }: { media: MediaItem[]; onT
     s.basePos.y += s.velocity.y;
     s.basePos.z += s.velocity.z;
 
+    // Secondary: override X/Y pan from shared state (primary owns pan)
+    if (splitRole === "secondary" && splitRefs) {
+      s.basePos.x = splitRefs.panRef.current.x;
+      s.basePos.y = splitRefs.panRef.current.y;
+      s.drift.x = splitRefs.panRef.current.driftX;
+      s.drift.y = splitRefs.panRef.current.driftY;
+    }
+
     camera.position.set(s.basePos.x + s.drift.x, s.basePos.y + s.drift.y, s.basePos.z);
+
+    // Primary: write X/Y pan to shared state
+    if (splitRole === "primary" && splitRefs) {
+      splitRefs.panRef.current = { x: s.basePos.x, y: s.basePos.y, driftX: s.drift.x, driftY: s.drift.y };
+    }
 
     s.targetVel.x *= VELOCITY_DECAY;
     s.targetVel.y *= VELOCITY_DECAY;
@@ -461,7 +534,12 @@ function SceneController({ media, onTextureProgress }: { media: MediaItem[]; onT
     const cy = Math.floor(s.basePos.y / CHUNK_SIZE);
     const cz = Math.floor(s.basePos.z / CHUNK_SIZE);
 
-    cameraGridRef.current = { cx, cy, cz, camZ: s.basePos.z };
+    cameraGridRef.current = { cx, cy, cz, camZ: s.basePos.z, camX: s.basePos.x };
+
+    // Secondary: mirror cursor from shared drag state
+    if (splitRole === "secondary" && splitRefs) {
+      gl.domElement.style.cursor = splitRefs.dragRef.current.isDragging ? "grabbing" : "grab";
+    }
 
     const key = `${cx},${cy},${cz}`;
     if (key !== s.lastChunkKey) {
@@ -504,7 +582,7 @@ function SceneController({ media, onTextureProgress }: { media: MediaItem[]; onT
   return (
     <>
       {chunks.map((chunk) => (
-        <Chunk key={chunk.key} cx={chunk.cx} cy={chunk.cy} cz={chunk.cz} media={media} cameraGridRef={cameraGridRef} />
+        <Chunk key={chunk.key} cx={chunk.cx} cy={chunk.cy} cz={chunk.cz} media={media} cameraGridRef={cameraGridRef} side={side} />
       ))}
     </>
   );
@@ -522,6 +600,10 @@ export function InfiniteCanvasScene({
   fogFar = 320,
   backgroundColor = "#ffffff",
   fogColor = "#ffffff",
+  splitRole,
+  splitRefs,
+  zoomSign = 1,
+  side,
 }: InfiniteCanvasProps) {
   const isTouchDevice = useIsTouchDevice();
   const dpr = Math.min(window.devicePixelRatio || 1, isTouchDevice ? 1.25 : 1.5);
@@ -542,7 +624,14 @@ export function InfiniteCanvasScene({
         >
           <color attach="background" args={[backgroundColor]} />
           <fog attach="fog" args={[fogColor, fogNear, fogFar]} />
-          <SceneController media={media} onTextureProgress={onTextureProgress} />
+          <SceneController
+            media={media}
+            onTextureProgress={onTextureProgress}
+            splitRole={splitRole}
+            splitRefs={splitRefs}
+            zoomSign={zoomSign}
+            side={side}
+          />
           {showFps && <Stats className={styles.stats} />}
         </Canvas>
 
