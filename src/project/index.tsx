@@ -55,7 +55,7 @@ export function ProjectPage() {
       <div className={styles.imageWrap}>
         <img
           key={current.url}
-          src={current.url}
+          src={`/${current.url}`}
           alt=""
           className={styles.image}
           draggable={false}
