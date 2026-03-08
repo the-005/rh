@@ -4,11 +4,14 @@ export type MediaItem = {
   url: string;
   width: number;
   height: number;
+  category?: string;
+  project?: string;
 };
 
 export type InfiniteCanvasProps = {
   media: MediaItem[];
   onTextureProgress?: (progress: number) => void;
+  onMediaClick?: (item: MediaItem) => void;
   showFps?: boolean;
   showControls?: boolean;
   cameraFov?: number;
@@ -18,6 +21,7 @@ export type InfiniteCanvasProps = {
   fogFar?: number;
   backgroundColor?: string;
   fogColor?: string;
+  activeCategory?: string;
 };
 
 export type ChunkData = {

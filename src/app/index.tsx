@@ -1,23 +1,34 @@
 import * as React from "react";
-import manifest from "~/src/artworks/manifest.json";
+import { Route, Switch, useLocation } from "wouter";
+import allManifest from "~/src/images/manifest.json";
 import { Frame } from "~/src/frame";
 import { InfiniteCanvas } from "~/src/infinite-canvas";
 import type { MediaItem } from "~/src/infinite-canvas/types";
 import { PageLoader } from "~/src/loader";
+import { ProjectPage } from "~/src/project";
+
+type Category = "all" | "art" | "commerce";
+
+const ALL_MEDIA = allManifest as MediaItem[];
 
 export function App() {
-  const [media] = React.useState<MediaItem[]>(manifest);
+  const [category, setCategory] = React.useState<Category>("all");
   const [textureProgress, setTextureProgress] = React.useState(0);
-
-  if (!media.length) {
-    return <PageLoader progress={0} />;
-  }
+  const [, navigate] = useLocation();
 
   return (
-    <>
-      <Frame />
-      <PageLoader progress={textureProgress} />
-      <InfiniteCanvas media={media} onTextureProgress={setTextureProgress} />
-    </>
+    <Switch>
+      <Route path="/project/:id" component={ProjectPage} />
+      <Route>
+        <Frame category={category} onCategoryChange={setCategory} />
+        <PageLoader progress={textureProgress} />
+        <InfiniteCanvas
+          media={ALL_MEDIA}
+          activeCategory={category}
+          onTextureProgress={setTextureProgress}
+          onMediaClick={(item) => item.project && navigate(`/project/${item.project}`)}
+        />
+      </Route>
+    </Switch>
   );
 }

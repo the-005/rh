@@ -60,35 +60,43 @@ type CameraGridState = {
   camX: number;
   /** Per-frame Z velocity applied to image depth offsets (not camera). */
   scrollDelta: number;
+  activeCategory: string;
 };
 
 function MediaPlane({
   position,
   scale,
-  media,
+  mediaPool,
+  mediaIndex,
   depthPhase,
   chunkCx,
   chunkCy,
   chunkCz,
   cameraGridRef,
+  onMediaClick,
 }: {
   position: THREE.Vector3;
   scale: THREE.Vector3;
-  media: MediaItem;
+  mediaPool: MediaItem[];
+  mediaIndex: number;
   depthPhase: number;
   chunkCx: number;
   chunkCy: number;
   chunkCz: number;
   cameraGridRef: React.RefObject<CameraGridState>;
+  onMediaClick?: (item: MediaItem) => void;
 }) {
   const meshRef = React.useRef<THREE.Mesh>(null);
   const materialRef = React.useRef<THREE.MeshBasicMaterial>(null);
-  const localState = React.useRef({ opacity: 0, ready: false, zOffset: depthPhase });
+  const localState = React.useRef({ opacity: 0, ready: false, absoluteZOffset: depthPhase, lastCycle: 0, swapPending: false, filterFade: false });
+
+  const [cycleIndex, setCycleIndex] = React.useState(0);
+  const media = mediaPool[((mediaIndex + cycleIndex) % mediaPool.length + mediaPool.length) % mediaPool.length];
 
   const [texture, setTexture] = React.useState<THREE.Texture | null>(null);
   const [isReady, setIsReady] = React.useState(false);
 
-  useFrame(() => {
+  useFrame((_state, delta) => {
     const material = materialRef.current;
     const mesh = meshRef.current;
     const state = localState.current;
@@ -101,19 +109,28 @@ function MediaPlane({
     const { scrollDelta, camX } = cameraGridRef.current;
     if (Math.abs(scrollDelta) > 0.00001) {
       const isRight = position.x >= camX;
-      const newZOffset = state.zOffset + scrollDelta * (isRight ? 1 : -1);
-      state.zOffset = ((newZOffset % DEPTH_FADE_END) + DEPTH_FADE_END) % DEPTH_FADE_END;
+      state.absoluteZOffset += scrollDelta * (isRight ? 1 : -1);
     }
 
-    const effectiveZ = INITIAL_CAMERA_Z - state.zOffset;
-    mesh.position.z = effectiveZ;
+    const zOffset = ((state.absoluteZOffset % DEPTH_FADE_END) + DEPTH_FADE_END) % DEPTH_FADE_END;
 
+    // Snap opacity to 0 and swap image whenever the plane crosses a depth cycle boundary
+    const newCycle = Math.floor(state.absoluteZOffset / DEPTH_FADE_END);
+    if (newCycle !== state.lastCycle) {
+      state.lastCycle = newCycle;
+      state.opacity = 0;
+      state.swapPending = false; // re-evaluate category match on next frame
+      setCycleIndex(newCycle);
+    }
+
+    const effectiveZ = INITIAL_CAMERA_Z - zOffset;
+    mesh.position.z = effectiveZ;
 
     const cam = cameraGridRef.current;
     const dist = Math.max(Math.abs(chunkCx - cam.cx), Math.abs(chunkCy - cam.cy), Math.abs(chunkCz - cam.cz));
-    const absDepth = state.zOffset;
+    const absDepth = zOffset;
 
-    if (absDepth > DEPTH_FADE_END + 50) {
+    if (zOffset > DEPTH_FADE_END + 50) {
       state.opacity = 0;
       material.opacity = 0;
       material.depthWrite = false;
@@ -131,13 +148,40 @@ function MediaPlane({
           ? 1
           : Math.max(0, 1 - (absDepth - DEPTH_FADE_START) / Math.max(DEPTH_FADE_END - DEPTH_FADE_START, 0.0001));
 
-    const target = Math.min(gridFade, depthFade * depthFade);
+    const naturalTarget = Math.min(gridFade, depthFade * depthFade);
 
-    state.opacity = target < INVIS_THRESHOLD && state.opacity < INVIS_THRESHOLD ? 0 : lerp(state.opacity, target, 0.1);
+    // Category filter: planes whose current image doesn't match the active filter fade to 0.
+    // Once invisible they advance to the next matching image in the pool and fade back in.
+    const poolLen = mediaPool.length;
+    const effectiveMedia = mediaPool[((mediaIndex + state.lastCycle) % poolLen + poolLen) % poolLen];
+    const categoryMatch =
+      cam.activeCategory === "all" || !effectiveMedia?.category || effectiveMedia.category === cam.activeCategory;
 
-    const isFullyOpaque = state.opacity > 0.99;
-    material.opacity = isFullyOpaque ? 1 : state.opacity;
-    material.depthWrite = isFullyOpaque;
+    if (!categoryMatch && !state.swapPending) state.swapPending = true;
+    if (categoryMatch) state.swapPending = false;
+
+    if (state.swapPending && state.opacity <= INVIS_THRESHOLD) {
+      state.swapPending = false;
+      for (let i = 1; i <= poolLen; i++) {
+        const candidate = mediaPool[((mediaIndex + state.lastCycle + i) % poolLen + poolLen) % poolLen];
+        if (cam.activeCategory === "all" || !candidate.category || candidate.category === cam.activeCategory) {
+          state.lastCycle += i;
+          state.opacity = 0;
+          setCycleIndex(state.lastCycle);
+          break;
+        }
+      }
+    }
+
+    const target = categoryMatch ? naturalTarget : 0;
+
+    if (!categoryMatch) state.filterFade = true;
+    if (state.filterFade && categoryMatch && state.opacity >= naturalTarget * 0.99) state.filterFade = false;
+
+    const alpha = state.filterFade ? 1 - Math.pow(INVIS_THRESHOLD, delta / 1.6) : 0.1;
+    state.opacity = target < INVIS_THRESHOLD && state.opacity < INVIS_THRESHOLD ? 0 : lerp(state.opacity, target, alpha);
+
+    material.opacity = state.opacity;
     mesh.visible = state.opacity > INVIS_THRESHOLD;
   });
 
@@ -178,15 +222,15 @@ function MediaPlane({
 
     material.map = texture;
     material.opacity = state.opacity;
-    material.depthWrite = state.opacity >= 1;
     mesh.scale.copy(displayScale);
   }, [displayScale, texture, isReady]);
 
   if (!texture || !isReady) return null;
 
   return (
-    <mesh ref={meshRef} position={position} scale={displayScale} visible={false} geometry={PLANE_GEOMETRY}>
-      <meshBasicMaterial ref={materialRef} transparent opacity={0} side={THREE.DoubleSide} />
+    // biome-ignore lint/a11y/noStaticElementInteractions: Three.js mesh is not a DOM element
+    <mesh ref={meshRef} position={position} scale={displayScale} visible={false} geometry={PLANE_GEOMETRY} onClick={() => onMediaClick?.(media)}>
+      <meshBasicMaterial ref={materialRef} transparent opacity={0} side={THREE.DoubleSide} depthTest={false} />
     </mesh>
   );
 }
@@ -197,12 +241,14 @@ function Chunk({
   cz,
   media,
   cameraGridRef,
+  onMediaClick,
 }: {
   cx: number;
   cy: number;
   cz: number;
   media: MediaItem[];
   cameraGridRef: React.RefObject<CameraGridState>;
+  onMediaClick?: (item: MediaItem) => void;
 }) {
   const [planes, setPlanes] = React.useState<PlaneData[] | null>(null);
 
@@ -229,24 +275,21 @@ function Chunk({
 
   return (
     <group>
-      {planes.map((plane) => {
-        const mediaItem = media[plane.mediaIndex % media.length];
-        if (!mediaItem) return null;
-
-        return (
-          <MediaPlane
-            key={plane.id}
-            position={plane.position}
-            scale={plane.scale}
-            media={mediaItem}
-            depthPhase={plane.depthPhase}
-            chunkCx={cx}
-            chunkCy={cy}
-            chunkCz={cz}
-            cameraGridRef={cameraGridRef}
-          />
-        );
-      })}
+      {planes.map((plane) => (
+        <MediaPlane
+          key={plane.id}
+          position={plane.position}
+          scale={plane.scale}
+          mediaPool={media}
+          mediaIndex={plane.mediaIndex}
+          depthPhase={plane.depthPhase}
+          chunkCx={cx}
+          chunkCy={cy}
+          chunkCz={cz}
+          cameraGridRef={cameraGridRef}
+          onMediaClick={onMediaClick}
+        />
+      ))}
     </group>
   );
 }
@@ -283,7 +326,7 @@ const createInitialState = (camZ: number): ControllerState => ({
   pendingChunk: null,
 });
 
-function SceneController({ media, onTextureProgress }: { media: MediaItem[]; onTextureProgress?: (progress: number) => void }) {
+function SceneController({ media, onTextureProgress, activeCategory = "all", onMediaClick }: { media: MediaItem[]; onTextureProgress?: (progress: number) => void; activeCategory?: string; onMediaClick?: (item: MediaItem) => void }) {
   const { camera, gl } = useThree();
   const isTouchDevice = useIsTouchDevice();
   const [, getKeys] = useKeyboardControls<keyof KeyboardKeys>();
@@ -296,6 +339,7 @@ function SceneController({ media, onTextureProgress }: { media: MediaItem[]; onT
     camZ: INITIAL_CAMERA_Z,
     camX: 0,
     scrollDelta: 0,
+    activeCategory: "all",
   });
 
   const [chunks, setChunks] = React.useState<ChunkData[]>([]);
@@ -468,6 +512,7 @@ function SceneController({ media, onTextureProgress }: { media: MediaItem[]; onT
       camZ: INITIAL_CAMERA_Z,
       camX: s.basePos.x,
       scrollDelta: s.velocity.z,
+      activeCategory,
     };
 
     const key = `${cx},${cy},${cz}`;
@@ -511,7 +556,7 @@ function SceneController({ media, onTextureProgress }: { media: MediaItem[]; onT
   return (
     <>
       {chunks.map((chunk) => (
-        <Chunk key={chunk.key} cx={chunk.cx} cy={chunk.cy} cz={chunk.cz} media={media} cameraGridRef={cameraGridRef} />
+        <Chunk key={chunk.key} cx={chunk.cx} cy={chunk.cy} cz={chunk.cz} media={media} cameraGridRef={cameraGridRef} onMediaClick={onMediaClick} />
       ))}
     </>
   );
@@ -520,6 +565,7 @@ function SceneController({ media, onTextureProgress }: { media: MediaItem[]; onT
 export function InfiniteCanvasScene({
   media,
   onTextureProgress,
+  onMediaClick,
   showFps = false,
   showControls = false,
   cameraFov = 60,
@@ -529,6 +575,7 @@ export function InfiniteCanvasScene({
   fogFar = 320,
   backgroundColor = "#ffffff",
   fogColor = "#ffffff",
+  activeCategory = "all",
 }: InfiniteCanvasProps) {
   const isTouchDevice = useIsTouchDevice();
   const dpr = Math.min(window.devicePixelRatio || 1, isTouchDevice ? 1.25 : 1.5);
@@ -550,7 +597,7 @@ export function InfiniteCanvasScene({
         >
           <color attach="background" args={[backgroundColor]} />
           <fog attach="fog" args={[fogColor, fogNear, fogFar]} />
-          <SceneController media={media} onTextureProgress={onTextureProgress} />
+          <SceneController media={media} onTextureProgress={onTextureProgress} activeCategory={activeCategory} onMediaClick={onMediaClick} />
           {showFps && <Stats className={styles.stats} />}
         </Canvas>
 
