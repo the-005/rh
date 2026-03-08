@@ -6,6 +6,7 @@ import { InfiniteCanvas } from "~/src/infinite-canvas";
 import type { MediaItem } from "~/src/infinite-canvas/types";
 import { PageLoader } from "~/src/loader";
 import { ProjectPage } from "~/src/project";
+import { setTransitionOrigin } from "~/src/project/transition-origin";
 
 type Category = "all" | "art" | "commerce";
 
@@ -26,7 +27,12 @@ export function App() {
           media={ALL_MEDIA}
           activeCategory={category}
           onTextureProgress={setTextureProgress}
-          onMediaClick={(item) => item.project && navigate(`/project/${item.project}`)}
+          onMediaClick={(item, x, y) => {
+            if (item.project) {
+              setTransitionOrigin(x, y);
+              navigate(`/project/${item.project}`);
+            }
+          }}
         />
       </Route>
     </Switch>

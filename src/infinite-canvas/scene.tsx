@@ -84,7 +84,7 @@ function MediaPlane({
   chunkCy: number;
   chunkCz: number;
   cameraGridRef: React.RefObject<CameraGridState>;
-  onMediaClick?: (item: MediaItem) => void;
+  onMediaClick?: (item: MediaItem, x: number, y: number) => void;
 }) {
   const meshRef = React.useRef<THREE.Mesh>(null);
   const materialRef = React.useRef<THREE.MeshBasicMaterial>(null);
@@ -229,7 +229,7 @@ function MediaPlane({
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: Three.js mesh is not a DOM element
-    <mesh ref={meshRef} position={position} scale={displayScale} visible={false} geometry={PLANE_GEOMETRY} onClick={() => onMediaClick?.(media)}>
+    <mesh ref={meshRef} position={position} scale={displayScale} visible={false} geometry={PLANE_GEOMETRY} onClick={(e) => onMediaClick?.(media, e.nativeEvent.clientX, e.nativeEvent.clientY)}>
       <meshBasicMaterial ref={materialRef} transparent opacity={0} side={THREE.DoubleSide} depthTest={false} />
     </mesh>
   );
@@ -248,7 +248,7 @@ function Chunk({
   cz: number;
   media: MediaItem[];
   cameraGridRef: React.RefObject<CameraGridState>;
-  onMediaClick?: (item: MediaItem) => void;
+  onMediaClick?: (item: MediaItem, x: number, y: number) => void;
 }) {
   const [planes, setPlanes] = React.useState<PlaneData[] | null>(null);
 
@@ -326,7 +326,7 @@ const createInitialState = (camZ: number): ControllerState => ({
   pendingChunk: null,
 });
 
-function SceneController({ media, onTextureProgress, activeCategory = "all", onMediaClick }: { media: MediaItem[]; onTextureProgress?: (progress: number) => void; activeCategory?: string; onMediaClick?: (item: MediaItem) => void }) {
+function SceneController({ media, onTextureProgress, activeCategory = "all", onMediaClick }: { media: MediaItem[]; onTextureProgress?: (progress: number) => void; activeCategory?: string; onMediaClick?: (item: MediaItem, x: number, y: number) => void }) {
   const { camera, gl } = useThree();
   const isTouchDevice = useIsTouchDevice();
   const [, getKeys] = useKeyboardControls<keyof KeyboardKeys>();
