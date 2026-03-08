@@ -247,7 +247,32 @@ function MediaPlane({
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: Three.js mesh is not a DOM element
-    <mesh ref={meshRef} position={position} scale={displayScale} visible={false} geometry={PLANE_GEOMETRY} onClick={(e) => { if (meshRef.current) onMediaClick?.(media, getMeshScreenRect(meshRef.current, e.camera)); }}>
+    <mesh
+      ref={meshRef}
+      position={position}
+      scale={displayScale}
+      visible={false}
+      geometry={PLANE_GEOMETRY}
+      onClick={(e) => {
+        const mesh = meshRef.current;
+        const mat = materialRef.current;
+        if (!mesh || !onMediaClick) return;
+
+        // depthTest is off, so the visually topmost image may not be the closest in 3D.
+        // Yield to any intersected mesh with meaningfully higher opacity (more visible).
+        const myOpacity = mat?.opacity ?? 0;
+        const shouldDefer = e.intersections.some((hit) => {
+          if (hit.object === mesh) return false;
+          const m = (hit.object as THREE.Mesh).material;
+          const op = Array.isArray(m) ? 0 : ((m as THREE.MeshBasicMaterial).opacity ?? 0);
+          return op > myOpacity + 0.05;
+        });
+        if (shouldDefer) return;
+
+        e.stopPropagation();
+        onMediaClick(media, getMeshScreenRect(mesh, e.camera));
+      }}
+    >
       <meshBasicMaterial ref={materialRef} transparent opacity={0} side={THREE.DoubleSide} depthTest={false} />
     </mesh>
   );
