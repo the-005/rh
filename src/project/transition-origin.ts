@@ -1,11 +1,19 @@
-let origin: { x: number; y: number } | null = null;
-
-export function setTransitionOrigin(x: number, y: number): void {
-  origin = { x, y };
+export interface PendingTransition {
+  rect: { x: number; y: number; width: number; height: number };
+  startIndex: number;
 }
 
-export function consumeTransitionOrigin(): { x: number; y: number } | null {
-  const o = origin;
-  origin = null;
-  return o;
+let pending: PendingTransition | null = null;
+
+export function setPendingTransition(
+  rect: { x: number; y: number; width: number; height: number },
+  startIndex: number,
+): void {
+  pending = { rect, startIndex };
+}
+
+export function consumePendingTransition(): PendingTransition | null {
+  const p = pending;
+  pending = null;
+  return p;
 }

@@ -11,7 +11,7 @@ export type MediaItem = {
 export type InfiniteCanvasProps = {
   media: MediaItem[];
   onTextureProgress?: (progress: number) => void;
-  onMediaClick?: (item: MediaItem, x: number, y: number) => void;
+  onMediaClick?: (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => void;
   showFps?: boolean;
   showControls?: boolean;
   cameraFov?: number;

@@ -26,6 +26,24 @@ import { generateChunkPlanesCached, getChunkUpdateThrottleMs, shouldThrottleUpda
 
 const PLANE_GEOMETRY = new THREE.PlaneGeometry(1, 1);
 
+function getMeshScreenRect(mesh: THREE.Mesh, camera: THREE.Camera) {
+  const pos = new THREE.Vector3();
+  mesh.getWorldPosition(pos);
+  const ws = new THREE.Vector3();
+  mesh.getWorldScale(ws);
+  const hw = ws.x / 2;
+  const hh = ws.y / 2;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const toScreen = (x: number, y: number, z: number) => {
+    const v = new THREE.Vector3(x, y, z).project(camera);
+    return { x: (v.x + 1) / 2 * w, y: (1 - v.y) / 2 * h };
+  };
+  const tl = toScreen(pos.x - hw, pos.y + hh, pos.z);
+  const br = toScreen(pos.x + hw, pos.y - hh, pos.z);
+  return { x: tl.x, y: tl.y, width: br.x - tl.x, height: br.y - tl.y };
+}
+
 const KEYBOARD_MAP = [
   { name: "forward", keys: ["w", "W", "ArrowUp"] },
   { name: "backward", keys: ["s", "S", "ArrowDown"] },
@@ -84,7 +102,7 @@ function MediaPlane({
   chunkCy: number;
   chunkCz: number;
   cameraGridRef: React.RefObject<CameraGridState>;
-  onMediaClick?: (item: MediaItem, x: number, y: number) => void;
+  onMediaClick?: (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => void;
 }) {
   const meshRef = React.useRef<THREE.Mesh>(null);
   const materialRef = React.useRef<THREE.MeshBasicMaterial>(null);
@@ -229,7 +247,7 @@ function MediaPlane({
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: Three.js mesh is not a DOM element
-    <mesh ref={meshRef} position={position} scale={displayScale} visible={false} geometry={PLANE_GEOMETRY} onClick={(e) => onMediaClick?.(media, e.nativeEvent.clientX, e.nativeEvent.clientY)}>
+    <mesh ref={meshRef} position={position} scale={displayScale} visible={false} geometry={PLANE_GEOMETRY} onClick={(e) => { if (meshRef.current) onMediaClick?.(media, getMeshScreenRect(meshRef.current, e.camera)); }}>
       <meshBasicMaterial ref={materialRef} transparent opacity={0} side={THREE.DoubleSide} depthTest={false} />
     </mesh>
   );
@@ -248,7 +266,7 @@ function Chunk({
   cz: number;
   media: MediaItem[];
   cameraGridRef: React.RefObject<CameraGridState>;
-  onMediaClick?: (item: MediaItem, x: number, y: number) => void;
+  onMediaClick?: (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => void;
 }) {
   const [planes, setPlanes] = React.useState<PlaneData[] | null>(null);
 
@@ -326,7 +344,7 @@ const createInitialState = (camZ: number): ControllerState => ({
   pendingChunk: null,
 });
 
-function SceneController({ media, onTextureProgress, activeCategory = "all", onMediaClick }: { media: MediaItem[]; onTextureProgress?: (progress: number) => void; activeCategory?: string; onMediaClick?: (item: MediaItem, x: number, y: number) => void }) {
+function SceneController({ media, onTextureProgress, activeCategory = "all", onMediaClick }: { media: MediaItem[]; onTextureProgress?: (progress: number) => void; activeCategory?: string; onMediaClick?: (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => void }) {
   const { camera, gl } = useThree();
   const isTouchDevice = useIsTouchDevice();
   const [, getKeys] = useKeyboardControls<keyof KeyboardKeys>();

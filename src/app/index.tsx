@@ -6,7 +6,7 @@ import { InfiniteCanvas } from "~/src/infinite-canvas";
 import type { MediaItem } from "~/src/infinite-canvas/types";
 import { PageLoader } from "~/src/loader";
 import { ProjectPage } from "~/src/project";
-import { setTransitionOrigin } from "~/src/project/transition-origin";
+import { setPendingTransition } from "~/src/project/transition-origin";
 
 type Category = "all" | "art" | "commerce";
 
@@ -17,15 +17,16 @@ export function App() {
   const [category, setCategory] = React.useState<Category>("all");
   const [textureProgress, setTextureProgress] = React.useState(0);
 
-  // Derive active project from URL — canvas is always mounted underneath
   const projectId = React.useMemo(() => {
     const m = location.match(/^\/project\/([^/]+)$/);
     return m ? m[1] : null;
   }, [location]);
 
-  const handleMediaClick = (item: MediaItem, x: number, y: number) => {
+  const handleMediaClick = (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => {
     if (item.project) {
-      setTransitionOrigin(x, y);
+      const projectImages = ALL_MEDIA.filter((m) => m.project === item.project);
+      const startIndex = Math.max(0, projectImages.findIndex((m) => m.url === item.url));
+      setPendingTransition(rect, startIndex);
       navigate(`/project/${item.project}`);
     }
   };
@@ -34,16 +35,13 @@ export function App() {
     <>
       <Frame category={category} onCategoryChange={setCategory} />
       <PageLoader progress={textureProgress} />
-      {/* Canvas is never unmounted — no texture reload when returning from a project */}
       <InfiniteCanvas
         media={ALL_MEDIA}
         activeCategory={category}
         onTextureProgress={setTextureProgress}
         onMediaClick={handleMediaClick}
       />
-      {projectId && (
-        <ProjectPage id={projectId} onClose={() => navigate("/")} />
-      )}
+      {projectId && <ProjectPage key={projectId} id={projectId} onClose={() => navigate("/")} />}
     </>
   );
 }
