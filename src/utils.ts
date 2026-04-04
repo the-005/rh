@@ -5,8 +5,11 @@ export const clamp = (v: number, min: number, max: number): number => Math.max(m
 export const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
 
 export const seededRandom = (seed: number): number => {
-  const x = Math.sin(seed * 9999) * 10000;
-  return x - Math.floor(x);
+  let s = seed | 0;
+  s = Math.imul(s ^ (s >>> 16), 0x45d9f3b);
+  s = Math.imul(s ^ (s >>> 16), 0x45d9f3b);
+  s = s ^ (s >>> 16);
+  return (s >>> 0) / 4294967296;
 };
 
 export const hashString = (str: string): number => {

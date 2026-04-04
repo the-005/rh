@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { hashString, seededRandom } from "~/src/utils";
-import { CHUNK_SIZE, DEPTH_FADE_END } from "./constants";
+import { CHUNK_SIZE, DEPTH_FADE_END, PLANE_SPREAD } from "./constants";
 import type { PlaneData } from "./types";
 
 const MAX_PLANE_CACHE = 256;
@@ -54,6 +54,8 @@ export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneDa
   const chunkPhase = ((chunkSeq * GOLDEN_RATIO) % 1) * DEPTH_FADE_END;
   const slotStep = DEPTH_FADE_END / ITEMS_PER_CHUNK;
 
+  const margin = (1 - PLANE_SPREAD) / 2;
+
   for (let i = 0; i < ITEMS_PER_CHUNK; i++) {
     const s = seed + i * 1000;
     const r = (n: number) => seededRandom(s + n);
@@ -62,8 +64,8 @@ export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneDa
     planes.push({
       id: `${cx}-${cy}-${cz}-${i}`,
       position: new THREE.Vector3(
-        cx * CHUNK_SIZE + r(0) * CHUNK_SIZE,
-        cy * CHUNK_SIZE + r(1) * CHUNK_SIZE,
+        cx * CHUNK_SIZE + (margin + r(0) * PLANE_SPREAD) * CHUNK_SIZE,
+        cy * CHUNK_SIZE + (margin + r(1) * PLANE_SPREAD) * CHUNK_SIZE,
         cz * CHUNK_SIZE + r(2) * CHUNK_SIZE
       ),
       scale: new THREE.Vector3(size, size, 1),
