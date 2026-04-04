@@ -439,7 +439,7 @@ function SceneController({ media, onTextureProgress, activeCategory = "all", onM
 
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      s.scrollAccum += e.deltaY * 0.006;
+      s.scrollAccum += e.deltaY * 0.002;
     };
 
     const onTouchStart = (e: TouchEvent) => {
@@ -508,7 +508,7 @@ function SceneController({ media, onTextureProgress, activeCategory = "all", onM
 
     // Z velocity driven by scroll — applied to image depth offsets, NOT camera Z
     s.targetVel.z += s.scrollAccum;
-    s.scrollAccum *= 0.8;
+    s.scrollAccum *= 0.85;
 
     const isZooming = Math.abs(s.velocity.z) > 0.05;
     const zoomFactor = clamp(s.basePos.z / 50, 0.3, 2.0);

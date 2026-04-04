@@ -38,7 +38,7 @@ Linting/formatting is **Biome** (not ESLint/Prettier). Config in `biome.jsonc`.
 ### Data flow
 `src/artworks/manifest.json` → `App` → `InfiniteCanvas` → Three.js scene
 
-Media items are `{ url, width, height }`. To swap in your own photos, replace `public/artworks/` images and update `src/artworks/manifest.json` to match (see `scripts/download-artworks.ts` for the manifest shape).
+Media items are `{ url, width, height, project? }`. To swap in your own photos, replace `public/artworks/` images and update `src/artworks/manifest.json` to match (see `scripts/download-artworks.ts` for the manifest shape). Items with a matching `project` field are grouped into a project page accessible by clicking the image.
 
 ### Key modules
 
@@ -46,7 +46,7 @@ Media items are `{ url, width, height }`. To swap in your own photos, replace `p
 - `scene.tsx` — four components: `InfiniteCanvasScene` (Canvas setup, fog, DPR), `SceneController` (input + chunk management), `Chunk` (spatial cell), `MediaPlane` (single image plane with depth cycling + fade)
 - `constants.ts` — all tunable physics/render values. Edit here to change feel.
 - `texture-manager.ts` — texture loading/caching; calls `onTextureProgress`
-- `utils.ts` — plane generation (3 planes/chunk, sizes 12–20 units, seeded RNG from chunk coords), LRU plane cache (max 256 entries), chunk update throttle logic
+- `utils.ts` — plane generation (1 plane/chunk, sizes 20–30 units, seeded RNG from chunk coords), LRU plane cache (max 256 entries), chunk update throttle logic
 
 **`src/app/index.tsx`** — root `App`; wires manifest → `InfiniteCanvas` + `PageLoader` + `Frame`
 
@@ -62,11 +62,25 @@ Media items are `{ url, width, height }`. To swap in your own photos, replace `p
 
 **Depth cycling (scroll zoom effect)**: Scrolling drives `velocity.z` which moves each image through a `[0, DEPTH_FADE_END)` depth cycle rather than moving the camera. `effectiveZ = INITIAL_CAMERA_Z - zOffset`. Images left of camera zoom out on scroll-up; images right zoom in. The cycle uses opacity fade zones: `NEAR_FADE_END` (fade in near camera), fully visible to `DEPTH_FADE_START`, then fade out to `DEPTH_FADE_END` where the image wraps invisibly back to 0.
 
-**Depth phase assignment** (`PlaneData.depthPhase`): Each image's starting position in the depth cycle is pre-computed in `generateChunkPlanes`. Within a chunk, 3 images are assigned evenly-spaced slots (`DEPTH_FADE_END / 3 ≈ 87` units apart). The per-chunk phase offset uses a golden-ratio sequence on chunk coordinates — this maximises the minimum gap between phases of different chunks, preventing depth collisions.
+**Depth phase assignment** (`PlaneData.depthPhase`): Each image's starting position in the depth cycle is pre-computed in `generateChunkPlanes`. The per-chunk phase offset uses a golden-ratio sequence on chunk coordinates — this maximises the minimum gap between phases of different chunks, preventing depth collisions.
 
 **Chunk throttling**: Chunk list updates are throttled to 100 ms normally, 400–500 ms while zooming fast, to avoid thrashing during rapid scroll.
 
 **React Compiler**: `babel-plugin-react-compiler` is active. Do not add manual `useMemo`/`useCallback` — the compiler handles memoization.
+
+### Tuned feel values (as of last session)
+
+All in `src/infinite-canvas/constants.ts` unless noted:
+
+| What | Constant / location | Value |
+|---|---|---|
+| Chunk spacing | `CHUNK_SIZE` | 200 |
+| Images per chunk | `ITEMS_PER_CHUNK` in `utils.ts` | 1 |
+| Plane size range | `size = 20 + r(4) * 10` in `utils.ts` | 20–30 units |
+| Velocity decay (inertia) | `VELOCITY_DECAY` | 0.96 |
+| Velocity smoothing | `VELOCITY_LERP` | 0.08 |
+| Scroll input sensitivity | `s.scrollAccum += e.deltaY * 0.002` in `scene.tsx` | 0.002 |
+| Camera FOV | `cameraFov={40}` in `src/app/index.tsx` | 40° |
 
 ### Customization props on `InfiniteCanvasScene`
 `backgroundColor`, `fogColor`, `fogNear`, `fogFar`, `cameraFov`, `cameraNear`, `cameraFar`, `showFps` (debug), `showControls` (debug hint overlay).

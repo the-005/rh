@@ -40,6 +40,7 @@ export function App() {
         activeCategory={category}
         onTextureProgress={setTextureProgress}
         onMediaClick={handleMediaClick}
+        cameraFov={40}
       />
       {projectId && <ProjectPage key={projectId} id={projectId} onClose={() => navigate("/")} />}
     </>

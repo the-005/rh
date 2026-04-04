@@ -45,7 +45,7 @@ export const getMediaDimensions = (media: HTMLImageElement | undefined) => {
 export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneData[] => {
   const planes: PlaneData[] = [];
   const seed = hashString(`${cx},${cy},${cz}`);
-  const ITEMS_PER_CHUNK = 3;
+  const ITEMS_PER_CHUNK = 1;
   // Golden ratio sequence on chunk coordinates: maximises the minimum gap
   // between any two chunk phases across the entire visible grid, eliminating
   // cross-chunk depth collisions that random phases can't prevent.
@@ -57,7 +57,7 @@ export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneDa
   for (let i = 0; i < ITEMS_PER_CHUNK; i++) {
     const s = seed + i * 1000;
     const r = (n: number) => seededRandom(s + n);
-    const size = 12 + r(4) * 8;
+    const size = 20 + r(4) * 10;
 
     planes.push({
       id: `${cx}-${cy}-${cz}-${i}`,
