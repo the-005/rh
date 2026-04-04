@@ -3,7 +3,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as React from "react";
 import * as THREE from "three";
 import { useIsTouchDevice } from "~/src/use-is-touch-device";
-import { clamp, lerp } from "~/src/utils";
+import { clamp, hashString, lerp, seededRandom } from "~/src/utils";
 import {
   CHUNK_FADE_MARGIN,
   CHUNK_OFFSETS,
@@ -106,7 +106,7 @@ function MediaPlane({
 }) {
   const meshRef = React.useRef<THREE.Mesh>(null);
   const materialRef = React.useRef<THREE.MeshBasicMaterial>(null);
-  const localState = React.useRef({ opacity: 0, ready: false, absoluteZOffset: depthPhase, lastCycle: 0, swapPending: false, filterFade: false });
+  const localState = React.useRef({ opacity: 0, ready: false, absoluteZOffset: depthPhase, lastCycle: 0, swapPending: false, filterFade: false, cycleX: position.x, cycleY: position.y });
 
   const [cycleIndex, setCycleIndex] = React.useState(0);
   const media = mediaPool[((mediaIndex + cycleIndex) % mediaPool.length + mediaPool.length) % mediaPool.length];
@@ -126,7 +126,7 @@ function MediaPlane({
     // Right images zoom in on scroll-up, left images zoom out.
     const { scrollDelta, camX } = cameraGridRef.current;
     if (Math.abs(scrollDelta) > 0.00001) {
-      const isRight = position.x >= camX;
+      const isRight = state.cycleX >= camX;
       state.absoluteZOffset += scrollDelta * (isRight ? 1 : -1);
     }
 
@@ -139,9 +139,16 @@ function MediaPlane({
       state.opacity = 0;
       state.swapPending = false; // re-evaluate category match on next frame
       setCycleIndex(newCycle);
+      // Relocate to a fresh random spot within the chunk so each cycle
+      // appears at a new position with a potentially different trajectory.
+      const cs = hashString(`${chunkCx},${chunkCy},${chunkCz},${newCycle}`);
+      state.cycleX = chunkCx * CHUNK_SIZE + seededRandom(cs) * CHUNK_SIZE;
+      state.cycleY = chunkCy * CHUNK_SIZE + (seededRandom(cs + 1) - 0.5) * CHUNK_SIZE;
     }
 
     const effectiveZ = INITIAL_CAMERA_Z - zOffset;
+    mesh.position.x = state.cycleX;
+    mesh.position.y = state.cycleY;
     mesh.position.z = effectiveZ;
 
     const cam = cameraGridRef.current;
