@@ -144,6 +144,14 @@ function MediaPlane({
       const cs = hashString(`${chunkCx},${chunkCy},${chunkCz},${newCycle}`);
       state.cycleX = chunkCx * CHUNK_SIZE + seededRandom(cs) * CHUNK_SIZE;
       state.cycleY = chunkCy * CHUNK_SIZE + (seededRandom(cs + 1) - 0.5) * CHUNK_SIZE;
+      // Reset depth to a fresh spread position — prevents direction-flip convergence
+      // where planes that flipped isRight drift toward each other's depth.
+      // Golden ratio on (chunkSeq + cycle) gives each chunk a unique phase that
+      // steps irrrationally each cycle, never revisiting the same depth.
+      const chunkSeq = (chunkCx + 10) * 400 + (chunkCy + 10) * 20 + (chunkCz + 10);
+      const GOLDEN_RATIO = 0.6180339887498949;
+      const phaseFraction = (((chunkSeq + newCycle) * GOLDEN_RATIO) % 1 + 1) % 1;
+      state.absoluteZOffset = newCycle * DEPTH_FADE_END + phaseFraction * DEPTH_FADE_END;
     }
 
     const effectiveZ = INITIAL_CAMERA_Z - zOffset;
