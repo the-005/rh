@@ -12,7 +12,6 @@ export const KEYBOARD_SPEED = 0.18;
 export const VELOCITY_LERP = 0.08;
 export const VELOCITY_DECAY = 0.96;
 export const INITIAL_CAMERA_Z = 50;
-export const PLANE_SPREAD = 0.7; // image stays within central 70% of each chunk; lower = more even, higher = more chaotic
 
 export type ChunkOffset = {
   dx: number;
