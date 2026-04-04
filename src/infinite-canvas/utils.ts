@@ -46,6 +46,13 @@ export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneDa
   const planes: PlaneData[] = [];
   const seed = hashString(`${cx},${cy},${cz}`);
   const ITEMS_PER_CHUNK = 2;
+  // Golden ratio sequence on chunk coords gives maximum minimum spacing between
+  // any two chunks' depth phases — prevents multiple images appearing at the
+  // same visual depth (same size) simultaneously.
+  const GOLDEN_RATIO = 0.6180339887498949;
+  const chunkSeq = (cx + 10) * 400 + (cy + 10) * 20 + (cz + 10);
+  const chunkPhase = ((chunkSeq * GOLDEN_RATIO) % 1) * DEPTH_FADE_END;
+  const slotStep = DEPTH_FADE_END / ITEMS_PER_CHUNK;
 
   for (let i = 0; i < ITEMS_PER_CHUNK; i++) {
     const s = seed + i * 1000;
@@ -61,7 +68,7 @@ export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneDa
       ),
       scale: new THREE.Vector3(size, size, 1),
       mediaIndex: Math.floor(r(5) * 1_000_000),
-      depthPhase: r(3) * DEPTH_FADE_END,
+      depthPhase: (chunkPhase + i * slotStep) % DEPTH_FADE_END,
     });
   }
 
