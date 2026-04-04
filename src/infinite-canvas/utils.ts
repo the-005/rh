@@ -68,7 +68,7 @@ export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneDa
       id: `${cx}-${cy}-${cz}-${i}`,
       position: new THREE.Vector3(
         cx * CHUNK_SIZE + xLocal,
-        cy * CHUNK_SIZE + r(1) * CHUNK_SIZE,
+        cy * CHUNK_SIZE + (r(1) - 0.5) * CHUNK_SIZE,
         cz * CHUNK_SIZE + r(2) * CHUNK_SIZE
       ),
       scale: new THREE.Vector3(size, size, 1),
