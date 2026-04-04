@@ -45,35 +45,23 @@ export const getMediaDimensions = (media: HTMLImageElement | undefined) => {
 export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneData[] => {
   const planes: PlaneData[] = [];
   const seed = hashString(`${cx},${cy},${cz}`);
-  // Two images per chunk, stratified across left and right halves of the X axis.
-  // This guarantees at least one image is always near the camera regardless of
-  // where in the chunk the camera sits, eliminating bare stretches.
   const ITEMS_PER_CHUNK = 2;
-  // Golden ratio sequence on chunk coordinates: maximises the minimum gap
-  // between any two chunk phases across the entire visible grid, eliminating
-  // cross-chunk depth collisions that random phases can't prevent.
-  const GOLDEN_RATIO = 0.6180339887498949;
-  const chunkSeq = (cx + 10) * 400 + (cy + 10) * 20 + (cz + 10);
-  const chunkPhase = ((chunkSeq * GOLDEN_RATIO) % 1) * DEPTH_FADE_END;
-  const slotStep = DEPTH_FADE_END / ITEMS_PER_CHUNK;
 
   for (let i = 0; i < ITEMS_PER_CHUNK; i++) {
     const s = seed + i * 1000;
     const r = (n: number) => seededRandom(s + n);
     const size = 20 + r(4) * 10;
-    // Stratify X: item 0 in left half, item 1 in right half of chunk
-    const xLocal = (i * 0.5 + r(0) * 0.5) * CHUNK_SIZE;
 
     planes.push({
       id: `${cx}-${cy}-${cz}-${i}`,
       position: new THREE.Vector3(
-        cx * CHUNK_SIZE + xLocal,
+        cx * CHUNK_SIZE + r(0) * CHUNK_SIZE,
         cy * CHUNK_SIZE + (r(1) - 0.5) * CHUNK_SIZE,
         cz * CHUNK_SIZE + r(2) * CHUNK_SIZE
       ),
       scale: new THREE.Vector3(size, size, 1),
       mediaIndex: Math.floor(r(5) * 1_000_000),
-      depthPhase: (chunkPhase + i * slotStep) % DEPTH_FADE_END,
+      depthPhase: r(3) * DEPTH_FADE_END,
     });
   }
 
