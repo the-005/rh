@@ -126,7 +126,7 @@ function MediaPlane({
     // Right images zoom in on scroll-up, left images zoom out.
     const { scrollDelta, camX } = cameraGridRef.current;
     if (Math.abs(scrollDelta) > 0.00001) {
-      const isRight = state.cycleX >= camX;
+      const isRight = position.x >= camX;
       state.absoluteZOffset += scrollDelta * (isRight ? 1 : -1);
     }
 
