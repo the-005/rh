@@ -26,33 +26,6 @@ import { generateChunkPlanesCached, getChunkUpdateThrottleMs, SESSION_SEED, shou
 
 const PLANE_GEOMETRY = new THREE.PlaneGeometry(1, 1);
 
-// Global depth registry — every active plane writes its current zOffset here each frame.
-// On cycle reset, findBestDepth picks the midpoint of the largest gap so each resetting
-// plane lands as far as possible from all others.
-const planeDepthRegistry = new Map<string, number>();
-
-const findBestDepth = (excludeId: string): number => {
-  const others = [...planeDepthRegistry.entries()]
-    .filter(([id]) => id !== excludeId)
-    .map(([, d]) => d)
-    .sort((a, b) => a - b);
-
-  if (others.length === 0) return 0;
-
-  let maxGap = 0;
-  let bestMidpoint = 0;
-  for (let i = 0; i < others.length; i++) {
-    const curr = others[i];
-    const next = i < others.length - 1 ? others[i + 1] : others[0] + DEPTH_FADE_END;
-    const gap = next - curr;
-    if (gap > maxGap) {
-      maxGap = gap;
-      bestMidpoint = ((curr + gap / 2) % DEPTH_FADE_END + DEPTH_FADE_END) % DEPTH_FADE_END;
-    }
-  }
-  return bestMidpoint;
-};
-
 function getMeshScreenRect(mesh: THREE.Mesh, camera: THREE.Camera) {
   const pos = new THREE.Vector3();
   mesh.getWorldPosition(pos);
@@ -133,8 +106,6 @@ function MediaPlane({
 }) {
   const meshRef = React.useRef<THREE.Mesh>(null);
   const materialRef = React.useRef<THREE.MeshBasicMaterial>(null);
-  // Stable unique ID for the depth registry — depthPhase is unique per plane within a chunk.
-  const planeId = `${chunkCx},${chunkCy},${chunkCz},${depthPhase}`;
   // cycleX/cycleY use the same hash formula as the cycle-reset below (with newCycle=0)
   // so that scrolling back to cycle 0 shows the exact same position as the initial view.
   const initCs = hashString(`${SESSION_SEED},${chunkCx},${chunkCy},${chunkCz},0`);
@@ -154,12 +125,6 @@ function MediaPlane({
 
   const [texture, setTexture] = React.useState<THREE.Texture | null>(null);
   const [isReady, setIsReady] = React.useState(false);
-
-  React.useEffect(() => {
-    return () => {
-      planeDepthRegistry.delete(planeId);
-    };
-  }, [planeId]);
 
   useFrame((_state, delta) => {
     const material = materialRef.current;
@@ -191,11 +156,7 @@ function MediaPlane({
       const cs = hashString(`${SESSION_SEED},${chunkCx},${chunkCy},${chunkCz},${newCycle}`);
       state.cycleX = chunkCx * CHUNK_SIZE + seededRandom(cs) * CHUNK_SIZE;
       state.cycleY = chunkCy * CHUNK_SIZE + (seededRandom(cs + 1) - 0.5) * CHUNK_SIZE;
-      // Pick the depth that sits at the midpoint of the largest gap among all active planes.
-      state.absoluteZOffset = newCycle * DEPTH_FADE_END + findBestDepth(planeId);
     }
-
-    planeDepthRegistry.set(planeId, ((state.absoluteZOffset % DEPTH_FADE_END) + DEPTH_FADE_END) % DEPTH_FADE_END);
 
     const effectiveZ = INITIAL_CAMERA_Z - zOffset;
     mesh.position.x = state.cycleX;
