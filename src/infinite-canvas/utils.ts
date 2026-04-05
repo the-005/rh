@@ -59,7 +59,7 @@ export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneDa
   for (let i = 0; i < ITEMS_PER_CHUNK; i++) {
     const s = seed + i * 1000;
     const r = (n: number) => seededRandom(s + n);
-    const size = 26 + r(4) * 12;
+    const size = 20 + r(4) * 10;
 
     planes.push({
       id: `${cx}-${cy}-${cz}-${i}`,
