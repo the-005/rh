@@ -3,7 +3,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as React from "react";
 import * as THREE from "three";
 import { useIsTouchDevice } from "~/src/use-is-touch-device";
-import { clamp, hashString, lerp, seededRandom } from "~/src/utils";
+import { clamp, lerp } from "~/src/utils";
 import {
   CHUNK_FADE_MARGIN,
   CHUNK_OFFSETS,
@@ -22,7 +22,7 @@ import {
 import styles from "./style.module.css";
 import { getTexture } from "./texture-manager";
 import type { ChunkData, InfiniteCanvasProps, MediaItem, PlaneData } from "./types";
-import { generateChunkPlanesCached, getChunkUpdateThrottleMs, SESSION_SEED, shouldThrottleUpdate } from "./utils";
+import { generateChunkPlanesCached, getChunkUpdateThrottleMs, shouldThrottleUpdate } from "./utils";
 
 const PLANE_GEOMETRY = new THREE.PlaneGeometry(1, 1);
 
@@ -76,7 +76,6 @@ type CameraGridState = {
   cz: number;
   camZ: number;
   camX: number;
-  camY: number;
   /** Per-frame Z velocity applied to image depth offsets (not camera). */
   scrollDelta: number;
   activeCategory: string;
@@ -107,20 +106,7 @@ function MediaPlane({
 }) {
   const meshRef = React.useRef<THREE.Mesh>(null);
   const materialRef = React.useRef<THREE.MeshBasicMaterial>(null);
-  // cycleX/cycleY use the same hash formula as the cycle-reset below (with newCycle=0)
-  // so that scrolling back to cycle 0 shows the exact same position as the initial view.
-  const initCs = hashString(`${SESSION_SEED},${chunkCx},${chunkCy},${chunkCz},0`);
-  const { camX: initCamX, camY: initCamY } = cameraGridRef.current;
-  const localState = React.useRef({
-    opacity: 0,
-    ready: false,
-    absoluteZOffset: depthPhase,
-    lastCycle: 0,
-    swapPending: false,
-    filterFade: false,
-    cycleX: initCamX + (seededRandom(initCs) - 0.5) * 200,
-    cycleY: initCamY + (seededRandom(initCs + 1) - 0.5) * 120,
-  });
+  const localState = React.useRef({ opacity: 0, ready: false, absoluteZOffset: depthPhase, lastCycle: 0, swapPending: false, filterFade: false });
 
   const [cycleIndex, setCycleIndex] = React.useState(0);
   const media = mediaPool[((mediaIndex + cycleIndex) % mediaPool.length + mediaPool.length) % mediaPool.length];
@@ -140,7 +126,7 @@ function MediaPlane({
     // Right images zoom in on scroll-up, left images zoom out.
     const { scrollDelta, camX } = cameraGridRef.current;
     if (Math.abs(scrollDelta) > 0.00001) {
-      const isRight = state.cycleX >= camX;
+      const isRight = position.x >= camX;
       state.absoluteZOffset += scrollDelta * (isRight ? 1 : -1);
     }
 
@@ -153,17 +139,9 @@ function MediaPlane({
       state.opacity = 0;
       state.swapPending = false; // re-evaluate category match on next frame
       setCycleIndex(newCycle);
-      // Relocate to the cycle-keyed position — deterministic per cycle so scrolling
-      // back revisits the same spot as the forward pass.
-      const cs = hashString(`${SESSION_SEED},${chunkCx},${chunkCy},${chunkCz},${newCycle}`);
-      const { camX: cx, camY: cy } = cameraGridRef.current;
-      state.cycleX = cx + (seededRandom(cs) - 0.5) * 200;
-      state.cycleY = cy + (seededRandom(cs + 1) - 0.5) * 120;
     }
 
     const effectiveZ = INITIAL_CAMERA_Z - zOffset;
-    mesh.position.x = state.cycleX;
-    mesh.position.y = state.cycleY;
     mesh.position.z = effectiveZ;
 
     const cam = cameraGridRef.current;
@@ -403,7 +381,6 @@ function SceneController({ media, onTextureProgress, activeCategory = "all", onM
     cz: 0,
     camZ: INITIAL_CAMERA_Z,
     camX: 0,
-    camY: 0,
     scrollDelta: 0,
     activeCategory: "all",
   });
@@ -462,7 +439,7 @@ function SceneController({ media, onTextureProgress, activeCategory = "all", onM
 
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      s.scrollAccum += e.deltaY * 0.004;
+      s.scrollAccum += e.deltaY * 0.006;
     };
 
     const onTouchStart = (e: TouchEvent) => {
@@ -531,7 +508,7 @@ function SceneController({ media, onTextureProgress, activeCategory = "all", onM
 
     // Z velocity driven by scroll — applied to image depth offsets, NOT camera Z
     s.targetVel.z += s.scrollAccum;
-    s.scrollAccum *= 0.85;
+    s.scrollAccum *= 0.8;
 
     const isZooming = Math.abs(s.velocity.z) > 0.05;
     const zoomFactor = clamp(s.basePos.z / 50, 0.3, 2.0);
@@ -577,7 +554,6 @@ function SceneController({ media, onTextureProgress, activeCategory = "all", onM
       cz,
       camZ: INITIAL_CAMERA_Z,
       camX: s.basePos.x,
-      camY: s.basePos.y,
       scrollDelta: s.velocity.z,
       activeCategory,
     };
