@@ -458,7 +458,7 @@ function SceneController({ media, onTextureProgress, activeCategory = "all", onM
 
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      s.scrollAccum += e.deltaY * 0.002;
+      s.scrollAccum += e.deltaY * 0.004;
     };
 
     const onTouchStart = (e: TouchEvent) => {
