@@ -76,6 +76,7 @@ type CameraGridState = {
   cz: number;
   camZ: number;
   camX: number;
+  camY: number;
   /** Per-frame Z velocity applied to image depth offsets (not camera). */
   scrollDelta: number;
   activeCategory: string;
@@ -109,7 +110,7 @@ function MediaPlane({
   // cycleX/cycleY use the same hash formula as the cycle-reset below (with newCycle=0)
   // so that scrolling back to cycle 0 shows the exact same position as the initial view.
   const initCs = hashString(`${SESSION_SEED},${chunkCx},${chunkCy},${chunkCz},0`);
-  const initCycleX = chunkCx * CHUNK_SIZE + seededRandom(initCs) * CHUNK_SIZE;
+  const { camX: initCamX, camY: initCamY } = cameraGridRef.current;
   const localState = React.useRef({
     opacity: 0,
     ready: false,
@@ -117,11 +118,8 @@ function MediaPlane({
     lastCycle: 0,
     swapPending: false,
     filterFade: false,
-    cycleX: initCycleX,
-    cycleY: chunkCy * CHUNK_SIZE + (seededRandom(initCs + 1) - 0.5) * CHUNK_SIZE,
-    // Locked for the entire cycle — only updated on cycle reset, never mid-cycle.
-    // Prevents panning from flipping direction and emptying the visible zone.
-    scrollDir: initCycleX >= cameraGridRef.current.camX ? 1 : -1,
+    cycleX: initCamX + (seededRandom(initCs) - 0.5) * 200,
+    cycleY: initCamY + (seededRandom(initCs + 1) - 0.5) * 120,
   });
 
   const [cycleIndex, setCycleIndex] = React.useState(0);
@@ -140,9 +138,10 @@ function MediaPlane({
     // zOffset is the image's depth from the camera within [0, DEPTH_FADE_END).
     // All images wrap at the same modulo boundary so they never converge in depth.
     // Right images zoom in on scroll-up, left images zoom out.
-    const { scrollDelta } = cameraGridRef.current;
+    const { scrollDelta, camX } = cameraGridRef.current;
     if (Math.abs(scrollDelta) > 0.00001) {
-      state.absoluteZOffset += scrollDelta * state.scrollDir;
+      const isRight = state.cycleX >= camX;
+      state.absoluteZOffset += scrollDelta * (isRight ? 1 : -1);
     }
 
     const zOffset = ((state.absoluteZOffset % DEPTH_FADE_END) + DEPTH_FADE_END) % DEPTH_FADE_END;
@@ -157,9 +156,9 @@ function MediaPlane({
       // Relocate to the cycle-keyed position — deterministic per cycle so scrolling
       // back revisits the same spot as the forward pass.
       const cs = hashString(`${SESSION_SEED},${chunkCx},${chunkCy},${chunkCz},${newCycle}`);
-      state.cycleX = chunkCx * CHUNK_SIZE + seededRandom(cs) * CHUNK_SIZE;
-      state.cycleY = chunkCy * CHUNK_SIZE + (seededRandom(cs + 1) - 0.5) * CHUNK_SIZE;
-      state.scrollDir = state.cycleX >= cameraGridRef.current.camX ? 1 : -1;
+      const { camX: cx, camY: cy } = cameraGridRef.current;
+      state.cycleX = cx + (seededRandom(cs) - 0.5) * 200;
+      state.cycleY = cy + (seededRandom(cs + 1) - 0.5) * 120;
     }
 
     const effectiveZ = INITIAL_CAMERA_Z - zOffset;
@@ -404,6 +403,7 @@ function SceneController({ media, onTextureProgress, activeCategory = "all", onM
     cz: 0,
     camZ: INITIAL_CAMERA_Z,
     camX: 0,
+    camY: 0,
     scrollDelta: 0,
     activeCategory: "all",
   });
@@ -577,6 +577,7 @@ function SceneController({ media, onTextureProgress, activeCategory = "all", onM
       cz,
       camZ: INITIAL_CAMERA_Z,
       camX: s.basePos.x,
+      camY: s.basePos.y,
       scrollDelta: s.velocity.z,
       activeCategory,
     };
