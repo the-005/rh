@@ -106,7 +106,19 @@ function MediaPlane({
 }) {
   const meshRef = React.useRef<THREE.Mesh>(null);
   const materialRef = React.useRef<THREE.MeshBasicMaterial>(null);
-  const localState = React.useRef({ opacity: 0, ready: false, absoluteZOffset: depthPhase, lastCycle: 0, swapPending: false, filterFade: false, cycleX: position.x, cycleY: position.y });
+  // cycleX/cycleY use the same hash formula as the cycle-reset below (with newCycle=0)
+  // so that scrolling back to cycle 0 shows the exact same position as the initial view.
+  const initCs = hashString(`${SESSION_SEED},${chunkCx},${chunkCy},${chunkCz},0`);
+  const localState = React.useRef({
+    opacity: 0,
+    ready: false,
+    absoluteZOffset: depthPhase,
+    lastCycle: 0,
+    swapPending: false,
+    filterFade: false,
+    cycleX: chunkCx * CHUNK_SIZE + seededRandom(initCs) * CHUNK_SIZE,
+    cycleY: chunkCy * CHUNK_SIZE + (seededRandom(initCs + 1) - 0.5) * CHUNK_SIZE,
+  });
 
   const [cycleIndex, setCycleIndex] = React.useState(0);
   const media = mediaPool[((mediaIndex + cycleIndex) % mediaPool.length + mediaPool.length) % mediaPool.length];
@@ -139,19 +151,11 @@ function MediaPlane({
       state.opacity = 0;
       state.swapPending = false; // re-evaluate category match on next frame
       setCycleIndex(newCycle);
-      // Relocate to a fresh random spot within the chunk so each cycle
-      // appears at a new position with a potentially different trajectory.
+      // Relocate to the cycle-keyed position — deterministic per cycle so scrolling
+      // back revisits the same spot as the forward pass.
       const cs = hashString(`${SESSION_SEED},${chunkCx},${chunkCy},${chunkCz},${newCycle}`);
       state.cycleX = chunkCx * CHUNK_SIZE + seededRandom(cs) * CHUNK_SIZE;
       state.cycleY = chunkCy * CHUNK_SIZE + (seededRandom(cs + 1) - 0.5) * CHUNK_SIZE;
-      // Reset depth to a fresh spread position — prevents direction-flip convergence
-      // where planes that flipped isRight drift toward each other's depth.
-      // Golden ratio on (chunkSeq + cycle) gives each chunk a unique phase that
-      // steps irrrationally each cycle, never revisiting the same depth.
-      const chunkSeq = (chunkCx + 10) * 400 + (chunkCy + 10) * 20 + (chunkCz + 10);
-      const GOLDEN_RATIO = 0.6180339887498949;
-      const phaseFraction = ((((chunkSeq + SESSION_SEED) + newCycle) * GOLDEN_RATIO) % 1 + 1) % 1;
-      state.absoluteZOffset = newCycle * DEPTH_FADE_END + phaseFraction * DEPTH_FADE_END;
     }
 
     const effectiveZ = INITIAL_CAMERA_Z - zOffset;
