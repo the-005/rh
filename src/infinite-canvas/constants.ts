@@ -1,7 +1,7 @@
 import { run } from "~/src/utils";
 
 export const CHUNK_SIZE = 200;
-export const RENDER_DISTANCE = 2;
+export const RENDER_DISTANCE = 1;
 export const CHUNK_FADE_MARGIN = 1;
 export const MAX_VELOCITY = 3.2;
 export const NEAR_FADE_END = 15;
