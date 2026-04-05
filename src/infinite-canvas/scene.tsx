@@ -22,7 +22,7 @@ import {
 import styles from "./style.module.css";
 import { getTexture } from "./texture-manager";
 import type { ChunkData, InfiniteCanvasProps, MediaItem, PlaneData } from "./types";
-import { generateChunkPlanesCached, getChunkUpdateThrottleMs, shouldThrottleUpdate } from "./utils";
+import { generateChunkPlanesCached, getChunkUpdateThrottleMs, SESSION_SEED, shouldThrottleUpdate } from "./utils";
 
 const PLANE_GEOMETRY = new THREE.PlaneGeometry(1, 1);
 
@@ -141,7 +141,7 @@ function MediaPlane({
       setCycleIndex(newCycle);
       // Relocate to a fresh random spot within the chunk so each cycle
       // appears at a new position with a potentially different trajectory.
-      const cs = hashString(`${chunkCx},${chunkCy},${chunkCz},${newCycle}`);
+      const cs = hashString(`${SESSION_SEED},${chunkCx},${chunkCy},${chunkCz},${newCycle}`);
       state.cycleX = chunkCx * CHUNK_SIZE + seededRandom(cs) * CHUNK_SIZE;
       state.cycleY = chunkCy * CHUNK_SIZE + (seededRandom(cs + 1) - 0.5) * CHUNK_SIZE;
       // Reset depth to a fresh spread position — prevents direction-flip convergence
@@ -150,7 +150,7 @@ function MediaPlane({
       // steps irrrationally each cycle, never revisiting the same depth.
       const chunkSeq = (chunkCx + 10) * 400 + (chunkCy + 10) * 20 + (chunkCz + 10);
       const GOLDEN_RATIO = 0.6180339887498949;
-      const phaseFraction = (((chunkSeq + newCycle) * GOLDEN_RATIO) % 1 + 1) % 1;
+      const phaseFraction = ((((chunkSeq + SESSION_SEED) + newCycle) * GOLDEN_RATIO) % 1 + 1) % 1;
       state.absoluteZOffset = newCycle * DEPTH_FADE_END + phaseFraction * DEPTH_FADE_END;
     }
 

@@ -3,6 +3,8 @@ import { hashString, seededRandom } from "~/src/utils";
 import { CHUNK_SIZE, DEPTH_FADE_END } from "./constants";
 import type { PlaneData } from "./types";
 
+export const SESSION_SEED = Math.floor(Math.random() * 1_000_000);
+
 const MAX_PLANE_CACHE = 256;
 const planeCache = new Map<string, PlaneData[]>();
 
@@ -44,14 +46,14 @@ export const getMediaDimensions = (media: HTMLImageElement | undefined) => {
 
 export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneData[] => {
   const planes: PlaneData[] = [];
-  const seed = hashString(`${cx},${cy},${cz}`);
+  const seed = hashString(`${SESSION_SEED},${cx},${cy},${cz}`);
   const ITEMS_PER_CHUNK = 2;
   // Golden ratio sequence on chunk coords gives maximum minimum spacing between
   // any two chunks' depth phases — prevents multiple images appearing at the
   // same visual depth (same size) simultaneously.
   const GOLDEN_RATIO = 0.6180339887498949;
   const chunkSeq = (cx + 10) * 400 + (cy + 10) * 20 + (cz + 10);
-  const chunkPhase = ((chunkSeq * GOLDEN_RATIO) % 1) * DEPTH_FADE_END;
+  const chunkPhase = (((chunkSeq + SESSION_SEED) * GOLDEN_RATIO) % 1) * DEPTH_FADE_END;
   const slotStep = DEPTH_FADE_END / ITEMS_PER_CHUNK;
 
   for (let i = 0; i < ITEMS_PER_CHUNK; i++) {
