@@ -47,7 +47,7 @@ export const getMediaDimensions = (media: HTMLImageElement | undefined) => {
 export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneData[] => {
   const planes: PlaneData[] = [];
   const seed = hashString(`${SESSION_SEED},${cx},${cy},${cz}`);
-  const ITEMS_PER_CHUNK = 1;
+  const ITEMS_PER_CHUNK = 2;
   // Golden ratio sequence on chunk coords gives maximum minimum spacing between
   // any two chunks' depth phases — prevents multiple images appearing at the
   // same visual depth (same size) simultaneously.
