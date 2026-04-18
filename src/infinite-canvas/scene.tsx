@@ -78,6 +78,9 @@ type CameraGridState = {
   camX: number;
   /** Per-frame Z velocity applied to image depth offsets (not camera). */
   scrollDelta: number;
+  /** Running sum of all scrollDelta values since session start. Used to sync
+   *  absoluteZOffset when a MediaPlane remounts after its chunk leaves/re-enters view. */
+  cumulativeScroll: number;
   activeCategory: string;
 };
 
@@ -109,18 +112,24 @@ function MediaPlane({
   const meshRef = React.useRef<THREE.Mesh>(null);
   const materialRef = React.useRef<THREE.MeshBasicMaterial>(null);
   const initPos = getChunkCyclePositions(chunkCx, chunkCy, chunkCz, 0)[chunkIndex];
+  const isInitRight = initPos.x >= cameraGridRef.current.camX;
+  const initialAbsoluteZ = depthPhase + cameraGridRef.current.cumulativeScroll * (isInitRight ? 1 : -1);
+  const initialCycle = Math.floor(initialAbsoluteZ / DEPTH_FADE_END);
+  const initCyclePos =
+    initialCycle === 0 ? initPos : getChunkCyclePositions(chunkCx, chunkCy, chunkCz, initialCycle)[chunkIndex];
+
   const localState = React.useRef({
     opacity: 0,
     ready: false,
-    absoluteZOffset: depthPhase,
-    lastCycle: 0,
+    absoluteZOffset: initialAbsoluteZ,
+    lastCycle: initialCycle,
     swapPending: false,
     filterFade: false,
-    cycleX: initPos.x,
-    cycleY: initPos.y,
+    cycleX: initCyclePos.x,
+    cycleY: initCyclePos.y,
   });
 
-  const [cycleIndex, setCycleIndex] = React.useState(0);
+  const [cycleIndex, setCycleIndex] = React.useState(initialCycle);
   const media = mediaPool[((mediaIndex + cycleIndex) % mediaPool.length + mediaPool.length) % mediaPool.length];
 
   const [texture, setTexture] = React.useState<THREE.Texture | null>(null);
@@ -389,7 +398,7 @@ const createInitialState = (camZ: number): ControllerState => ({
   pendingChunk: null,
 });
 
-function SceneController({ media, onTextureProgress, activeCategory = "all", onMediaClick }: { media: MediaItem[]; onTextureProgress?: (progress: number) => void; activeCategory?: string; onMediaClick?: (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => void }) {
+function SceneController({ media, onTextureProgress, activeCategory = "all", onMediaClick, debugElRef }: { media: MediaItem[]; onTextureProgress?: (progress: number) => void; activeCategory?: string; onMediaClick?: (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => void; debugElRef?: React.RefObject<HTMLDivElement | null> }) {
   const { camera, gl } = useThree();
   const isTouchDevice = useIsTouchDevice();
   const [, getKeys] = useKeyboardControls<keyof KeyboardKeys>();
@@ -402,6 +411,7 @@ function SceneController({ media, onTextureProgress, activeCategory = "all", onM
     camZ: INITIAL_CAMERA_Z,
     camX: 0,
     scrollDelta: 0,
+    cumulativeScroll: 0,
     activeCategory: "all",
   });
 
@@ -568,6 +578,7 @@ function SceneController({ media, onTextureProgress, activeCategory = "all", onM
     const cy = Math.floor(s.basePos.y / CHUNK_SIZE);
     const cz = Math.floor(INITIAL_CAMERA_Z / CHUNK_SIZE);
 
+    const newCumScroll = cameraGridRef.current.cumulativeScroll + s.velocity.z;
     cameraGridRef.current = {
       cx,
       cy,
@@ -575,8 +586,18 @@ function SceneController({ media, onTextureProgress, activeCategory = "all", onM
       camZ: INITIAL_CAMERA_Z,
       camX: s.basePos.x,
       scrollDelta: s.velocity.z,
+      cumulativeScroll: newCumScroll,
       activeCategory,
     };
+
+    const debugEl = debugElRef?.current;
+    if (debugEl) {
+      debugEl.textContent =
+        `pos    x:${s.basePos.x.toFixed(0).padStart(7)}  y:${s.basePos.y.toFixed(0).padStart(7)}\n` +
+        `chunk  cx:${String(cx).padStart(3)}  cy:${String(cy).padStart(3)}\n` +
+        `vel.z  ${s.velocity.z.toFixed(3).padStart(8)}  zoom:${isZooming ? "Y" : "N"}\n` +
+        `cumScroll  ${newCumScroll.toFixed(1)}`;
+    }
 
     const key = `${cx},${cy},${cz}`;
     if (key !== s.lastChunkKey) {
@@ -631,6 +652,7 @@ export function InfiniteCanvasScene({
   onMediaClick,
   showFps = false,
   showControls = false,
+  showDebug = false,
   cameraFov = 60,
   cameraNear = 1,
   cameraFar = 500,
@@ -640,6 +662,7 @@ export function InfiniteCanvasScene({
   fogColor = "#ffffff",
   activeCategory = "all",
 }: InfiniteCanvasProps) {
+  const debugElRef = React.useRef<HTMLDivElement>(null);
   const isTouchDevice = useIsTouchDevice();
   const dpr = Math.min(window.devicePixelRatio || 1, isTouchDevice ? 1.25 : 1.5);
 
@@ -660,7 +683,7 @@ export function InfiniteCanvasScene({
         >
           <color attach="background" args={[backgroundColor]} />
           <fog attach="fog" args={[fogColor, fogNear, fogFar]} />
-          <SceneController media={media} onTextureProgress={onTextureProgress} activeCategory={activeCategory} onMediaClick={onMediaClick} />
+          <SceneController media={media} onTextureProgress={onTextureProgress} activeCategory={activeCategory} onMediaClick={onMediaClick} debugElRef={showDebug ? debugElRef : undefined} />
           {showFps && <Stats className={styles.stats} />}
         </Canvas>
 
@@ -677,6 +700,7 @@ export function InfiniteCanvasScene({
             )}
           </div>
         )}
+        {showDebug && <div ref={debugElRef} className={styles.debugPanel} />}
       </div>
     </KeyboardControls>
   );

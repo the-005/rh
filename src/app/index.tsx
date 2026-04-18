@@ -41,6 +41,7 @@ export function App() {
         onTextureProgress={setTextureProgress}
         onMediaClick={handleMediaClick}
         cameraFov={60}
+        showDebug
       />
       {projectId && <ProjectPage key={projectId} id={projectId} onClose={() => navigate("/")} />}
     </>

@@ -14,6 +14,7 @@ export type InfiniteCanvasProps = {
   onMediaClick?: (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => void;
   showFps?: boolean;
   showControls?: boolean;
+  showDebug?: boolean;
   cameraFov?: number;
   cameraNear?: number;
   cameraFar?: number;

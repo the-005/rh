@@ -47,3 +47,20 @@
   right: 12px !important;
   left: auto !important;
 }
+
+.debugPanel {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  z-index: 10;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.72);
+  padding: 10px 14px;
+  font-size: 11px;
+  font-family: ui-monospace, monospace;
+  color: #7fffb2;
+  white-space: pre;
+  line-height: 1.7;
+  pointer-events: none;
+  letter-spacing: 0.02em;
+}
