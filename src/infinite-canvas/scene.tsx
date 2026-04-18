@@ -728,23 +728,43 @@ export function InfiniteCanvasScene({
         {showDebug && <div ref={debugElRef} className={styles.debugPanel} />}
         {showTuning && (
           <div className={styles.tuningPanel}>
-            <label>Density {tv.itemsPerChunk}
+            <label>
+              <span className={styles.labelRow}>
+                Density {tv.itemsPerChunk}
+                <span className={styles.info} data-tip="Images per chunk cell. Higher = denser canvas.">ⓘ</span>
+              </span>
               <input type="range" min={1} max={4} step={1} value={tv.itemsPerChunk}
                 onChange={e => { const v = +e.target.value; tuning.itemsPerChunk = v; setTv(t => ({...t, itemsPerChunk: v})); bumpGen(); }} />
             </label>
-            <label>Min size {tv.minSize}
+            <label>
+              <span className={styles.labelRow}>
+                Min size {tv.minSize}
+                <span className={styles.info} data-tip="Smallest image size in world units.">ⓘ</span>
+              </span>
               <input type="range" min={10} max={50} value={tv.minSize}
                 onChange={e => { const v = +e.target.value; tuning.minSize = v; setTv(t => ({...t, minSize: v})); bumpGen(); }} />
             </label>
-            <label>Max size {tv.maxSize}
+            <label>
+              <span className={styles.labelRow}>
+                Max size {tv.maxSize}
+                <span className={styles.info} data-tip="Largest image size in world units.">ⓘ</span>
+              </span>
               <input type="range" min={15} max={70} value={tv.maxSize}
                 onChange={e => { const v = +e.target.value; tuning.maxSize = v; setTv(t => ({...t, maxSize: v})); bumpGen(); }} />
             </label>
-            <label>Visible window {tv.depthFadeStart}
+            <label>
+              <span className={styles.labelRow}>
+                Visible window {tv.depthFadeStart}
+                <span className={styles.info} data-tip="Depth at which images start fading out. Higher = images stay visible longer before disappearing.">ⓘ</span>
+              </span>
               <input type="range" min={50} max={450} step={10} value={tv.depthFadeStart}
                 onChange={e => { const v = +e.target.value; tuning.depthFadeStart = v; setTv(t => ({...t, depthFadeStart: v})); }} />
             </label>
-            <label>Cycle length {tv.depthFadeEnd}
+            <label>
+              <span className={styles.labelRow}>
+                Cycle length {tv.depthFadeEnd}
+                <span className={styles.info} data-tip="Full depth cycle before an image wraps back. Higher = longer between repeat appearances.">ⓘ</span>
+              </span>
               <input type="range" min={300} max={1000} step={10} value={tv.depthFadeEnd}
                 onChange={e => { const v = +e.target.value; tuning.depthFadeEnd = v; setTv(t => ({...t, depthFadeEnd: v})); bumpGen(); }} />
             </label>
