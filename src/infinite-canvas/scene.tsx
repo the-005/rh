@@ -3,7 +3,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as React from "react";
 import * as THREE from "three";
 import { useIsTouchDevice } from "~/src/use-is-touch-device";
-import { clamp, hashString, lerp, seededRandom } from "~/src/utils";
+import { clamp, lerp } from "~/src/utils";
 import {
   CHUNK_FADE_MARGIN,
   CHUNK_OFFSETS,
@@ -22,7 +22,7 @@ import {
 import styles from "./style.module.css";
 import { getTexture } from "./texture-manager";
 import type { ChunkData, InfiniteCanvasProps, MediaItem, PlaneData } from "./types";
-import { SESSION_SEED, generateChunkPlanesCached, getChunkUpdateThrottleMs, shouldThrottleUpdate } from "./utils";
+import { generateChunkPlanesCached, getChunkCyclePositions, getChunkUpdateThrottleMs, shouldThrottleUpdate } from "./utils";
 
 const PLANE_GEOMETRY = new THREE.PlaneGeometry(1, 1);
 
@@ -87,6 +87,7 @@ function MediaPlane({
   mediaPool,
   mediaIndex,
   depthPhase,
+  chunkIndex,
   chunkCx,
   chunkCy,
   chunkCz,
@@ -98,6 +99,7 @@ function MediaPlane({
   mediaPool: MediaItem[];
   mediaIndex: number;
   depthPhase: number;
+  chunkIndex: number;
   chunkCx: number;
   chunkCy: number;
   chunkCz: number;
@@ -106,7 +108,7 @@ function MediaPlane({
 }) {
   const meshRef = React.useRef<THREE.Mesh>(null);
   const materialRef = React.useRef<THREE.MeshBasicMaterial>(null);
-  const initHash = hashString(`${SESSION_SEED},${mediaIndex},0`);
+  const initPos = getChunkCyclePositions(chunkCx, chunkCy, chunkCz, 0)[chunkIndex];
   const localState = React.useRef({
     opacity: 0,
     ready: false,
@@ -114,8 +116,8 @@ function MediaPlane({
     lastCycle: 0,
     swapPending: false,
     filterFade: false,
-    cycleX: chunkCx * CHUNK_SIZE + seededRandom(initHash) * CHUNK_SIZE,
-    cycleY: chunkCy * CHUNK_SIZE + (seededRandom(initHash + 1) - 0.5) * CHUNK_SIZE,
+    cycleX: initPos.x,
+    cycleY: initPos.y,
   });
 
   const [cycleIndex, setCycleIndex] = React.useState(0);
@@ -151,9 +153,9 @@ function MediaPlane({
       state.opacity = 0;
       state.swapPending = false;
       setCycleIndex(newCycle);
-      const cs = hashString(`${SESSION_SEED},${mediaIndex},${newCycle}`);
-      state.cycleX = chunkCx * CHUNK_SIZE + seededRandom(cs) * CHUNK_SIZE;
-      state.cycleY = chunkCy * CHUNK_SIZE + (seededRandom(cs + 1) - 0.5) * CHUNK_SIZE;
+      const pos = getChunkCyclePositions(chunkCx, chunkCy, chunkCz, newCycle)[chunkIndex];
+      state.cycleX = pos.x;
+      state.cycleY = pos.y;
     }
 
     const effectiveZ = INITIAL_CAMERA_Z - zOffset;
@@ -343,6 +345,7 @@ function Chunk({
           mediaPool={media}
           mediaIndex={plane.mediaIndex}
           depthPhase={plane.depthPhase}
+          chunkIndex={plane.chunkIndex}
           chunkCx={cx}
           chunkCy={cy}
           chunkCz={cz}

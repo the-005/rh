@@ -37,4 +37,5 @@ export type PlaneData = {
   scale: THREE.Vector3;
   mediaIndex: number;
   depthPhase: number;
+  chunkIndex: number;
 };
