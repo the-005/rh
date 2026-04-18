@@ -116,7 +116,7 @@ export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneDa
   const chunkSeq = (cx + 10) * 400 + (cy + 10) * 20 + (cz + 10);
   const chunkPhase = (((chunkSeq + SESSION_SEED) * GOLDEN_RATIO) % 1) * DEPTH_FADE_END;
   const { itemsPerChunk, minSize, maxSize } = tuning;
-  const slotStep = DEPTH_FADE_END / itemsPerChunk;
+  const slotStep = tuning.zSpread;
 
   const positions = getChunkCyclePositions(cx, cy, cz, 0);
 
@@ -144,7 +144,7 @@ export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneDa
 
 export const generateChunkPlanesCached = (cx: number, cy: number, cz: number): PlaneData[] => {
   const { itemsPerChunk, minSize, maxSize, depthFadeEnd } = tuning;
-  const key = `${cx},${cy},${cz},${itemsPerChunk},${minSize},${maxSize},${depthFadeEnd}`;
+  const key = `${cx},${cy},${cz},${itemsPerChunk},${minSize},${maxSize},${depthFadeEnd},${tuning.zSpread}`;
   const cached = planeCache.get(key);
   if (cached) {
     touchPlaneCache(key);

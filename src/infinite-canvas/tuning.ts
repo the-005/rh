@@ -6,6 +6,7 @@ export type TuningValues = {
   maxSize: number;
   depthFadeStart: number;
   depthFadeEnd: number;
+  zSpread: number;
 };
 
 export const tuning: TuningValues = {
@@ -14,4 +15,5 @@ export const tuning: TuningValues = {
   maxSize: 30,
   depthFadeStart: DEPTH_FADE_START,
   depthFadeEnd: DEPTH_FADE_END,
+  zSpread: DEPTH_FADE_END / 2,
 };

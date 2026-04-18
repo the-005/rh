@@ -684,6 +684,7 @@ export function InfiniteCanvasScene({
     maxSize: tuning.maxSize,
     depthFadeStart: tuning.depthFadeStart,
     depthFadeEnd: tuning.depthFadeEnd,
+    zSpread: tuning.zSpread,
   });
 
   const bumpGen = () => {
@@ -767,6 +768,14 @@ export function InfiniteCanvasScene({
               </span>
               <input type="range" min={300} max={1000} step={10} value={tv.depthFadeEnd}
                 onChange={e => { const v = +e.target.value; tuning.depthFadeEnd = v; setTv(t => ({...t, depthFadeEnd: v})); bumpGen(); }} />
+            </label>
+            <label>
+              <span className={styles.labelRow}>
+                Z spacing {tv.zSpread}
+                <span className={styles.info} data-tip="Depth gap between images in the same chunk. Higher = more staggered appearances while scrolling.">ⓘ</span>
+              </span>
+              <input type="range" min={10} max={500} step={10} value={tv.zSpread}
+                onChange={e => { const v = +e.target.value; tuning.zSpread = v; setTv(t => ({...t, zSpread: v})); bumpGen(); }} />
             </label>
           </div>
         )}
