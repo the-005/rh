@@ -635,6 +635,19 @@ function SceneController({ media, onTextureProgress, activeCategory = "all", onM
     );
   }, [camera]);
 
+  React.useEffect(() => {
+    if (!tuningGenVersion) return;
+    const { cx, cy, cz } = cameraGridRef.current;
+    setChunks(
+      CHUNK_OFFSETS.map((o) => ({
+        key: `${cx + o.dx},${cy + o.dy},${cz + o.dz},v${tuningGenVersion}`,
+        cx: cx + o.dx,
+        cy: cy + o.dy,
+        cz: cz + o.dz,
+      })),
+    );
+  }, [tuningGenVersion]);
+
   return (
     <>
       {chunks.map((chunk) => (
@@ -665,6 +678,7 @@ export function InfiniteCanvasScene({
   const isTouchDevice = useIsTouchDevice();
   const dpr = Math.min(window.devicePixelRatio || 1, isTouchDevice ? 1.25 : 1.5);
   const [tuningGenVersion, setTuningGenVersion] = React.useState(0);
+  const [, forceUpdate] = React.useReducer((x: number) => x + 1, 0);
 
   const bumpGen = () => {
     clearPlaneCache();
@@ -722,7 +736,7 @@ export function InfiniteCanvasScene({
             </label>
             <label>Visible window {tuning.depthFadeStart}
               <input type="range" min={50} max={450} step={10} defaultValue={tuning.depthFadeStart}
-                onChange={e => { tuning.depthFadeStart = +e.target.value; }} />
+                onChange={e => { tuning.depthFadeStart = +e.target.value; forceUpdate(); }} />
             </label>
             <label>Cycle length {tuning.depthFadeEnd}
               <input type="range" min={300} max={1000} step={10} defaultValue={tuning.depthFadeEnd}
