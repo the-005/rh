@@ -115,8 +115,6 @@ function MediaPlane({
   const isInitRight = initPos.x >= cameraGridRef.current.camX;
   const initialAbsoluteZ = depthPhase + cameraGridRef.current.cumulativeScroll * (isInitRight ? 1 : -1);
   const initialCycle = Math.floor(initialAbsoluteZ / DEPTH_FADE_END);
-  const initCyclePos =
-    initialCycle === 0 ? initPos : getChunkCyclePositions(chunkCx, chunkCy, chunkCz, initialCycle)[chunkIndex];
 
   const localState = React.useRef({
     opacity: 0,
@@ -125,8 +123,8 @@ function MediaPlane({
     lastCycle: initialCycle,
     swapPending: false,
     filterFade: false,
-    cycleX: initCyclePos.x,
-    cycleY: initCyclePos.y,
+    cycleX: initPos.x,
+    cycleY: initPos.y,
   });
 
   const [cycleIndex, setCycleIndex] = React.useState(initialCycle);
