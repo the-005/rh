@@ -15,6 +15,7 @@ export type InfiniteCanvasProps = {
   showFps?: boolean;
   showControls?: boolean;
   showDebug?: boolean;
+  showTuning?: boolean;
   cameraFov?: number;
   cameraNear?: number;
   cameraFar?: number;

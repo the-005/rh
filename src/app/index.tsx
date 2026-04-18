@@ -42,6 +42,7 @@ export function App() {
         onMediaClick={handleMediaClick}
         cameraFov={60}
         showDebug
+        showTuning
       />
       {projectId && <ProjectPage key={projectId} id={projectId} onClose={() => navigate("/")} />}
     </>

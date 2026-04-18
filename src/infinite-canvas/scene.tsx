@@ -8,8 +8,6 @@ import {
   CHUNK_FADE_MARGIN,
   CHUNK_OFFSETS,
   CHUNK_SIZE,
-  DEPTH_FADE_END,
-  DEPTH_FADE_START,
   INITIAL_CAMERA_Z,
   INVIS_THRESHOLD,
   KEYBOARD_SPEED,
@@ -22,7 +20,8 @@ import {
 import styles from "./style.module.css";
 import { getTexture } from "./texture-manager";
 import type { ChunkData, InfiniteCanvasProps, MediaItem, PlaneData } from "./types";
-import { generateChunkPlanesCached, getChunkCyclePositions, getChunkUpdateThrottleMs, shouldThrottleUpdate } from "./utils";
+import { tuning } from "./tuning";
+import { clearPlaneCache, generateChunkPlanesCached, getChunkCyclePositions, getChunkUpdateThrottleMs, shouldThrottleUpdate } from "./utils";
 
 const PLANE_GEOMETRY = new THREE.PlaneGeometry(1, 1);
 
@@ -114,7 +113,7 @@ function MediaPlane({
   const initPos = getChunkCyclePositions(chunkCx, chunkCy, chunkCz, 0)[chunkIndex];
   const isInitRight = initPos.x >= cameraGridRef.current.camX;
   const initialAbsoluteZ = depthPhase + cameraGridRef.current.cumulativeScroll * (isInitRight ? 1 : -1);
-  const initialCycle = Math.floor(initialAbsoluteZ / DEPTH_FADE_END);
+  const initialCycle = Math.floor(initialAbsoluteZ / tuning.depthFadeEnd);
 
   const localState = React.useRef({
     opacity: 0,
@@ -149,12 +148,13 @@ function MediaPlane({
       state.absoluteZOffset += scrollDelta * (isRight ? 1 : -1);
     }
 
-    const zOffset = ((state.absoluteZOffset % DEPTH_FADE_END) + DEPTH_FADE_END) % DEPTH_FADE_END;
+    const { depthFadeEnd, depthFadeStart } = tuning;
+    const zOffset = ((state.absoluteZOffset % depthFadeEnd) + depthFadeEnd) % depthFadeEnd;
 
     // Snap opacity to 0 and swap image whenever the plane crosses a depth cycle boundary.
     // Also relocate to a new random position within the chunk — deterministic per cycle
     // so scrolling back restores the exact same position (reversibility preserved).
-    const newCycle = Math.floor(state.absoluteZOffset / DEPTH_FADE_END);
+    const newCycle = Math.floor(state.absoluteZOffset / depthFadeEnd);
     if (newCycle !== state.lastCycle) {
       state.lastCycle = newCycle;
       state.opacity = 0;
@@ -174,7 +174,7 @@ function MediaPlane({
     const dist = Math.max(Math.abs(chunkCx - cam.cx), Math.abs(chunkCy - cam.cy), Math.abs(chunkCz - cam.cz));
     const absDepth = zOffset;
 
-    if (zOffset > DEPTH_FADE_END + 50) {
+    if (zOffset > depthFadeEnd + 50) {
       state.opacity = 0;
       material.opacity = 0;
       material.depthWrite = false;
@@ -188,9 +188,9 @@ function MediaPlane({
     const depthFade =
       absDepth <= NEAR_FADE_END
         ? absDepth / NEAR_FADE_END
-        : absDepth <= DEPTH_FADE_START
+        : absDepth <= depthFadeStart
           ? 1
-          : Math.max(0, 1 - (absDepth - DEPTH_FADE_START) / Math.max(DEPTH_FADE_END - DEPTH_FADE_START, 0.0001));
+          : Math.max(0, 1 - (absDepth - depthFadeStart) / Math.max(depthFadeEnd - depthFadeStart, 0.0001));
 
     const naturalTarget = Math.min(gridFade, depthFade * depthFade);
 
@@ -396,7 +396,7 @@ const createInitialState = (camZ: number): ControllerState => ({
   pendingChunk: null,
 });
 
-function SceneController({ media, onTextureProgress, activeCategory = "all", onMediaClick, debugElRef }: { media: MediaItem[]; onTextureProgress?: (progress: number) => void; activeCategory?: string; onMediaClick?: (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => void; debugElRef?: React.RefObject<HTMLDivElement | null> }) {
+function SceneController({ media, onTextureProgress, activeCategory = "all", onMediaClick, debugElRef, tuningGenVersion }: { media: MediaItem[]; onTextureProgress?: (progress: number) => void; activeCategory?: string; onMediaClick?: (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => void; debugElRef?: React.RefObject<HTMLDivElement | null>; tuningGenVersion?: number }) {
   const { camera, gl } = useThree();
   const isTouchDevice = useIsTouchDevice();
   const [, getKeys] = useKeyboardControls<keyof KeyboardKeys>();
@@ -612,7 +612,7 @@ function SceneController({ media, onTextureProgress, activeCategory = "all", onM
 
       setChunks(
         CHUNK_OFFSETS.map((o) => ({
-          key: `${ucx + o.dx},${ucy + o.dy},${ucz + o.dz}`,
+          key: `${ucx + o.dx},${ucy + o.dy},${ucz + o.dz},v${tuningGenVersion ?? 0}`,
           cx: ucx + o.dx,
           cy: ucy + o.dy,
           cz: ucz + o.dz,
@@ -627,7 +627,7 @@ function SceneController({ media, onTextureProgress, activeCategory = "all", onM
 
     setChunks(
       CHUNK_OFFSETS.map((o) => ({
-        key: `${o.dx},${o.dy},${o.dz}`,
+        key: `${o.dx},${o.dy},${o.dz},v${tuningGenVersion ?? 0}`,
         cx: o.dx,
         cy: o.dy,
         cz: o.dz,
@@ -651,6 +651,7 @@ export function InfiniteCanvasScene({
   showFps = false,
   showControls = false,
   showDebug = false,
+  showTuning = false,
   cameraFov = 60,
   cameraNear = 1,
   cameraFar = 500,
@@ -663,6 +664,12 @@ export function InfiniteCanvasScene({
   const debugElRef = React.useRef<HTMLDivElement>(null);
   const isTouchDevice = useIsTouchDevice();
   const dpr = Math.min(window.devicePixelRatio || 1, isTouchDevice ? 1.25 : 1.5);
+  const [tuningGenVersion, setTuningGenVersion] = React.useState(0);
+
+  const bumpGen = () => {
+    clearPlaneCache();
+    setTuningGenVersion((v) => v + 1);
+  };
 
   // Stable reference — prevents R3F from resetting camera position on every parent re-render
   const cameraPos = React.useMemo<[number, number, number]>(() => [0, 0, INITIAL_CAMERA_Z], []);
@@ -681,7 +688,7 @@ export function InfiniteCanvasScene({
         >
           <color attach="background" args={[backgroundColor]} />
           <fog attach="fog" args={[fogColor, fogNear, fogFar]} />
-          <SceneController media={media} onTextureProgress={onTextureProgress} activeCategory={activeCategory} onMediaClick={onMediaClick} debugElRef={showDebug ? debugElRef : undefined} />
+          <SceneController media={media} onTextureProgress={onTextureProgress} activeCategory={activeCategory} onMediaClick={onMediaClick} debugElRef={showDebug ? debugElRef : undefined} tuningGenVersion={tuningGenVersion} />
           {showFps && <Stats className={styles.stats} />}
         </Canvas>
 
@@ -699,6 +706,30 @@ export function InfiniteCanvasScene({
           </div>
         )}
         {showDebug && <div ref={debugElRef} className={styles.debugPanel} />}
+        {showTuning && (
+          <div className={styles.tuningPanel}>
+            <label>Density {tuning.itemsPerChunk}
+              <input type="range" min={1} max={4} step={1} defaultValue={tuning.itemsPerChunk}
+                onChange={e => { tuning.itemsPerChunk = +e.target.value; bumpGen(); }} />
+            </label>
+            <label>Min size {tuning.minSize}
+              <input type="range" min={10} max={50} defaultValue={tuning.minSize}
+                onChange={e => { tuning.minSize = +e.target.value; bumpGen(); }} />
+            </label>
+            <label>Max size {tuning.maxSize}
+              <input type="range" min={15} max={70} defaultValue={tuning.maxSize}
+                onChange={e => { tuning.maxSize = +e.target.value; bumpGen(); }} />
+            </label>
+            <label>Visible window {tuning.depthFadeStart}
+              <input type="range" min={50} max={450} step={10} defaultValue={tuning.depthFadeStart}
+                onChange={e => { tuning.depthFadeStart = +e.target.value; }} />
+            </label>
+            <label>Cycle length {tuning.depthFadeEnd}
+              <input type="range" min={300} max={1000} step={10} defaultValue={tuning.depthFadeEnd}
+                onChange={e => { tuning.depthFadeEnd = +e.target.value; bumpGen(); }} />
+            </label>
+          </div>
+        )}
       </div>
     </KeyboardControls>
   );

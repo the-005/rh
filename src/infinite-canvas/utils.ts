@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { hashString, seededRandom } from "~/src/utils";
 import { CHUNK_SIZE, DEPTH_FADE_END } from "./constants";
+import { tuning } from "./tuning";
 import type { PlaneData } from "./types";
 
 export const SESSION_SEED = Math.floor(Math.random() * 1_000_000);
@@ -17,6 +18,8 @@ const touchPlaneCache = (key: string) => {
   planeCache.delete(key);
   planeCache.set(key, v);
 };
+
+export const clearPlaneCache = () => planeCache.clear();
 
 const evictPlaneCache = () => {
   while (planeCache.size > MAX_PLANE_CACHE) {
@@ -112,14 +115,15 @@ export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneDa
   const GOLDEN_RATIO = 0.6180339887498949;
   const chunkSeq = (cx + 10) * 400 + (cy + 10) * 20 + (cz + 10);
   const chunkPhase = (((chunkSeq + SESSION_SEED) * GOLDEN_RATIO) % 1) * DEPTH_FADE_END;
-  const slotStep = DEPTH_FADE_END / ITEMS_PER_CHUNK;
+  const { itemsPerChunk, minSize, maxSize } = tuning;
+  const slotStep = DEPTH_FADE_END / itemsPerChunk;
 
   const positions = getChunkCyclePositions(cx, cy, cz, 0);
 
-  for (let i = 0; i < ITEMS_PER_CHUNK; i++) {
+  for (let i = 0; i < itemsPerChunk; i++) {
     const s = seed + i * 1000;
     const r = (n: number) => seededRandom(s + n);
-    const size = 20 + r(4) * 10;
+    const size = minSize + r(4) * (maxSize - minSize);
 
     planes.push({
       id: `${cx}-${cy}-${cz}-${i}`,
@@ -130,7 +134,7 @@ export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneDa
       ),
       scale: new THREE.Vector3(size, size, 1),
       mediaIndex: Math.floor(r(5) * 1_000_000),
-      depthPhase: (chunkPhase + i * slotStep) % DEPTH_FADE_END,
+      depthPhase: (chunkPhase + i * slotStep) % tuning.depthFadeEnd,
       chunkIndex: i,
     });
   }
@@ -139,7 +143,8 @@ export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneDa
 };
 
 export const generateChunkPlanesCached = (cx: number, cy: number, cz: number): PlaneData[] => {
-  const key = `${cx},${cy},${cz}`;
+  const { itemsPerChunk, minSize, maxSize, depthFadeEnd } = tuning;
+  const key = `${cx},${cy},${cz},${itemsPerChunk},${minSize},${maxSize},${depthFadeEnd}`;
   const cached = planeCache.get(key);
   if (cached) {
     touchPlaneCache(key);
