@@ -678,7 +678,13 @@ export function InfiniteCanvasScene({
   const isTouchDevice = useIsTouchDevice();
   const dpr = Math.min(window.devicePixelRatio || 1, isTouchDevice ? 1.25 : 1.5);
   const [tuningGenVersion, setTuningGenVersion] = React.useState(0);
-  const [, forceUpdate] = React.useReducer((x: number) => x + 1, 0);
+  const [tv, setTv] = React.useState({
+    itemsPerChunk: tuning.itemsPerChunk,
+    minSize: tuning.minSize,
+    maxSize: tuning.maxSize,
+    depthFadeStart: tuning.depthFadeStart,
+    depthFadeEnd: tuning.depthFadeEnd,
+  });
 
   const bumpGen = () => {
     clearPlaneCache();
@@ -722,25 +728,25 @@ export function InfiniteCanvasScene({
         {showDebug && <div ref={debugElRef} className={styles.debugPanel} />}
         {showTuning && (
           <div className={styles.tuningPanel}>
-            <label>Density {tuning.itemsPerChunk}
-              <input type="range" min={1} max={4} step={1} defaultValue={tuning.itemsPerChunk}
-                onChange={e => { tuning.itemsPerChunk = +e.target.value; bumpGen(); }} />
+            <label>Density {tv.itemsPerChunk}
+              <input type="range" min={1} max={4} step={1} value={tv.itemsPerChunk}
+                onChange={e => { const v = +e.target.value; tuning.itemsPerChunk = v; setTv(t => ({...t, itemsPerChunk: v})); bumpGen(); }} />
             </label>
-            <label>Min size {tuning.minSize}
-              <input type="range" min={10} max={50} defaultValue={tuning.minSize}
-                onChange={e => { tuning.minSize = +e.target.value; bumpGen(); }} />
+            <label>Min size {tv.minSize}
+              <input type="range" min={10} max={50} value={tv.minSize}
+                onChange={e => { const v = +e.target.value; tuning.minSize = v; setTv(t => ({...t, minSize: v})); bumpGen(); }} />
             </label>
-            <label>Max size {tuning.maxSize}
-              <input type="range" min={15} max={70} defaultValue={tuning.maxSize}
-                onChange={e => { tuning.maxSize = +e.target.value; bumpGen(); }} />
+            <label>Max size {tv.maxSize}
+              <input type="range" min={15} max={70} value={tv.maxSize}
+                onChange={e => { const v = +e.target.value; tuning.maxSize = v; setTv(t => ({...t, maxSize: v})); bumpGen(); }} />
             </label>
-            <label>Visible window {tuning.depthFadeStart}
-              <input type="range" min={50} max={450} step={10} defaultValue={tuning.depthFadeStart}
-                onChange={e => { tuning.depthFadeStart = +e.target.value; forceUpdate(); }} />
+            <label>Visible window {tv.depthFadeStart}
+              <input type="range" min={50} max={450} step={10} value={tv.depthFadeStart}
+                onChange={e => { const v = +e.target.value; tuning.depthFadeStart = v; setTv(t => ({...t, depthFadeStart: v})); }} />
             </label>
-            <label>Cycle length {tuning.depthFadeEnd}
-              <input type="range" min={300} max={1000} step={10} defaultValue={tuning.depthFadeEnd}
-                onChange={e => { tuning.depthFadeEnd = +e.target.value; bumpGen(); }} />
+            <label>Cycle length {tv.depthFadeEnd}
+              <input type="range" min={300} max={1000} step={10} value={tv.depthFadeEnd}
+                onChange={e => { const v = +e.target.value; tuning.depthFadeEnd = v; setTv(t => ({...t, depthFadeEnd: v})); bumpGen(); }} />
             </label>
           </div>
         )}
