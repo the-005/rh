@@ -111,7 +111,7 @@ export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneDa
   const seed = hashString(`${SESSION_SEED},${cx},${cy},${cz}`);
   const chunkPhase = seededRandom(hashString(`${SESSION_SEED},${cx},${cy},${cz},phase`)) * tuning.zSpread;
   const { itemsPerChunk, minSize, maxSize } = tuning;
-  const slotStep = tuning.zSpread / Math.max(itemsPerChunk, 1);
+  const slotStep = tuning.depthFadeEnd / Math.max(itemsPerChunk, 1);
 
   const positions = getChunkCyclePositions(cx, cy, cz, 0);
 
