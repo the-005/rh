@@ -473,7 +473,7 @@ const createInitialState = (camZ: number): ControllerState => ({
   pendingChunk: null,
 });
 
-function SceneController({ media, onTextureProgress, activeCategory = "all", onMediaClick, debugElRef, tuningGenVersion }: { media: MediaItem[]; onTextureProgress?: (progress: number) => void; activeCategory?: string; onMediaClick?: (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => void; debugElRef?: React.RefObject<HTMLDivElement | null>; tuningGenVersion?: number }) {
+function SceneController({ media, onTextureProgress, activeCategory = "all", onMediaClick, debugElRef, tuningGenVersion, showGuides }: { media: MediaItem[]; onTextureProgress?: (progress: number) => void; activeCategory?: string; onMediaClick?: (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => void; debugElRef?: React.RefObject<HTMLDivElement | null>; tuningGenVersion?: number; showGuides?: boolean }) {
   const { camera, gl } = useThree();
   const isTouchDevice = useIsTouchDevice();
   const [, getKeys] = useKeyboardControls<keyof KeyboardKeys>();
@@ -728,7 +728,7 @@ function SceneController({ media, onTextureProgress, activeCategory = "all", onM
   return (
     <>
       {chunks.map((chunk) => (
-        <Chunk key={chunk.key} cx={chunk.cx} cy={chunk.cy} cz={chunk.cz} media={media} cameraGridRef={cameraGridRef} onMediaClick={onMediaClick} showLabel={!!debugElRef} />
+        <Chunk key={chunk.key} cx={chunk.cx} cy={chunk.cy} cz={chunk.cz} media={media} cameraGridRef={cameraGridRef} onMediaClick={onMediaClick} showLabel={!!debugElRef && (showGuides ?? true)} />
       ))}
     </>
   );
@@ -756,6 +756,7 @@ export function InfiniteCanvasScene({
   const dpr = Math.min(window.devicePixelRatio || 1, isTouchDevice ? 1.25 : 1.5);
   const [tuningGenVersion, setTuningGenVersion] = React.useState(0);
   const [panelOpen, setPanelOpen] = React.useState(true);
+  const [showGuides, setShowGuides] = React.useState(true);
   const [tv, setTv] = React.useState({
     itemsPerChunk: tuning.itemsPerChunk,
     minSize: tuning.minSize,
@@ -788,7 +789,7 @@ export function InfiniteCanvasScene({
         >
           <color attach="background" args={[backgroundColor]} />
           <fog attach="fog" args={[fogColor, fogNear, fogFar]} />
-          <SceneController media={media} onTextureProgress={onTextureProgress} activeCategory={activeCategory} onMediaClick={onMediaClick} debugElRef={showDebug ? debugElRef : undefined} tuningGenVersion={tuningGenVersion} />
+          <SceneController media={media} onTextureProgress={onTextureProgress} activeCategory={activeCategory} onMediaClick={onMediaClick} debugElRef={showDebug ? debugElRef : undefined} tuningGenVersion={tuningGenVersion} showGuides={showGuides} />
           {showFps && <Stats className={styles.stats} />}
         </Canvas>
 
@@ -872,6 +873,11 @@ export function InfiniteCanvasScene({
                   <input type="range" min={50} max={tv.depthFadeEnd} step={10} value={Math.min(tv.zSpread, tv.depthFadeEnd)}
                     onChange={e => { const v = +e.target.value; tuning.zSpread = v; setTv(t => ({...t, zSpread: v})); bumpGen(); }} />
                 </label>
+                {showDebug && (
+                  <button type="button" className={styles.tuningToggle} style={{ alignSelf: "flex-start", marginTop: 4 }} onClick={() => setShowGuides(g => !g)}>
+                    {showGuides ? "Hide guides" : "Show guides"}
+                  </button>
+                )}
               </>
             )}
           </div>
