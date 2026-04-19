@@ -94,6 +94,7 @@ function MediaPlane({
   chunkCz,
   cameraGridRef,
   onMediaClick,
+  showLabel,
 }: {
   position: THREE.Vector3;
   scale: THREE.Vector3;
@@ -106,9 +107,31 @@ function MediaPlane({
   chunkCz: number;
   cameraGridRef: React.RefObject<CameraGridState>;
   onMediaClick?: (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => void;
+  showLabel?: boolean;
 }) {
+  const groupRef = React.useRef<THREE.Group>(null);
   const meshRef = React.useRef<THREE.Mesh>(null);
   const materialRef = React.useRef<THREE.MeshBasicMaterial>(null);
+
+  const labelTexture = React.useMemo(() => {
+    if (!showLabel) return null;
+    const canvas = document.createElement("canvas");
+    canvas.width = 192;
+    canvas.height = 48;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.fillStyle = "rgba(220,60,0,0.85)";
+    ctx.roundRect(2, 2, 188, 44, 6);
+    ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 22px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(`${chunkCx},${chunkCy} #${chunkIndex}`, 96, 24);
+    return new THREE.CanvasTexture(canvas);
+  }, [showLabel, chunkCx, chunkCy, chunkIndex]);
+
+  React.useEffect(() => () => { labelTexture?.dispose(); }, [labelTexture]);
   const initPos = getChunkCyclePositions(chunkCx, chunkCy, chunkCz, 0)[chunkIndex];
   const isInitRight = initPos.x >= cameraGridRef.current.camX;
   const initialAbsoluteZ = depthPhase + cameraGridRef.current.cumulativeScroll * (isInitRight ? 1 : -1);
@@ -165,9 +188,12 @@ function MediaPlane({
     }
 
     const effectiveZ = INITIAL_CAMERA_Z - zOffset;
-    mesh.position.x = state.cycleX;
-    mesh.position.y = state.cycleY;
-    mesh.position.z = effectiveZ;
+    const group = groupRef.current;
+    if (group) {
+      group.position.x = state.cycleX;
+      group.position.y = state.cycleY;
+      group.position.z = effectiveZ;
+    }
 
     const cam = cameraGridRef.current;
     const dist = Math.max(Math.abs(chunkCx - cam.cx), Math.abs(chunkCy - cam.cy), Math.abs(chunkCz - cam.cz));
@@ -271,35 +297,41 @@ function MediaPlane({
   if (!texture || !isReady) return null;
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: Three.js mesh is not a DOM element
-    <mesh
-      ref={meshRef}
-      position={position}
-      scale={displayScale}
-      visible={false}
-      geometry={PLANE_GEOMETRY}
-      onClick={(e) => {
-        const mesh = meshRef.current;
-        const mat = materialRef.current;
-        if (!mesh || !onMediaClick) return;
+    <group ref={groupRef} position={position}>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: Three.js mesh is not a DOM element */}
+      <mesh
+        ref={meshRef}
+        scale={displayScale}
+        visible={false}
+        geometry={PLANE_GEOMETRY}
+        onClick={(e) => {
+          const mesh = meshRef.current;
+          const mat = materialRef.current;
+          if (!mesh || !onMediaClick) return;
 
-        // depthTest is off, so the visually topmost image may not be the closest in 3D.
-        // Yield to any intersected mesh with meaningfully higher opacity (more visible).
-        const myOpacity = mat?.opacity ?? 0;
-        const shouldDefer = e.intersections.some((hit) => {
-          if (hit.object === mesh) return false;
-          const m = (hit.object as THREE.Mesh).material;
-          const op = Array.isArray(m) ? 0 : ((m as THREE.MeshBasicMaterial).opacity ?? 0);
-          return op > myOpacity + 0.05;
-        });
-        if (shouldDefer) return;
+          // depthTest is off, so the visually topmost image may not be the closest in 3D.
+          // Yield to any intersected mesh with meaningfully higher opacity (more visible).
+          const myOpacity = mat?.opacity ?? 0;
+          const shouldDefer = e.intersections.some((hit) => {
+            if (hit.object === mesh) return false;
+            const m = (hit.object as THREE.Mesh).material;
+            const op = Array.isArray(m) ? 0 : ((m as THREE.MeshBasicMaterial).opacity ?? 0);
+            return op > myOpacity + 0.05;
+          });
+          if (shouldDefer) return;
 
-        e.stopPropagation();
-        onMediaClick(media, getMeshScreenRect(mesh, e.camera));
-      }}
-    >
-      <meshBasicMaterial ref={materialRef} transparent opacity={0} side={THREE.DoubleSide} depthTest={false} />
-    </mesh>
+          e.stopPropagation();
+          onMediaClick(media, getMeshScreenRect(mesh, e.camera));
+        }}
+      >
+        <meshBasicMaterial ref={materialRef} transparent opacity={0} side={THREE.DoubleSide} depthTest={false} />
+      </mesh>
+      {showLabel && labelTexture && (
+        <sprite position={[0, displayScale.y / 2 + 3, 0]} scale={[12, 3, 1]}>
+          <spriteMaterial map={labelTexture} transparent depthTest={false} />
+        </sprite>
+      )}
+    </group>
   );
 }
 
@@ -398,6 +430,7 @@ function Chunk({
           chunkCz={cz}
           cameraGridRef={cameraGridRef}
           onMediaClick={onMediaClick}
+          showLabel={showLabel}
         />
       ))}
       {showLabel && <ChunkLabel cx={cx} cy={cy} />}
