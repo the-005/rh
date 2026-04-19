@@ -96,10 +96,10 @@ function samplePoissonDisk2D(
 export function getChunkCyclePositions(
   cx: number,
   cy: number,
-  _cz: number,
+  cz: number,
   cycleNumber: number,
 ): { x: number; y: number }[] {
-  const seed = hashString(`${SESSION_SEED},${cx},${cy},cycle${cycleNumber}`);
+  const seed = hashString(`${SESSION_SEED},${cx},${cy},${cz},cycle${cycleNumber}`);
   let counter = 0;
   const rng = () => seededRandom(seed + counter++);
   const offsets = samplePoissonDisk2D(ITEMS_PER_CHUNK, CHUNK_SIZE, MIN_SEPARATION, EDGE_PADDING, rng);
