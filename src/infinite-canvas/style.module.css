@@ -66,6 +66,24 @@
   min-width: 220px;
 }
 
+.tuningPanelHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2px;
+}
+
+.tuningToggle {
+  background: none;
+  border: none;
+  color: #7fffb2;
+  cursor: pointer;
+  font-size: 14px;
+  font-family: ui-monospace, monospace;
+  padding: 0 0 0 8px;
+  line-height: 1;
+}
+
 .tuningPanel label {
   display: flex;
   flex-direction: column;
