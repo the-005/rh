@@ -109,9 +109,14 @@ export function getChunkCyclePositions(
 export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneData[] => {
   const planes: PlaneData[] = [];
   const seed = hashString(`${SESSION_SEED},${cx},${cy},${cz}`);
-  const chunkPhase = seededRandom(hashString(`${SESSION_SEED},${cx},${cy},${cz},phase`)) * tuning.zSpread;
+  // Golden ratio sequence on chunk coordinates: maximises the minimum gap
+  // between any two chunk phases across the entire visible grid, eliminating
+  // cross-chunk depth collisions that random phases can't prevent.
+  const GOLDEN_RATIO = 0.6180339887498949;
+  const chunkSeq = (cx + 10) * 400 + (cy + 10) * 20 + (cz + 10);
+  const chunkPhase = (((chunkSeq + SESSION_SEED) * GOLDEN_RATIO) % 1) * tuning.zSpread;
   const { itemsPerChunk, minSize, maxSize } = tuning;
-  const slotStep = tuning.depthFadeEnd / Math.max(itemsPerChunk, 1);
+  const slotStep = tuning.zSpread / Math.max(itemsPerChunk, 1);
 
   const positions = getChunkCyclePositions(cx, cy, cz, 0);
 
