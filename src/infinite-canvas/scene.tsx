@@ -303,6 +303,45 @@ function MediaPlane({
   );
 }
 
+function ChunkLabel({ cx, cy }: { cx: number; cy: number }) {
+  const texture = React.useMemo(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 256;
+    canvas.height = 64;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.fillStyle = "rgba(0,100,255,0.75)";
+    ctx.roundRect(4, 4, 248, 56, 8);
+    ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 28px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(`${cx},${cy}`, 128, 32);
+    return new THREE.CanvasTexture(canvas);
+  }, [cx, cy]);
+
+  React.useEffect(() => () => { texture?.dispose(); }, [texture]);
+
+  if (!texture) return null;
+
+  const lx = cx * CHUNK_SIZE + CHUNK_SIZE / 2;
+  const ly = cy * CHUNK_SIZE + CHUNK_SIZE / 2;
+  const lz = INITIAL_CAMERA_Z - 150;
+
+  return (
+    <group>
+      <sprite position={[lx, ly, lz]} scale={[24, 6, 1]}>
+        <spriteMaterial map={texture} transparent depthTest={false} />
+      </sprite>
+      <mesh position={[lx, ly, lz]}>
+        <planeGeometry args={[CHUNK_SIZE, CHUNK_SIZE]} />
+        <meshBasicMaterial color="#0055ff" wireframe transparent opacity={0.15} depthTest={false} />
+      </mesh>
+    </group>
+  );
+}
+
 function Chunk({
   cx,
   cy,
@@ -310,6 +349,7 @@ function Chunk({
   media,
   cameraGridRef,
   onMediaClick,
+  showLabel,
 }: {
   cx: number;
   cy: number;
@@ -317,6 +357,7 @@ function Chunk({
   media: MediaItem[];
   cameraGridRef: React.RefObject<CameraGridState>;
   onMediaClick?: (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => void;
+  showLabel?: boolean;
 }) {
   const [planes, setPlanes] = React.useState<PlaneData[] | null>(null);
 
@@ -359,6 +400,7 @@ function Chunk({
           onMediaClick={onMediaClick}
         />
       ))}
+      {showLabel && <ChunkLabel cx={cx} cy={cy} />}
     </group>
   );
 }
@@ -650,7 +692,7 @@ function SceneController({ media, onTextureProgress, activeCategory = "all", onM
   return (
     <>
       {chunks.map((chunk) => (
-        <Chunk key={chunk.key} cx={chunk.cx} cy={chunk.cy} cz={chunk.cz} media={media} cameraGridRef={cameraGridRef} onMediaClick={onMediaClick} />
+        <Chunk key={chunk.key} cx={chunk.cx} cy={chunk.cy} cz={chunk.cz} media={media} cameraGridRef={cameraGridRef} onMediaClick={onMediaClick} showLabel={!!debugElRef} />
       ))}
     </>
   );
