@@ -24,6 +24,8 @@ export type InfiniteCanvasProps = {
   backgroundColor?: string;
   fogColor?: string;
   activeCategory?: string;
+  splashSrc?: string;
+  splashAspect?: number;
 };
 
 export type ChunkData = {

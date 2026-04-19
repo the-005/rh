@@ -7,6 +7,7 @@ import type { MediaItem } from "~/src/infinite-canvas/types";
 import { PageLoader } from "~/src/loader";
 import { ProjectPage } from "~/src/project";
 import { setPendingTransition } from "~/src/project/transition-origin";
+import { SplashVideo } from "~/src/splash";
 
 type Category = "all" | "art" | "commerce";
 
@@ -16,6 +17,8 @@ export function App() {
   const [location, navigate] = useLocation();
   const [category, setCategory] = React.useState<Category>("all");
   const [textureProgress, setTextureProgress] = React.useState(0);
+  const [splashFrame, setSplashFrame] = React.useState<string | null>(null);
+  const [splashAspect, setSplashAspect] = React.useState(16 / 9);
 
   const projectId = React.useMemo(() => {
     const m = location.match(/^\/project\/([^/]+)$/);
@@ -33,6 +36,10 @@ export function App() {
 
   return (
     <>
+      <SplashVideo
+        videoSrc="/PR-01_DE_58.mp4"
+        onDismiss={(frame, aspect) => { setSplashFrame(frame); setSplashAspect(aspect); }}
+      />
       <Frame category={category} onCategoryChange={setCategory} />
       <PageLoader progress={textureProgress} />
       <InfiniteCanvas
@@ -43,6 +50,8 @@ export function App() {
         cameraFov={60}
         showDebug
         showTuning
+        splashSrc={splashFrame ?? undefined}
+        splashAspect={splashAspect}
       />
       {projectId && <ProjectPage key={projectId} id={projectId} onClose={() => navigate("/")} />}
     </>
