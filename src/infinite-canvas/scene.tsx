@@ -342,19 +342,32 @@ function SplashPlane({
   src,
   aspect,
   cameraGridRef,
+  onReady,
 }: {
   src: string;
   aspect: number;
   cameraGridRef: React.RefObject<CameraGridState>;
+  onReady: () => void;
 }) {
   const meshRef = React.useRef<THREE.Mesh>(null);
   const materialRef = React.useRef<THREE.MeshBasicMaterial>(null);
   const [texture, setTexture] = React.useState<THREE.Texture | null>(null);
+  const { size } = useThree();
 
   const SPLASH_HEIGHT = 40;
   const displayScale = new THREE.Vector3(SPLASH_HEIGHT * aspect, SPLASH_HEIGHT, 1);
 
-  const localState = React.useRef({ opacity: 0, absoluteZOffset: 100 });
+  // Compute the zOffset at which the plane fills the viewport (matching object-fit: cover)
+  const tanHalfFov = Math.tan((60 * Math.PI / 180) / 2);
+  const viewportAspect = size.width / size.height;
+  const startZOffset = aspect >= viewportAspect
+    ? SPLASH_HEIGHT / (2 * tanHalfFov)
+    : (SPLASH_HEIGHT * aspect) / (2 * tanHalfFov * viewportAspect);
+
+  const localState = React.useRef({
+    opacity: 0,
+    absoluteZOffset: startZOffset + cameraGridRef.current.cumulativeScroll,
+  });
 
   React.useEffect(() => {
     const loader = new THREE.TextureLoader();
@@ -371,11 +384,11 @@ function SplashPlane({
     if (!material || !texture) return;
     material.map = texture;
     material.needsUpdate = true;
-    // Start fully visible — replaces the HTML overlay, no fade-in gap
     localState.current.opacity = 1;
     material.opacity = 1;
     if (mesh) mesh.visible = true;
-  }, [texture]);
+    onReady();
+  }, [texture, onReady]);
 
   useFrame(() => {
     const mesh = meshRef.current;
@@ -410,7 +423,7 @@ function SplashPlane({
   return (
     <mesh
       ref={meshRef}
-      position={[0, 0, INITIAL_CAMERA_Z - 100]}
+      position={[0, 0, INITIAL_CAMERA_Z - startZOffset]}
       scale={displayScale}
       visible={false}
       geometry={PLANE_GEOMETRY}
@@ -561,7 +574,7 @@ const createInitialState = (camZ: number): ControllerState => ({
   pendingChunk: null,
 });
 
-function SceneController({ media, onTextureProgress, activeCategory = "all", onMediaClick, debugElRef, tuningGenVersion, showGuides, splashSrc, splashAspect }: { media: MediaItem[]; onTextureProgress?: (progress: number) => void; activeCategory?: string; onMediaClick?: (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => void; debugElRef?: React.RefObject<HTMLDivElement | null>; tuningGenVersion?: number; showGuides?: boolean; splashSrc?: string; splashAspect?: number }) {
+function SceneController({ media, onTextureProgress, activeCategory = "all", onMediaClick, debugElRef, tuningGenVersion, showGuides, splashSrc, splashAspect, onSplashReady }: { media: MediaItem[]; onTextureProgress?: (progress: number) => void; activeCategory?: string; onMediaClick?: (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => void; debugElRef?: React.RefObject<HTMLDivElement | null>; tuningGenVersion?: number; showGuides?: boolean; splashSrc?: string; splashAspect?: number; onSplashReady?: () => void }) {
   const { camera, gl } = useThree();
   const isTouchDevice = useIsTouchDevice();
   const [, getKeys] = useKeyboardControls<keyof KeyboardKeys>();
@@ -818,7 +831,7 @@ function SceneController({ media, onTextureProgress, activeCategory = "all", onM
       {chunks.map((chunk) => (
         <Chunk key={chunk.key} cx={chunk.cx} cy={chunk.cy} cz={chunk.cz} media={media} cameraGridRef={cameraGridRef} onMediaClick={onMediaClick} showLabel={!!debugElRef && (showGuides ?? true)} />
       ))}
-      {splashSrc && <SplashPlane src={splashSrc} aspect={splashAspect ?? 16 / 9} cameraGridRef={cameraGridRef} />}
+      {splashSrc && onSplashReady && <SplashPlane src={splashSrc} aspect={splashAspect ?? 16 / 9} cameraGridRef={cameraGridRef} onReady={onSplashReady} />}
     </>
   );
 }
@@ -841,6 +854,7 @@ export function InfiniteCanvasScene({
   activeCategory = "all",
   splashSrc,
   splashAspect,
+  onSplashReady,
 }: InfiniteCanvasProps) {
   const debugElRef = React.useRef<HTMLDivElement>(null);
   const isTouchDevice = useIsTouchDevice();
@@ -880,7 +894,7 @@ export function InfiniteCanvasScene({
         >
           <color attach="background" args={[backgroundColor]} />
           <fog attach="fog" args={[fogColor, fogNear, fogFar]} />
-          <SceneController media={media} onTextureProgress={onTextureProgress} activeCategory={activeCategory} onMediaClick={onMediaClick} debugElRef={showDebug ? debugElRef : undefined} tuningGenVersion={tuningGenVersion} showGuides={showGuides} splashSrc={splashSrc} splashAspect={splashAspect} />
+          <SceneController media={media} onTextureProgress={onTextureProgress} activeCategory={activeCategory} onMediaClick={onMediaClick} debugElRef={showDebug ? debugElRef : undefined} tuningGenVersion={tuningGenVersion} showGuides={showGuides} splashSrc={splashSrc} splashAspect={splashAspect} onSplashReady={onSplashReady} />
           {showFps && <Stats className={styles.stats} />}
         </Canvas>
 

@@ -19,6 +19,7 @@ export function App() {
   const [textureProgress, setTextureProgress] = React.useState(0);
   const [splashFrame, setSplashFrame] = React.useState<string | null>(null);
   const [splashAspect, setSplashAspect] = React.useState(16 / 9);
+  const [splashDismissed, setSplashDismissed] = React.useState(false);
 
   const projectId = React.useMemo(() => {
     const m = location.match(/^\/project\/([^/]+)$/);
@@ -37,6 +38,7 @@ export function App() {
   return (
     <>
       <SplashVideo
+        visible={!splashDismissed}
         videoSrc="/PR-01_DE_58.mp4"
         onDismiss={(frame, aspect) => { setSplashFrame(frame); setSplashAspect(aspect); }}
       />
@@ -52,6 +54,7 @@ export function App() {
         showTuning
         splashSrc={splashFrame ?? undefined}
         splashAspect={splashAspect}
+        onSplashReady={() => setSplashDismissed(true)}
       />
       {projectId && <ProjectPage key={projectId} id={projectId} onClose={() => navigate("/")} />}
     </>

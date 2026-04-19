@@ -2,16 +2,18 @@ import * as React from "react";
 import styles from "./style.module.css";
 
 type Props = {
+  visible: boolean;
   videoSrc: string;
   onDismiss: (frameDataUrl: string, aspect: number) => void;
 };
 
-export function SplashVideo({ videoSrc, onDismiss }: Props) {
+export function SplashVideo({ visible, videoSrc, onDismiss }: Props) {
   const videoRef = React.useRef<HTMLVideoElement>(null);
-  const [phase, setPhase] = React.useState<"visible" | "fading" | "done">("visible");
   const dismissedRef = React.useRef(false);
 
-  const handleDismiss = () => {
+  if (!visible) return null;
+
+  const handleWheel = () => {
     if (dismissedRef.current) return;
     dismissedRef.current = true;
 
@@ -26,21 +28,11 @@ export function SplashVideo({ videoSrc, onDismiss }: Props) {
       cvs.getContext("2d")?.drawImage(video, 0, 0, w, h);
       onDismiss(cvs.toDataURL("image/jpeg", 0.92), w / h);
     }
-
-    setPhase("fading");
   };
-
-  if (phase === "done") return null;
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: full-screen splash overlay
-    // biome-ignore lint/a11y/useKeyWithClickEvents: full-screen splash overlay
-    <div
-      className={`${styles.overlay}${phase === "fading" ? ` ${styles.fading}` : ""}`}
-      onClick={phase === "visible" ? handleDismiss : undefined}
-      onWheel={phase === "visible" ? handleDismiss : undefined}
-      onTransitionEnd={() => { if (phase === "fading") setPhase("done"); }}
-    >
+    <div className={styles.overlay} onWheel={handleWheel}>
       <video ref={videoRef} src={videoSrc} autoPlay muted loop playsInline className={styles.video} />
     </div>
   );

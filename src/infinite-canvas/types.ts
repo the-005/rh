@@ -26,6 +26,7 @@ export type InfiniteCanvasProps = {
   activeCategory?: string;
   splashSrc?: string;
   splashAspect?: number;
+  onSplashReady?: () => void;
 };
 
 export type ChunkData = {
