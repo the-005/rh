@@ -755,8 +755,8 @@ export function InfiniteCanvasScene({
   const isTouchDevice = useIsTouchDevice();
   const dpr = Math.min(window.devicePixelRatio || 1, isTouchDevice ? 1.25 : 1.5);
   const [tuningGenVersion, setTuningGenVersion] = React.useState(0);
-  const [panelOpen, setPanelOpen] = React.useState(true);
-  const [showGuides, setShowGuides] = React.useState(true);
+  const [panelOpen, setPanelOpen] = React.useState(false);
+  const [showGuides, setShowGuides] = React.useState(false);
   const [tv, setTv] = React.useState({
     itemsPerChunk: tuning.itemsPerChunk,
     minSize: tuning.minSize,
