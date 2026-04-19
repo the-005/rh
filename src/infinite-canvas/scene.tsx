@@ -772,9 +772,9 @@ export function InfiniteCanvasScene({
             <label>
               <span className={styles.labelRow}>
                 Z spacing {tv.zSpread}
-                <span className={styles.info} data-tip="Depth gap between images in the same chunk. Higher = more staggered appearances while scrolling.">ⓘ</span>
+                <span className={styles.info} data-tip="How spread out images are across the depth cycle. High = images at very different depths (more Z gap). Low = images clustered at similar depths.">ⓘ</span>
               </span>
-              <input type="range" min={10} max={500} step={10} value={tv.zSpread}
+              <input type="range" min={50} max={520} step={10} value={tv.zSpread}
                 onChange={e => { const v = +e.target.value; tuning.zSpread = v; setTv(t => ({...t, zSpread: v})); bumpGen(); }} />
             </label>
           </div>

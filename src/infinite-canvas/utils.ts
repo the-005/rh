@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { hashString, seededRandom } from "~/src/utils";
-import { CHUNK_SIZE, DEPTH_FADE_END } from "./constants";
+import { CHUNK_SIZE } from "./constants";
 import { tuning } from "./tuning";
 import type { PlaneData } from "./types";
 
@@ -114,9 +114,9 @@ export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneDa
   // cross-chunk depth collisions that random phases can't prevent.
   const GOLDEN_RATIO = 0.6180339887498949;
   const chunkSeq = (cx + 10) * 400 + (cy + 10) * 20 + (cz + 10);
-  const chunkPhase = (((chunkSeq + SESSION_SEED) * GOLDEN_RATIO) % 1) * DEPTH_FADE_END;
+  const chunkPhase = (((chunkSeq + SESSION_SEED) * GOLDEN_RATIO) % 1) * tuning.zSpread;
   const { itemsPerChunk, minSize, maxSize } = tuning;
-  const slotStep = tuning.zSpread;
+  const slotStep = tuning.zSpread / Math.max(itemsPerChunk, 1);
 
   const positions = getChunkCyclePositions(cx, cy, cz, 0);
 
