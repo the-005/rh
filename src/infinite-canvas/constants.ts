@@ -25,11 +25,9 @@ export const CHUNK_OFFSETS: ChunkOffset[] = run(() => {
   const offsets: ChunkOffset[] = [];
   for (let dx = -maxDist; dx <= maxDist; dx++) {
     for (let dy = -maxDist; dy <= maxDist; dy++) {
-      for (let dz = -maxDist; dz <= maxDist; dz++) {
-        const dist = Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz));
-        if (dist > maxDist) continue;
-        offsets.push({ dx, dy, dz, dist });
-      }
+      const dist = Math.max(Math.abs(dx), Math.abs(dy));
+      if (dist > maxDist) continue;
+      offsets.push({ dx, dy, dz: 0, dist });
     }
   }
   return offsets;
