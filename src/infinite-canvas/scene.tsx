@@ -367,9 +367,14 @@ function SplashPlane({
 
   React.useEffect(() => {
     const material = materialRef.current;
+    const mesh = meshRef.current;
     if (!material || !texture) return;
     material.map = texture;
     material.needsUpdate = true;
+    // Start fully visible — replaces the HTML overlay, no fade-in gap
+    localState.current.opacity = 1;
+    material.opacity = 1;
+    if (mesh) mesh.visible = true;
   }, [texture]);
 
   useFrame(() => {
