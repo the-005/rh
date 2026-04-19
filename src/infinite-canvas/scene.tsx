@@ -112,6 +112,7 @@ function MediaPlane({
   const groupRef = React.useRef<THREE.Group>(null);
   const meshRef = React.useRef<THREE.Mesh>(null);
   const materialRef = React.useRef<THREE.MeshBasicMaterial>(null);
+  const labelRef = React.useRef<THREE.Sprite>(null);
 
   const labelTexture = React.useMemo(() => {
     if (!showLabel) return null;
@@ -251,7 +252,9 @@ function MediaPlane({
     state.opacity = target < INVIS_THRESHOLD && state.opacity < INVIS_THRESHOLD ? 0 : lerp(state.opacity, target, alpha);
 
     material.opacity = state.opacity;
-    mesh.visible = state.opacity > INVIS_THRESHOLD;
+    const isVisible = state.opacity > INVIS_THRESHOLD;
+    mesh.visible = isVisible;
+    if (labelRef.current) labelRef.current.visible = isVisible;
   });
 
   const displayScale = React.useMemo(() => {
@@ -327,7 +330,7 @@ function MediaPlane({
         <meshBasicMaterial ref={materialRef} transparent opacity={0} side={THREE.DoubleSide} depthTest={false} />
       </mesh>
       {showLabel && labelTexture && (
-        <sprite position={[0, displayScale.y / 2 + 3, 0]} scale={[12, 3, 1]}>
+        <sprite ref={labelRef} visible={false} position={[0, displayScale.y / 2 + 3, 0]} scale={[12, 3, 1]}>
           <spriteMaterial map={labelTexture} transparent depthTest={false} />
         </sprite>
       )}
