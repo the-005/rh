@@ -1,4 +1,4 @@
-import { KeyboardControls, Stats, useKeyboardControls, useProgress } from "@react-three/drei";
+import { KeyboardControls, Stats, Text, useKeyboardControls, useProgress } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as React from "react";
 import * as THREE from "three";
@@ -310,6 +310,7 @@ function Chunk({
   media,
   cameraGridRef,
   onMediaClick,
+  showLabel,
 }: {
   cx: number;
   cy: number;
@@ -317,6 +318,7 @@ function Chunk({
   media: MediaItem[];
   cameraGridRef: React.RefObject<CameraGridState>;
   onMediaClick?: (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => void;
+  showLabel?: boolean;
 }) {
   const [planes, setPlanes] = React.useState<PlaneData[] | null>(null);
 
@@ -341,6 +343,10 @@ function Chunk({
 
   if (!planes) return null;
 
+  const labelZ = INITIAL_CAMERA_Z - 150;
+  const labelX = cx * CHUNK_SIZE + CHUNK_SIZE / 2;
+  const labelY = cy * CHUNK_SIZE + CHUNK_SIZE / 2;
+
   return (
     <group>
       {planes.map((plane) => (
@@ -359,6 +365,17 @@ function Chunk({
           onMediaClick={onMediaClick}
         />
       ))}
+      {showLabel && (
+        <>
+          <mesh position={[labelX, labelY, labelZ]}>
+            <planeGeometry args={[CHUNK_SIZE, CHUNK_SIZE]} />
+            <meshBasicMaterial color="#0088ff" wireframe transparent opacity={0.3} />
+          </mesh>
+          <Text position={[labelX, labelY, labelZ]} fontSize={6} color="#0088ff" anchorX="center" anchorY="middle" depthOffset={-1}>
+            {`${cx},${cy}`}
+          </Text>
+        </>
+      )}
     </group>
   );
 }
@@ -650,7 +667,7 @@ function SceneController({ media, onTextureProgress, activeCategory = "all", onM
   return (
     <>
       {chunks.map((chunk) => (
-        <Chunk key={chunk.key} cx={chunk.cx} cy={chunk.cy} cz={chunk.cz} media={media} cameraGridRef={cameraGridRef} onMediaClick={onMediaClick} />
+        <Chunk key={chunk.key} cx={chunk.cx} cy={chunk.cy} cz={chunk.cz} media={media} cameraGridRef={cameraGridRef} onMediaClick={onMediaClick} showLabel={!!debugElRef} />
       ))}
     </>
   );
