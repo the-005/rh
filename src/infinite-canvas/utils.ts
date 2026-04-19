@@ -106,17 +106,18 @@ export function getChunkCyclePositions(
   return offsets.map((o) => ({ x: cx * CHUNK_SIZE + o.x, y: cy * CHUNK_SIZE + o.y }));
 }
 
-// Golden ratio QMC constants — gives maximally-separated phases for any 2D grid of chunks.
+// Golden ratio QMC constants — gives maximally-separated phases for any 3D grid of chunks.
 const PHI1 = 0.6180339887498949;
 const PHI2 = 0.7548776662466927;
+const PHI3 = 0.5698402909980532;
 
 export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneData[] => {
   const planes: PlaneData[] = [];
   const seed = hashString(`${SESSION_SEED},${cx},${cy},${cz}`);
-  // QMC sequence: chunk (cx,cy) maps to a unique, evenly-distributed phase in [0, depthFadeEnd).
+  // QMC sequence: each (cx,cy,cz) maps to a unique, evenly-distributed phase in [0, depthFadeEnd).
   // Session offset scrambles the pattern each page load so it doesn't look static.
   const sessionFrac = seededRandom(SESSION_SEED);
-  const chunkPhase = (((cx * PHI1 + cy * PHI2 + sessionFrac) % 1) + 1) % 1 * tuning.depthFadeEnd;
+  const chunkPhase = (((cx * PHI1 + cy * PHI2 + cz * PHI3 + sessionFrac) % 1) + 1) % 1 * tuning.depthFadeEnd;
   const { itemsPerChunk, minSize, maxSize } = tuning;
   const slotStep = tuning.zSpread / Math.max(itemsPerChunk, 1);
 

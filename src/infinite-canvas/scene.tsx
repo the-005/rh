@@ -127,7 +127,7 @@ function MediaPlane({
     ctx.font = "bold 22px monospace";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(`${chunkCx},${chunkCy} #${chunkIndex}`, 96, 24);
+    ctx.fillText(`${chunkCx},${chunkCy},${chunkCz} #${chunkIndex}`, 96, 24);
     return new THREE.CanvasTexture(canvas);
   }, [showLabel, chunkCx, chunkCy, chunkIndex]);
 
