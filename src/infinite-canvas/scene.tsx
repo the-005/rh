@@ -352,13 +352,14 @@ function SplashPlane({
   const meshRef = React.useRef<THREE.Mesh>(null);
   const materialRef = React.useRef<THREE.MeshBasicMaterial>(null);
   const [texture, setTexture] = React.useState<THREE.Texture | null>(null);
-  const { size } = useThree();
+  const { size, camera } = useThree();
 
   const SPLASH_HEIGHT = 40;
   const displayScale = new THREE.Vector3(SPLASH_HEIGHT * aspect, SPLASH_HEIGHT, 1);
 
   // Compute the zOffset at which the plane fills the viewport (matching object-fit: cover)
-  const tanHalfFov = Math.tan((60 * Math.PI / 180) / 2);
+  const fov = (camera as THREE.PerspectiveCamera).fov ?? 60;
+  const tanHalfFov = Math.tan((fov * Math.PI / 180) / 2);
   const viewportAspect = size.width / size.height;
   const startZOffset = aspect >= viewportAspect
     ? SPLASH_HEIGHT / (2 * tanHalfFov)
@@ -399,7 +400,10 @@ function SplashPlane({
     const { scrollDelta } = cameraGridRef.current;
     state.absoluteZOffset += scrollDelta;
 
-    const { depthFadeEnd, depthFadeStart, depthFadeNear } = tuning;
+    const { depthFadeEnd, depthFadeStart } = tuning;
+    // The splash starts at cover size, which may sit inside the global near-fade
+    // band — clamp the fade-in end below startZOffset so it spawns fully opaque.
+    const depthFadeNear = Math.min(tuning.depthFadeNear, startZOffset * 0.8);
     const zOffset = ((state.absoluteZOffset % depthFadeEnd) + depthFadeEnd) % depthFadeEnd;
     mesh.position.z = INITIAL_CAMERA_Z - zOffset;
 
@@ -847,8 +851,8 @@ export function InfiniteCanvasScene({
   cameraFov = 60,
   cameraNear = 1,
   cameraFar = 500,
-  fogNear = 120,
-  fogFar = 320,
+  fogNear = 160,
+  fogFar = 420,
   backgroundColor = "#ffffff",
   fogColor = "#ffffff",
   activeCategory = "all",

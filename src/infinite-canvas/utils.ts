@@ -47,8 +47,10 @@ export const getMediaDimensions = (media: HTMLImageElement | undefined) => {
   return { width, height };
 };
 
-const MIN_SEPARATION = 40;
-const EDGE_PADDING = 15;
+// Widest manifest aspect is 1.78 → a max-size (30) image spans ~53 units.
+// Separation must exceed that, and padding × 2 must cover the cross-chunk gap.
+const MIN_SEPARATION = 56;
+const EDGE_PADDING = 28;
 const POISSON_K = 30;
 const ITEMS_PER_CHUNK = 2;
 

@@ -49,7 +49,7 @@ export function App() {
         activeCategory={category}
         onTextureProgress={setTextureProgress}
         onMediaClick={handleMediaClick}
-        cameraFov={60}
+        cameraFov={48}
         splashSrc={splashFrame ?? undefined}
         splashAspect={splashAspect}
         onSplashReady={() => setSplashDismissed(true)}

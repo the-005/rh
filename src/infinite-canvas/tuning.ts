@@ -12,7 +12,7 @@ export type TuningValues = {
 
 export const tuning: TuningValues = {
   itemsPerChunk: 2,
-  minSize: 20,
+  minSize: 22,
   maxSize: 30,
   depthFadeNear: NEAR_FADE_END,
   depthFadeStart: DEPTH_FADE_START,

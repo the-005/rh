@@ -89,13 +89,13 @@ When `showDebug` is true:
 | Chunk size | `CHUNK_SIZE` in `constants.ts` | 160 |
 | Z layers rendered | `CHUNK_OFFSETS` dz loop | −1..1 (3 layers) |
 | Images per chunk | `tuning.itemsPerChunk` in `tuning.ts` | 2 |
-| Plane size range | `tuning.minSize` / `tuning.maxSize` | 20–30 units |
+| Plane size range | `tuning.minSize` / `tuning.maxSize` | 22–30 units |
 | Depth cycle length | `tuning.depthFadeEnd` | 1000 |
 | Z spread (within-chunk) | `tuning.zSpread` | 1000 |
 | Velocity decay | `VELOCITY_DECAY` in `constants.ts` | 0.96 |
 | Velocity smoothing | `VELOCITY_LERP` in `constants.ts` | 0.08 |
 | Scroll sensitivity | `s.scrollAccum += e.deltaY * 0.012` in `scene.tsx` | 0.012 |
-| Camera FOV | `cameraFov={60}` in `src/app/index.tsx` | 60° |
+| Camera FOV | `cameraFov={48}` in `src/app/index.tsx` | 48° |
 
 ### Path alias
 `~` resolves to the repo root (configured in `vite.config.ts`). Imports look like `~/src/utils`.
