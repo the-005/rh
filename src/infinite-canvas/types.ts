@@ -43,8 +43,4 @@ export type PlaneData = {
   mediaIndex: number;
   depthPhase: number;
   chunkIndex: number;
-  /** Fixed scroll direction (+1 zooms in on scroll-up, −1 zooms out). Checkerboard
-   *  parity of (cx + cy + depth slot) — never camera-relative, so relative depths
-   *  between same-direction planes are preserved forever. */
-  zDir: 1 | -1;
 };

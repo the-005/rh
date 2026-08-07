@@ -24,6 +24,9 @@ import { clearPlaneCache, generateChunkPlanesCached, getChunkCyclePositions, get
 
 const PLANE_GEOMETRY = new THREE.PlaneGeometry(1, 1);
 
+/** Live positions/depths of mounted planes, for rest-time depth de-confliction. */
+type PlaneRegistry = Map<string, { x: number; y: number; z: number; o: number }>;
+
 function getMeshScreenRect(mesh: THREE.Mesh, camera: THREE.Camera) {
   const pos = new THREE.Vector3();
   mesh.getWorldPosition(pos);
@@ -92,8 +95,8 @@ function MediaPlane({
   chunkCx,
   chunkCy,
   chunkCz,
-  zDir,
   cameraGridRef,
+  registryRef,
   onMediaClick,
   showLabel,
 }: {
@@ -106,8 +109,8 @@ function MediaPlane({
   chunkCx: number;
   chunkCy: number;
   chunkCz: number;
-  zDir: 1 | -1;
   cameraGridRef: React.RefObject<CameraGridState>;
+  registryRef: React.RefObject<PlaneRegistry>;
   onMediaClick?: (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => void;
   showLabel?: boolean;
 }) {
@@ -136,10 +139,15 @@ function MediaPlane({
 
   React.useEffect(() => () => { labelTexture?.dispose(); }, [labelTexture]);
   const initPos = getChunkCyclePositions(chunkCx, chunkCy, chunkCz, 0)[chunkIndex];
-  // zDir is a fixed property of the plane, so this reconstruction is exact even
-  // when a chunk remounts after leaving view — no camera-position dependence.
-  const initialAbsoluteZ = depthPhase + cameraGridRef.current.cumulativeScroll * zDir;
+  const isInitRight = initPos.x >= cameraGridRef.current.camX;
+  const initialAbsoluteZ = depthPhase + cameraGridRef.current.cumulativeScroll * (isInitRight ? 1 : -1);
   const initialCycle = Math.floor(initialAbsoluteZ / tuning.depthFadeEnd);
+
+  const regKey = `${chunkCx},${chunkCy},${chunkCz},${chunkIndex}`;
+  React.useEffect(() => {
+    const registry = registryRef.current;
+    return () => { registry.delete(regKey); };
+  }, [regKey, registryRef]);
 
   const localState = React.useRef({
     opacity: 0,
@@ -166,12 +174,13 @@ function MediaPlane({
     if (!material || !mesh) return;
 
     // zOffset is the image's depth from the camera within [0, DEPTH_FADE_END).
-    // Direction is fixed per plane (checkerboard parity) — never camera-relative.
-    // A camera-relative split lets panning flip directions mid-flight, which
-    // scrambles relative phases and can weld two planes to the same depth forever.
-    const { scrollDelta } = cameraGridRef.current;
+    // Right images zoom in on scroll-up, left images zoom out — direction is
+    // re-evaluated against the camera every frame (intentional feature: planes
+    // flip direction when the camera pans past them).
+    const { scrollDelta, camX } = cameraGridRef.current;
     if (Math.abs(scrollDelta) > 0.00001) {
-      state.absoluteZOffset += scrollDelta * zDir;
+      const isRight = state.cycleX >= camX;
+      state.absoluteZOffset += scrollDelta * (isRight ? 1 : -1);
     }
 
     const { depthFadeEnd, depthFadeStart, depthFadeNear } = tuning;
@@ -208,6 +217,7 @@ function MediaPlane({
       material.opacity = 0;
       material.depthWrite = false;
       mesh.visible = false;
+      registryRef.current.set(regKey, { x: state.cycleX, y: state.cycleY, z: zOffset, o: 0 });
       return;
     }
 
@@ -258,6 +268,27 @@ function MediaPlane({
     const isVisible = state.opacity > INVIS_THRESHOLD;
     mesh.visible = isVisible;
     if (labelRef.current) labelRef.current.visible = isVisible;
+
+    // Depth de-confliction. Camera-relative direction flips mean two nearby
+    // planes can drift to identical depths and then move in lockstep — welded
+    // on screen with no parallax separation. While the canvas is at rest, ease
+    // any visible same-depth XY-overlapping pair apart in depth.
+    const registry = registryRef.current;
+    registry.set(regKey, { x: state.cycleX, y: state.cycleY, z: zOffset, o: state.opacity });
+    if (Math.abs(scrollDelta) < 0.01 && state.opacity > 0.05) {
+      for (const [k, q] of registry) {
+        if (k === regKey || q.o <= 0.05) continue;
+        if (Math.abs(q.x - state.cycleX) > 60 || Math.abs(q.y - state.cycleY) > 60) continue;
+        let dz = zOffset - q.z;
+        dz -= Math.round(dz / depthFadeEnd) * depthFadeEnd;
+        if (Math.abs(dz) < 50) {
+          // Push away from the neighbor; ties broken by key so both planes
+          // don't chase each other in the same direction.
+          state.absoluteZOffset += (dz !== 0 ? Math.sign(dz) : regKey > k ? 1 : -1) * 0.6;
+          break;
+        }
+      }
+    }
   });
 
   const displayScale = React.useMemo(() => {
@@ -491,6 +522,7 @@ function Chunk({
   cz,
   media,
   cameraGridRef,
+  registryRef,
   onMediaClick,
   showLabel,
 }: {
@@ -499,6 +531,7 @@ function Chunk({
   cz: number;
   media: MediaItem[];
   cameraGridRef: React.RefObject<CameraGridState>;
+  registryRef: React.RefObject<PlaneRegistry>;
   onMediaClick?: (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => void;
   showLabel?: boolean;
 }) {
@@ -539,8 +572,8 @@ function Chunk({
           chunkCx={cx}
           chunkCy={cy}
           chunkCz={cz}
-          zDir={plane.zDir}
           cameraGridRef={cameraGridRef}
+          registryRef={registryRef}
           onMediaClick={onMediaClick}
           showLabel={showLabel}
         />
@@ -598,6 +631,7 @@ function SceneController({ media, onTextureProgress, activeCategory = "all", onM
     cumulativeScroll: 0,
     activeCategory: "all",
   });
+  const planeRegistryRef = React.useRef<PlaneRegistry>(new Map());
 
   const [chunks, setChunks] = React.useState<ChunkData[]>([]);
 
@@ -837,7 +871,7 @@ function SceneController({ media, onTextureProgress, activeCategory = "all", onM
   return (
     <>
       {chunks.map((chunk) => (
-        <Chunk key={chunk.key} cx={chunk.cx} cy={chunk.cy} cz={chunk.cz} media={media} cameraGridRef={cameraGridRef} onMediaClick={onMediaClick} showLabel={!!debugElRef && (showGuides ?? true)} />
+        <Chunk key={chunk.key} cx={chunk.cx} cy={chunk.cy} cz={chunk.cz} media={media} cameraGridRef={cameraGridRef} registryRef={planeRegistryRef} onMediaClick={onMediaClick} showLabel={!!debugElRef && (showGuides ?? true)} />
       ))}
       {splashSrc && onSplashReady && <SplashPlane src={splashSrc} aspect={splashAspect ?? 16 / 9} cameraGridRef={cameraGridRef} onReady={onSplashReady} />}
     </>

@@ -94,14 +94,16 @@ export function getChunkCyclePositions(
 }
 
 // Depth-phase constants found by grid search: maximize the minimum circular
-// phase gap over all SAME-DIRECTION plane pairs (parity of Δcx+Δcy+Δslot even —
-// only those keep a fixed relative depth; opposite-direction pairs drift apart
-// on the next scroll) within ±2 chunk columns, with a ±4 guard against exact
-// rational welds (the previous 0.4242/0.6363 pair was in exact 2:3 ratio,
-// locking every (3,−2)-offset column pair to identical depths forever).
-// Result: every persistent pair within ±2 columns stays ≥31.8 units apart.
-const ALPHA_X = 0.38788;
-const ALPHA_Y = 0.46464;
+// phase gap over all plane pairs within ±2 chunk columns, with a ±4-window
+// guard against exact rational welds (an earlier pair, 0.4242/0.6363, was in
+// exact 2:3 ratio — locking every (3,−2)-offset column pair to identical
+// phases). Every pair within ±2 columns spawns ≥15.9 units apart. Because
+// direction is camera-relative (planes flip when the camera passes them),
+// relative phases drift as the user pans — spawn spacing is the starting
+// point, and the rest-time de-confliction pass in MediaPlane handles pairs
+// that later converge.
+const ALPHA_X = 0.1106;
+const ALPHA_Y = 0.31566;
 
 export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneData[] => {
   const planes: PlaneData[] = [];
@@ -133,7 +135,6 @@ export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneDa
       mediaIndex: Math.floor(r(5) * 1_000_000),
       depthPhase: (columnPhase + slotOffset) % depthFadeEnd,
       chunkIndex: i,
-      zDir: ((((cx + cy + slot) % 2) + 2) % 2 === 0 ? 1 : -1) as 1 | -1,
     });
   }
 
