@@ -16,6 +16,6 @@ export const tuning: TuningValues = {
   maxSize: 30,
   depthFadeNear: NEAR_FADE_END,
   depthFadeStart: DEPTH_FADE_START,
-  depthFadeEnd: 800,
-  zSpread: 800,
+  depthFadeEnd: 900,
+  zSpread: 900,
 };

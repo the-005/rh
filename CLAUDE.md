@@ -90,8 +90,8 @@ When `showDebug` is true:
 | Z layers rendered | `CHUNK_OFFSETS` dz loop | −1..1 (3 layers) |
 | Images per chunk | `tuning.itemsPerChunk` in `tuning.ts` | 2 |
 | Plane size range | `tuning.minSize` / `tuning.maxSize` | 22–30 units |
-| Depth cycle length | `tuning.depthFadeEnd` | 800 |
-| Z spread (within-chunk) | `tuning.zSpread` | 800 |
+| Depth cycle length | `tuning.depthFadeEnd` | 900 |
+| Z spread (within-chunk) | `tuning.zSpread` | 900 |
 | Velocity decay | `VELOCITY_DECAY` in `constants.ts` | 0.96 |
 | Velocity smoothing | `VELOCITY_LERP` in `constants.ts` | 0.08 |
 | Scroll sensitivity | `s.scrollAccum += e.deltaY * 0.012` in `scene.tsx` | 0.012 |
