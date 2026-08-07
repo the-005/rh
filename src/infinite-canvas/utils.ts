@@ -47,53 +47,19 @@ export const getMediaDimensions = (media: HTMLImageElement | undefined) => {
   return { width, height };
 };
 
-// Widest manifest aspect is 1.78 → a max-size (30) image spans ~53 units.
-// Separation must exceed that, and padding × 2 must cover the cross-chunk gap.
-const MIN_SEPARATION = 56;
-const EDGE_PADDING = 28;
-const POISSON_K = 30;
-const ITEMS_PER_CHUNK = 2;
-
-function samplePoissonDisk2D(
-  count: number,
-  areaSize: number,
-  minDist: number,
-  padding: number,
-  rng: () => number,
-): { x: number; y: number }[] {
-  const lo = padding;
-  const hi = areaSize - padding;
-  const span = hi - lo;
-  const points: { x: number; y: number }[] = [];
-
-  for (let p = 0; p < count; p++) {
-    if (p === 0) {
-      points.push({ x: lo + rng() * span, y: lo + rng() * span });
-      continue;
-    }
-    let best = { x: lo + rng() * span, y: lo + rng() * span };
-    let bestMinD = Number.NEGATIVE_INFINITY;
-    for (let k = 0; k < POISSON_K; k++) {
-      const cx = lo + rng() * span;
-      const cy = lo + rng() * span;
-      let minD = Number.POSITIVE_INFINITY;
-      for (const pt of points) {
-        const d = Math.hypot(cx - pt.x, cy - pt.y);
-        if (d < minD) minD = d;
-      }
-      if (minD >= minDist) {
-        best = { x: cx, y: cy };
-        break;
-      }
-      if (minD > bestMinD) {
-        bestMinD = minD;
-        best = { x: cx, y: cy };
-      }
-    }
-    points.push(best);
-  }
-  return points;
-}
+// Staggered lattice sites (as fractions of chunk size). The union across all
+// chunks tiles into a uniform grid, capping the worst-case empty XY region at
+// ~half a chunk — random per-chunk scatter allowed voids of 1.5+ chunks.
+// For itemsPerChunk=2, nearest sites (same or adjacent chunk) are 113 units
+// apart; jitter radius 25 keeps every pair ≥63 apart, above the ~53-unit span
+// of the widest image (aspect 1.78 at max size 30).
+const LATTICE_SITES: Record<number, [number, number][]> = {
+  1: [[0.5, 0.5]],
+  2: [[0.25, 0.25], [0.75, 0.75]],
+  3: [[0.25, 0.25], [0.75, 0.55], [0.35, 0.85]],
+  4: [[0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]],
+};
+const JITTER_RADIUS: Record<number, number> = { 1: 45, 2: 25, 3: 10, 4: 12 };
 
 export function getChunkCyclePositions(
   cx: number,
@@ -101,11 +67,23 @@ export function getChunkCyclePositions(
   cz: number,
   cycleNumber: number,
 ): { x: number; y: number }[] {
-  const seed = hashString(`${SESSION_SEED},${cx},${cy},${cz},cycle${cycleNumber}`);
-  let counter = 0;
-  const rng = () => seededRandom(seed + counter++);
-  const offsets = samplePoissonDisk2D(ITEMS_PER_CHUNK, CHUNK_SIZE, MIN_SEPARATION, EDGE_PADDING, rng);
-  return offsets.map((o) => ({ x: cx * CHUNK_SIZE + o.x, y: cy * CHUNK_SIZE + o.y }));
+  const n = Math.min(Math.max(Math.round(tuning.itemsPerChunk), 1), 4);
+  const sites = LATTICE_SITES[n];
+  const jitter = JITTER_RADIUS[n];
+  // Odd z-layers use the anti-diagonal so the layers interleave in XY instead
+  // of stacking on the same sites — doubles effective coverage for n=2.
+  const flipX = n === 2 && ((cz % 2) + 2) % 2 === 1;
+
+  return sites.map(([sx, sy], i) => {
+    const seed = hashString(`${SESSION_SEED},${cx},${cy},${cz},${i},cycle${cycleNumber}`);
+    const r = jitter * Math.sqrt(seededRandom(seed));
+    const theta = 2 * Math.PI * seededRandom(seed + 1);
+    const fx = flipX ? 1 - sx : sx;
+    return {
+      x: cx * CHUNK_SIZE + fx * CHUNK_SIZE + r * Math.cos(theta),
+      y: cy * CHUNK_SIZE + sy * CHUNK_SIZE + r * Math.sin(theta),
+    };
+  });
 }
 
 // Golden ratio QMC constants — gives maximally-separated phases for any 3D grid of chunks.

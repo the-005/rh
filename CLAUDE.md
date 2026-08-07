@@ -47,7 +47,7 @@ Media items are `{ url, width, height, project?, category? }`. Images live in `p
 - `constants.ts` — physics/render constants. `CHUNK_OFFSETS` defines the 3D grid of visible chunks (currently dz = −1..1, dx/dy = −3..3).
 - `tuning.ts` — mutable singleton `tuning` object read live by `useFrame` and `generateChunkPlanes`. Sliders in the tuning panel write directly to this object; changes take effect without remounting except for generation params (density, size, cycle length, Z spacing) which call `bumpGen()` to clear the plane cache and increment `tuningGenVersion`.
 - `texture-manager.ts` — texture loading/caching; calls `onTextureProgress`.
-- `utils.ts` — `generateChunkPlanes` (seeded RNG, QMC depth phases, Poisson disk XY placement), LRU plane cache (max 256 entries), chunk update throttle logic.
+- `utils.ts` — `generateChunkPlanes` (seeded RNG, QMC depth phases, staggered-lattice XY placement), LRU plane cache (max 256 entries), chunk update throttle logic.
 
 **`src/app/index.tsx`** — root `App`; wires manifest → `InfiniteCanvas` + `PageLoader` + `Frame`.
 
@@ -65,7 +65,7 @@ Media items are `{ url, width, height, project?, category? }`. Images live in `p
 
 **Depth phase assignment** (`PlaneData.depthPhase`): Pre-computed in `generateChunkPlanes` using a 3D golden-ratio QMC sequence on `(cx, cy, cz)` plus a per-session random offset. This ensures any set of chunks has maximally spread-out phases — no two nearby chunks land at the same depth simultaneously. Within a chunk, items are spaced `zSpread / itemsPerChunk` apart.
 
-**XY placement**: Poisson disk sampling (`samplePoissonDisk2D`) places images within each chunk with a minimum separation of 40 units. Seed includes `SESSION_SEED + cx + cy + cz + cycleNumber` so positions vary per session and per depth cycle.
+**XY placement**: Staggered lattice (`LATTICE_SITES` in `utils.ts`) — each chunk's items sit on fixed fractional sites (diagonal pair for density 2; odd z-layers use the anti-diagonal so layers interleave) plus a deterministic jitter (radius `JITTER_RADIUS`). The union across chunks tiles uniformly, capping worst-case empty regions at ~half a chunk while keeping every pair of images ≥63 units apart. Jitter seed includes `SESSION_SEED + cx + cy + cz + item index + cycleNumber` so positions vary per session and per depth cycle.
 
 **Chunk throttling**: Chunk list updates throttle to 100 ms normally, 400–500 ms while zooming fast.
 
