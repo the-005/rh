@@ -87,20 +87,26 @@ export function getChunkCyclePositions(
   });
 }
 
-// Golden ratio QMC constants — gives maximally-separated phases for any 3D grid of chunks.
-const PHI1 = 0.6180339887498949;
-const PHI2 = 0.7548776662466927;
-const PHI3 = 0.5698402909980532;
+// Depth-phase constants found by grid search (maximize the minimum circular
+// phase gap over all plane pairs within ±2 chunk columns). All planes sharing
+// an XY column (3 z-layers × itemsPerChunk) are stratified onto evenly spaced
+// slots — 150 units apart at defaults — and the per-column base phase avoids
+// every neighboring column's slots. Worst-case arrival gap between any two
+// nearby planes rises from 3 units (old golden-ratio mix, which locked some
+// neighbor pairs into arriving simultaneously every cycle) to 27 in a 2×2
+// column window and 14 in 3×3, both near the pigeonhole optimum.
+const ALPHA_X = 0.4242;
+const ALPHA_Y = 0.6363;
 
 export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneData[] => {
   const planes: PlaneData[] = [];
   const seed = hashString(`${SESSION_SEED},${cx},${cy},${cz}`);
-  // QMC sequence: each (cx,cy,cz) maps to a unique, evenly-distributed phase in [0, depthFadeEnd).
   // Session offset scrambles the pattern each page load so it doesn't look static.
   const sessionFrac = seededRandom(SESSION_SEED);
-  const chunkPhase = (((cx * PHI1 + cy * PHI2 + cz * PHI3 + sessionFrac) % 1) + 1) % 1 * tuning.depthFadeEnd;
-  const { itemsPerChunk, minSize, maxSize } = tuning;
-  const slotStep = tuning.zSpread / Math.max(itemsPerChunk, 1);
+  const { itemsPerChunk, minSize, maxSize, depthFadeEnd, zSpread } = tuning;
+  const columnPhase = ((((cx * ALPHA_X + cy * ALPHA_Y + sessionFrac) % 1) + 1) % 1) * depthFadeEnd;
+  const zLayer = ((cz % 3) + 3) % 3;
+  const numSlots = 3 * Math.max(itemsPerChunk, 1);
 
   const positions = getChunkCyclePositions(cx, cy, cz, 0);
 
@@ -108,6 +114,7 @@ export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneDa
     const s = seed + i * 1000;
     const r = (n: number) => seededRandom(s + n);
     const size = minSize + r(4) * (maxSize - minSize);
+    const slotOffset = ((zLayer * itemsPerChunk + i) / numSlots) * zSpread;
 
     planes.push({
       id: `${cx}-${cy}-${cz}-${i}`,
@@ -118,7 +125,7 @@ export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneDa
       ),
       scale: new THREE.Vector3(size, size, 1),
       mediaIndex: Math.floor(r(5) * 1_000_000),
-      depthPhase: (chunkPhase + i * slotStep) % tuning.depthFadeEnd,
+      depthPhase: (columnPhase + slotOffset) % depthFadeEnd,
       chunkIndex: i,
     });
   }
