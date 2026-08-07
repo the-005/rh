@@ -95,7 +95,7 @@ When `showDebug` is true:
 | Velocity decay | `VELOCITY_DECAY` in `constants.ts` | 0.96 |
 | Velocity smoothing | `VELOCITY_LERP` in `constants.ts` | 0.08 |
 | Scroll sensitivity | `s.scrollAccum += e.deltaY * 0.012` in `scene.tsx` | 0.012 |
-| Camera FOV | `cameraFov={48}` in `src/app/index.tsx` | 48° |
+| Camera FOV | `cameraFov={48}` in `src/app/index.tsx` | 48° vertical at aspect ≥ 1; widens on narrower viewports (horizontal-coverage floor, capped 95°) via `AdaptiveFov` in `scene.tsx` |
 
 ### Path alias
 `~` resolves to the repo root (configured in `vite.config.ts`). Imports look like `~/src/utils`.

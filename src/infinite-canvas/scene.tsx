@@ -477,6 +477,28 @@ function SplashPlane({
   );
 }
 
+/** Keeps horizontal world coverage from collapsing on narrow/portrait viewports.
+ *  At aspect ≥ 1 the vertical FOV is the configured base; below 1 it widens so the
+ *  horizontal FOV matches a square viewport's (capped at 95° to limit distortion).
+ *  Without this, a tall window can fit less than one lattice lane of images in x,
+ *  which renders the scatter as a single vertical column. */
+function AdaptiveFov({ baseFov }: { baseFov: number }) {
+  const { camera, size } = useThree();
+
+  React.useEffect(() => {
+    const cam = camera as THREE.PerspectiveCamera;
+    const aspect = size.width / size.height;
+    const baseTan = Math.tan((baseFov * Math.PI) / 360);
+    const fov = aspect >= 1 ? baseFov : Math.min(95, (360 / Math.PI) * Math.atan(baseTan / aspect));
+    if (cam.fov !== fov) {
+      cam.fov = fov;
+      cam.updateProjectionMatrix();
+    }
+  }, [camera, size, baseFov]);
+
+  return null;
+}
+
 function ChunkLabel({ cx, cy }: { cx: number; cy: number }) {
   const texture = React.useMemo(() => {
     const canvas = document.createElement("canvas");
@@ -936,6 +958,7 @@ export function InfiniteCanvasScene({
         >
           <color attach="background" args={[backgroundColor]} />
           <fog attach="fog" args={[fogColor, fogNear, fogFar]} />
+          <AdaptiveFov baseFov={cameraFov} />
           <SceneController media={media} onTextureProgress={onTextureProgress} activeCategory={activeCategory} onMediaClick={onMediaClick} debugElRef={showDebug ? debugElRef : undefined} tuningGenVersion={tuningGenVersion} showGuides={showGuides} splashSrc={splashSrc} splashAspect={splashAspect} onSplashReady={onSplashReady} />
           {showFps && <Stats className={styles.stats} />}
         </Canvas>
