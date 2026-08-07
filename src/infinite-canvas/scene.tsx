@@ -2,6 +2,7 @@ import { KeyboardControls, Stats, useKeyboardControls, useProgress } from "@reac
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as React from "react";
 import * as THREE from "three";
+import { isPlaneHidden, stageTransitionSource } from "~/src/project/transition-origin";
 import { useIsTouchDevice } from "~/src/use-is-touch-device";
 import { clamp, lerp } from "~/src/utils";
 import {
@@ -256,7 +257,12 @@ function MediaPlane({
       }
     }
 
-    const target = categoryMatch ? naturalTarget : 0;
+    // While the project-page overlay owns this image, the plane vanishes instantly
+    // (the overlay <img> is painted exactly over it) and fades back in on release.
+    const hidden = isPlaneHidden(regKey);
+    if (hidden) state.opacity = 0;
+
+    const target = hidden ? 0 : categoryMatch ? naturalTarget : 0;
 
     if (!categoryMatch) state.filterFade = true;
     if (state.filterFade && categoryMatch && state.opacity >= naturalTarget * 0.99) state.filterFade = false;
@@ -358,6 +364,7 @@ function MediaPlane({
           if (shouldDefer) return;
 
           e.stopPropagation();
+          stageTransitionSource(regKey, myOpacity);
           onMediaClick(media, getMeshScreenRect(mesh, e.camera));
         }}
       >

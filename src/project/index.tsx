@@ -1,74 +1,117 @@
 import * as React from "react";
 import allManifest from "~/src/images/manifest.json";
 import type { MediaItem } from "~/src/infinite-canvas/types";
-import { consumePendingTransition } from "./transition-origin";
+import {
+  consumePendingTransition,
+  hideTransitionSource,
+  releaseTransitionSource,
+} from "./transition-origin";
 import styles from "./style.module.css";
 
 const ALL_MEDIA = allManifest as MediaItem[];
 
 const SLOT_W = 380;
+const ENTRY_EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
 
 export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }) {
-  const images = React.useMemo(() => ALL_MEDIA.filter((item) => item.project === id), [id]);
-
   // Capture once on mount — clears the module-level store
   const transitionRef = React.useRef(consumePendingTransition());
 
-  // Start at the image the user actually clicked, not index 0
-  const [current, setCurrent] = React.useState(transitionRef.current?.startIndex ?? 0);
+  // Rotate the project's images so the clicked one is always first (counter reads 1/N)
+  const filtered = ALL_MEDIA.filter((item) => item.project === id);
+  const start = transitionRef.current?.startIndex ?? 0;
+  const images = start > 0 ? [...filtered.slice(start), ...filtered.slice(0, start)] : filtered;
+
+  const [current, setCurrent] = React.useState(0);
 
   const overlayRef = React.useRef<HTMLDivElement>(null);
   const centerImageRef = React.useRef<HTMLImageElement>(null);
 
-  // FLIP entry: slide the clicked image from its canvas position to the centre
+  // FLIP entry: the clicked image tweens (transform-only, so compositor-cheap)
+  // from its canvas rect to the centre slot while the rest of the page fades in.
   React.useLayoutEffect(() => {
     const overlay = overlayRef.current;
     const t = transitionRef.current;
-    const centerImg = centerImageRef.current;
+    const img = centerImageRef.current;
 
     if (!overlay) return;
 
-    if (t && centerImg) {
-      const { rect } = t;
+    if (t && img) {
+      const { rect, opacity, sourceKey } = t;
 
-      // Freeze background as transparent; freeze image at canvas rect
+      // Freeze: transparent background, chrome hidden, centre image over its canvas rect
       overlay.style.background = "transparent";
-      centerImg.style.transition = "none";
-      centerImg.style.left = `${rect.x + rect.width / 2}px`;
-      centerImg.style.top = `${rect.y + rect.height / 2}px`;
-      centerImg.style.height = `${rect.height}px`;
-      centerImg.style.maxWidth = "none";
 
-      const raf = requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          // Animate background and image to final state
-          overlay.style.transition = "background 0.45s ease";
-          overlay.style.background = "#eae8e4";
-
-          centerImg.style.transition = [
-            "left 0.55s cubic-bezier(0.22, 1, 0.36, 1)",
-            "top 0.55s cubic-bezier(0.22, 1, 0.36, 1)",
-            "height 0.55s cubic-bezier(0.22, 1, 0.36, 1)",
-            "max-width 0.55s cubic-bezier(0.22, 1, 0.36, 1)",
-          ].join(", ");
-          centerImg.style.left = "calc(50% + 0px)";
-          centerImg.style.top = "50%";
-          centerImg.style.height = "78vh";
-          centerImg.style.maxWidth = "44vw";
-        });
+      const chrome = Array.from(
+        overlay.querySelectorAll<HTMLElement>(
+          `.${styles.image}, .${styles.close}, .${styles.counter}`,
+        ),
+      ).filter((el) => el !== img);
+      const restore = chrome.map((el) => {
+        const orig = el.style.opacity;
+        el.style.transition = "none";
+        el.style.opacity = "0";
+        return { el, orig };
       });
 
-      // After FLIP completes, hand transition control back to the CSS class
-      const cleanup = setTimeout(() => {
-        centerImg.style.transition = "";
-        centerImg.style.top = "";
-        overlay.style.transition = "";
-        overlay.style.background = "";
-      }, 680);
+      // Measure the final layout box, then transform back onto the canvas rect.
+      // object-fit: contain letterboxes when the box aspect differs from the
+      // image's, so map the visual image rect rather than the element box.
+      img.style.transition = "none";
+      const box = img.getBoundingClientRect();
+      const aspect = rect.width / rect.height;
+      const visualW = box.width / box.height > aspect ? box.height * aspect : box.width;
+      const dx = rect.x + rect.width / 2 - (box.x + box.width / 2);
+      const dy = rect.y + rect.height / 2 - (box.y + box.height / 2);
+      const scale = rect.width / visualW;
+      img.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(${scale})`;
+      img.style.opacity = String(opacity);
+
+      let raf = 0;
+      let cleanupTimer: ReturnType<typeof setTimeout> | undefined;
+
+      const begin = () => {
+        raf = requestAnimationFrame(() => {
+          // The overlay image is now painted exactly over the canvas plane —
+          // hide the plane so only one copy of the image ever moves.
+          hideTransitionSource(sourceKey);
+          raf = requestAnimationFrame(() => {
+            overlay.style.transition = "background 0.55s ease";
+            overlay.style.background = "#eae8e4";
+
+            img.style.transition = `transform 0.9s ${ENTRY_EASE}, opacity 0.35s ease`;
+            img.style.transform = "translate(-50%, -50%)";
+            img.style.opacity = "1";
+
+            // Supporting elements fade in staggered — farther (dimmer) ones later
+            for (const { el, orig } of restore) {
+              const target = orig === "" ? 1 : Number(orig);
+              const delay = (0.3 + (1 - target) * 0.25).toFixed(2);
+              el.style.transition = `opacity 0.55s ease ${delay}s`;
+              el.style.opacity = orig;
+            }
+          });
+        });
+
+        // Hand control back to the CSS classes once the entry settles
+        cleanupTimer = setTimeout(() => {
+          img.style.transition = "";
+          img.style.transform = "";
+          img.style.opacity = "";
+          overlay.style.transition = "";
+          overlay.style.background = "";
+          for (const { el } of restore) el.style.transition = "";
+        }, 1300);
+      };
+
+      // Never start moving until the image can actually paint — the canvas plane
+      // keeps showing underneath until then, so the wait is invisible.
+      if (img.complete && img.naturalWidth > 0) begin();
+      else img.decode().then(begin, begin);
 
       return () => {
         cancelAnimationFrame(raf);
-        clearTimeout(cleanup);
+        if (cleanupTimer) clearTimeout(cleanupTimer);
       };
     }
 
@@ -90,10 +133,14 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     };
   }, []);
 
+  // Whatever the exit path, give the hidden canvas plane back
+  React.useEffect(() => releaseTransitionSource, []);
+
   const advance = () => setCurrent((i) => (i + 1) % images.length);
   const goBack = () => setCurrent((i) => (i - 1 + images.length) % images.length);
 
   const handleClose = () => {
+    releaseTransitionSource();
     const overlay = overlayRef.current;
     if (overlay) {
       overlay.style.transition = "opacity 0.3s ease";
