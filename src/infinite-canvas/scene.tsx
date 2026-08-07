@@ -92,6 +92,7 @@ function MediaPlane({
   chunkCx,
   chunkCy,
   chunkCz,
+  zDir,
   cameraGridRef,
   onMediaClick,
   showLabel,
@@ -105,6 +106,7 @@ function MediaPlane({
   chunkCx: number;
   chunkCy: number;
   chunkCz: number;
+  zDir: 1 | -1;
   cameraGridRef: React.RefObject<CameraGridState>;
   onMediaClick?: (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => void;
   showLabel?: boolean;
@@ -134,8 +136,9 @@ function MediaPlane({
 
   React.useEffect(() => () => { labelTexture?.dispose(); }, [labelTexture]);
   const initPos = getChunkCyclePositions(chunkCx, chunkCy, chunkCz, 0)[chunkIndex];
-  const isInitRight = initPos.x >= cameraGridRef.current.camX;
-  const initialAbsoluteZ = depthPhase + cameraGridRef.current.cumulativeScroll * (isInitRight ? 1 : -1);
+  // zDir is a fixed property of the plane, so this reconstruction is exact even
+  // when a chunk remounts after leaving view — no camera-position dependence.
+  const initialAbsoluteZ = depthPhase + cameraGridRef.current.cumulativeScroll * zDir;
   const initialCycle = Math.floor(initialAbsoluteZ / tuning.depthFadeEnd);
 
   const localState = React.useRef({
@@ -163,12 +166,12 @@ function MediaPlane({
     if (!material || !mesh) return;
 
     // zOffset is the image's depth from the camera within [0, DEPTH_FADE_END).
-    // All images wrap at the same modulo boundary so they never converge in depth.
-    // Right images zoom in on scroll-up, left images zoom out.
-    const { scrollDelta, camX } = cameraGridRef.current;
+    // Direction is fixed per plane (checkerboard parity) — never camera-relative.
+    // A camera-relative split lets panning flip directions mid-flight, which
+    // scrambles relative phases and can weld two planes to the same depth forever.
+    const { scrollDelta } = cameraGridRef.current;
     if (Math.abs(scrollDelta) > 0.00001) {
-      const isRight = state.cycleX >= camX;
-      state.absoluteZOffset += scrollDelta * (isRight ? 1 : -1);
+      state.absoluteZOffset += scrollDelta * zDir;
     }
 
     const { depthFadeEnd, depthFadeStart, depthFadeNear } = tuning;
@@ -536,6 +539,7 @@ function Chunk({
           chunkCx={cx}
           chunkCy={cy}
           chunkCz={cz}
+          zDir={plane.zDir}
           cameraGridRef={cameraGridRef}
           onMediaClick={onMediaClick}
           showLabel={showLabel}

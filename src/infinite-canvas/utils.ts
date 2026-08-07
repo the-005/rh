@@ -60,7 +60,17 @@ const LATTICE_SITES: Record<number, [number, number][]> = {
   3: [[0.25, 0.25], [0.75, 0.55], [0.35, 0.85]],
   4: [[0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]],
 };
+// For n=2, each of the three z-layers gets its own site variant so no two
+// layers ever share XY sites (pre-jitter cross-layer distance ≥56.6 units):
+// layer 0 = diagonal, layer 1 = anti-diagonal, layer 2 = center/corner.
+const LATTICE_VARIANTS_N2: [number, number][][] = [
+  [[0.25, 0.25], [0.75, 0.75]],
+  [[0.75, 0.25], [0.25, 0.75]],
+  [[0.5, 0.5], [0.0, 0.0]],
+];
 const JITTER_RADIUS: Record<number, number> = { 1: 40, 2: 15, 3: 10, 4: 12 };
+
+export const zLayerOf = (cz: number) => ((cz % 3) + 3) % 3;
 
 export function getChunkCyclePositions(
   cx: number,
@@ -69,34 +79,29 @@ export function getChunkCyclePositions(
   cycleNumber: number,
 ): { x: number; y: number }[] {
   const n = Math.min(Math.max(Math.round(tuning.itemsPerChunk), 1), 4);
-  const sites = LATTICE_SITES[n];
+  const sites = n === 2 ? LATTICE_VARIANTS_N2[zLayerOf(cz)] : LATTICE_SITES[n];
   const jitter = JITTER_RADIUS[n];
-  // Odd z-layers use the anti-diagonal so the layers interleave in XY instead
-  // of stacking on the same sites — doubles effective coverage for n=2.
-  const flipX = n === 2 && ((cz % 2) + 2) % 2 === 1;
 
   return sites.map(([sx, sy], i) => {
     const seed = hashString(`${SESSION_SEED},${cx},${cy},${cz},${i},cycle${cycleNumber}`);
     const r = jitter * Math.sqrt(seededRandom(seed));
     const theta = 2 * Math.PI * seededRandom(seed + 1);
-    const fx = flipX ? 1 - sx : sx;
     return {
-      x: cx * CHUNK_SIZE + fx * CHUNK_SIZE + r * Math.cos(theta),
+      x: cx * CHUNK_SIZE + sx * CHUNK_SIZE + r * Math.cos(theta),
       y: cy * CHUNK_SIZE + sy * CHUNK_SIZE + r * Math.sin(theta),
     };
   });
 }
 
-// Depth-phase constants found by grid search (maximize the minimum circular
-// phase gap over all plane pairs within ±2 chunk columns). All planes sharing
-// an XY column (3 z-layers × itemsPerChunk) are stratified onto evenly spaced
-// slots — 150 units apart at defaults — and the per-column base phase avoids
-// every neighboring column's slots. Worst-case arrival gap between any two
-// nearby planes rises from 3 units (old golden-ratio mix, which locked some
-// neighbor pairs into arriving simultaneously every cycle) to 27 in a 2×2
-// column window and 14 in 3×3, both near the pigeonhole optimum.
-const ALPHA_X = 0.4242;
-const ALPHA_Y = 0.6363;
+// Depth-phase constants found by grid search: maximize the minimum circular
+// phase gap over all SAME-DIRECTION plane pairs (parity of Δcx+Δcy+Δslot even —
+// only those keep a fixed relative depth; opposite-direction pairs drift apart
+// on the next scroll) within ±2 chunk columns, with a ±4 guard against exact
+// rational welds (the previous 0.4242/0.6363 pair was in exact 2:3 ratio,
+// locking every (3,−2)-offset column pair to identical depths forever).
+// Result: every persistent pair within ±2 columns stays ≥31.8 units apart.
+const ALPHA_X = 0.38788;
+const ALPHA_Y = 0.46464;
 
 export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneData[] => {
   const planes: PlaneData[] = [];
@@ -105,7 +110,7 @@ export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneDa
   const sessionFrac = seededRandom(SESSION_SEED);
   const { itemsPerChunk, minSize, maxSize, depthFadeEnd, zSpread } = tuning;
   const columnPhase = ((((cx * ALPHA_X + cy * ALPHA_Y + sessionFrac) % 1) + 1) % 1) * depthFadeEnd;
-  const zLayer = ((cz % 3) + 3) % 3;
+  const zLayer = zLayerOf(cz);
   const numSlots = 3 * Math.max(itemsPerChunk, 1);
 
   const positions = getChunkCyclePositions(cx, cy, cz, 0);
@@ -114,7 +119,8 @@ export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneDa
     const s = seed + i * 1000;
     const r = (n: number) => seededRandom(s + n);
     const size = minSize + r(4) * (maxSize - minSize);
-    const slotOffset = ((zLayer * itemsPerChunk + i) / numSlots) * zSpread;
+    const slot = zLayer * itemsPerChunk + i;
+    const slotOffset = (slot / numSlots) * zSpread;
 
     planes.push({
       id: `${cx}-${cy}-${cz}-${i}`,
@@ -127,6 +133,7 @@ export const generateChunkPlanes = (cx: number, cy: number, cz: number): PlaneDa
       mediaIndex: Math.floor(r(5) * 1_000_000),
       depthPhase: (columnPhase + slotOffset) % depthFadeEnd,
       chunkIndex: i,
+      zDir: ((((cx + cy + slot) % 2) + 2) % 2 === 0 ? 1 : -1) as 1 | -1,
     });
   }
 
