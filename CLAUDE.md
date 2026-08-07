@@ -65,7 +65,7 @@ Media items are `{ url, width, height, project?, category? }`. Images live in `p
 
 **Depth phase assignment** (`PlaneData.depthPhase`): Pre-computed in `generateChunkPlanes` using a 3D golden-ratio QMC sequence on `(cx, cy, cz)` plus a per-session random offset. This ensures any set of chunks has maximally spread-out phases — no two nearby chunks land at the same depth simultaneously. Within a chunk, items are spaced `zSpread / itemsPerChunk` apart.
 
-**XY placement**: Staggered lattice (`LATTICE_SITES` in `utils.ts`) — each chunk's items sit on fixed fractional sites (diagonal pair for density 2; odd z-layers use the anti-diagonal so layers interleave) plus a deterministic jitter (radius `JITTER_RADIUS`). The union across chunks tiles uniformly, capping worst-case empty regions at ~half a chunk while keeping every pair of images ≥63 units apart. Jitter seed includes `SESSION_SEED + cx + cy + cz + item index + cycleNumber` so positions vary per session and per depth cycle.
+**XY placement**: Staggered lattice (`LATTICE_SITES` in `utils.ts`) — each chunk's items sit on fixed fractional sites (diagonal pair for density 2; odd z-layers use the anti-diagonal so layers interleave) plus a deterministic jitter (radius `JITTER_RADIUS`). The union across chunks tiles uniformly, capping worst-case empty regions at ~half a chunk while keeping every pair of images ≥83 units apart. Jitter seed includes `SESSION_SEED + cx + cy + cz + item index + cycleNumber` so positions vary per session and per depth cycle.
 
 **Chunk throttling**: Chunk list updates throttle to 100 ms normally, 400–500 ms while zooming fast.
 

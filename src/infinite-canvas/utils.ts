@@ -51,15 +51,16 @@ export const getMediaDimensions = (media: HTMLImageElement | undefined) => {
 // chunks tiles into a uniform grid, capping the worst-case empty XY region at
 // ~half a chunk — random per-chunk scatter allowed voids of 1.5+ chunks.
 // For itemsPerChunk=2, nearest sites (same or adjacent chunk) are 113 units
-// apart; jitter radius 25 keeps every pair ≥63 apart, above the ~53-unit span
-// of the widest image (aspect 1.78 at max size 30).
+// apart; jitter radius 15 keeps every pair ≥83 apart — comfortably above the
+// ~53-unit span of the widest image (aspect 1.78 at max size 30) — and keeps
+// interleaved z-layer sites (80 apart) ≥50 apart in XY.
 const LATTICE_SITES: Record<number, [number, number][]> = {
   1: [[0.5, 0.5]],
   2: [[0.25, 0.25], [0.75, 0.75]],
   3: [[0.25, 0.25], [0.75, 0.55], [0.35, 0.85]],
   4: [[0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]],
 };
-const JITTER_RADIUS: Record<number, number> = { 1: 45, 2: 25, 3: 10, 4: 12 };
+const JITTER_RADIUS: Record<number, number> = { 1: 40, 2: 15, 3: 10, 4: 12 };
 
 export function getChunkCyclePositions(
   cx: number,
