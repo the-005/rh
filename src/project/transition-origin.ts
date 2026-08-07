@@ -1,28 +1,44 @@
+export interface TransitionRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface PendingTransition {
-  rect: { x: number; y: number; width: number; height: number };
+  rect: TransitionRect;
   startIndex: number;
-  /** Material opacity of the clicked plane at click time — the overlay image starts here. */
-  opacity: number;
-  /** Registry key of the clicked plane, used to hide exactly that plane (the same
-   *  image URL can be shown by several planes at once) during the transition. */
+  /** Registry key of the clicked plane (the same image URL can be shown by
+   *  several planes at once, so the plane is addressed by identity, not URL). */
   sourceKey: string | null;
 }
 
-let staged: { key: string; opacity: number } | null = null;
-let pending: PendingTransition | null = null;
-let hiddenKey: string | null = null;
-
-/** Called by the clicked MediaPlane, synchronously before onMediaClick fires. */
-export function stageTransitionSource(key: string, opacity: number): void {
-  staged = { key, opacity };
+interface HeroTween {
+  key: string;
+  /** Destination slot rect in screen pixels, measured from the project-page DOM. */
+  target: TransitionRect;
+  durationMs: number;
+  done: boolean;
+  onArrive: (() => void) | null;
 }
 
-export function setPendingTransition(
-  rect: { x: number; y: number; width: number; height: number },
-  startIndex: number,
-): void {
-  pending = { rect, startIndex, opacity: staged?.opacity ?? 1, sourceKey: staged?.key ?? null };
+let staged: string | null = null;
+let pending: PendingTransition | null = null;
+let heroTween: HeroTween | null = null;
+let hiddenKey: string | null = null;
+/** True from click until the project page fully releases the canvas: freezes
+ *  input, dims non-hero planes, and tints the scene background. */
+let active = false;
+
+/** Called by the clicked MediaPlane, synchronously before onMediaClick fires. */
+export function stageTransitionSource(key: string): void {
+  staged = key;
+}
+
+export function setPendingTransition(rect: TransitionRect, startIndex: number): void {
+  pending = { rect, startIndex, sourceKey: staged };
   staged = null;
+  active = true;
 }
 
 export function consumePendingTransition(): PendingTransition | null {
@@ -31,16 +47,48 @@ export function consumePendingTransition(): PendingTransition | null {
   return p;
 }
 
+/** Fly the source plane (in-scene) to the given screen rect. The plane itself
+ *  performs the tween in its frame loop and stays pinned there afterwards. */
+export function beginHeroTween(
+  key: string,
+  target: TransitionRect,
+  durationMs: number,
+  onArrive: () => void,
+): void {
+  heroTween = { key, target, durationMs, done: false, onArrive };
+}
+
+export function getHeroTween(key: string): HeroTween | null {
+  return heroTween && heroTween.key === key ? heroTween : null;
+}
+
 /** Hide the source plane once the overlay image is painted exactly over it. */
 export function hideTransitionSource(key: string | null): void {
   hiddenKey = key;
 }
 
-/** Un-hide the source plane — it fades back in via its normal opacity lerp. */
-export function releaseTransitionSource(): void {
-  hiddenKey = null;
-}
-
 export function isPlaneHidden(key: string): boolean {
   return hiddenKey === key;
+}
+
+/** Every plane except the flying hero fades out while a transition is active. */
+export function isDimmedPlane(key: string): boolean {
+  return active && heroTween !== null && heroTween.key !== key;
+}
+
+export function isCanvasFrozen(): boolean {
+  return active;
+}
+
+export function isTransitionActive(): boolean {
+  return active;
+}
+
+/** End the transition: un-hide, un-dim, un-freeze — the canvas comes back to life. */
+export function releaseTransition(): void {
+  staged = null;
+  pending = null;
+  heroTween = null;
+  hiddenKey = null;
+  active = false;
 }

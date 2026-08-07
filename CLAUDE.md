@@ -51,6 +51,10 @@ Media items are `{ url, width, height, project?, category? }`. Images live in `p
 
 **`src/app/index.tsx`** — root `App`; wires manifest → `InfiniteCanvas` + `PageLoader` + `Frame`.
 
+**`src/project/`** — project page + canvas↔page transition:
+- `index.tsx` — `ProjectPage`: all of a project's images in one row, equal height, scaled to fit the viewport width (row centered at 36% viewport height). The clicked image is rotated to be first (leftmost). No slider/nav; click anywhere or Escape closes.
+- `transition-origin.ts` — module-level store coordinating the persistent-plane transition (modeled on Codrops "persistent page transitions"): the clicked WebGL plane itself flies (expo-out, 1s) to the hero slot rect measured from the DOM, other planes dim, canvas input freezes, and scene background/fog lerp to the page color. Only when the plane is pinned at rest is the DOM `<img>` revealed and the plane hidden (`hideTransitionSource`), so the handoff is invisible. Supporting images stagger-fade in during flight (0.25s + j·0.08s). `releaseTransition()` (on close/unmount) un-hides, un-dims, and un-freezes. The flight itself runs in `MediaPlane.useFrame` (`getHeroTween(regKey)` branch in `scene.tsx`); planes are addressed by registry key, not URL, because one image can appear on several planes.
+
 **`src/frame/index.tsx`** — HTML overlay header with category filter buttons (all / art / commerce).
 
 **`src/loader/index.tsx`** — loading progress overlay (0–1 driven by texture load).

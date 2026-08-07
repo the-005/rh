@@ -2,7 +2,14 @@ import { KeyboardControls, Stats, useKeyboardControls, useProgress } from "@reac
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as React from "react";
 import * as THREE from "three";
-import { isPlaneHidden, stageTransitionSource } from "~/src/project/transition-origin";
+import {
+  getHeroTween,
+  isCanvasFrozen,
+  isDimmedPlane,
+  isPlaneHidden,
+  isTransitionActive,
+  stageTransitionSource,
+} from "~/src/project/transition-origin";
 import { useIsTouchDevice } from "~/src/use-is-touch-device";
 import { clamp, lerp } from "~/src/utils";
 import {
@@ -24,6 +31,14 @@ import { tuning } from "./tuning";
 import { clearPlaneCache, generateChunkPlanesCached, getChunkCyclePositions, getChunkUpdateThrottleMs, shouldThrottleUpdate } from "./utils";
 
 const PLANE_GEOMETRY = new THREE.PlaneGeometry(1, 1);
+
+/** Camera distance at which the flying hero plane parks — inside the fog-free
+ *  zone and close enough that nothing meaningfully overlaps it. */
+const HERO_DEPTH = 120;
+
+/** Scene background/fog tint while the project page owns the screen. Must match
+ *  the project overlay background so the DOM handoff is invisible. */
+const PROJECT_BG_COLOR = new THREE.Color("#eae8e4");
 
 /** Live positions/depths of mounted planes, for rest-time depth de-confliction. */
 type PlaneRegistry = Map<string, { x: number; y: number; z: number; o: number }>;
@@ -167,12 +182,72 @@ function MediaPlane({
   const [texture, setTexture] = React.useState<THREE.Texture | null>(null);
   const [isReady, setIsReady] = React.useState(false);
 
+  const heroRunRef = React.useRef<{
+    start: number;
+    aspect: number;
+    from: { x: number; y: number; z: number; h: number; o: number };
+    to: { x: number; y: number; z: number; h: number };
+  } | null>(null);
+
   useFrame((_state, delta) => {
     const material = materialRef.current;
     const mesh = meshRef.current;
     const state = localState.current;
 
     if (!material || !mesh) return;
+
+    // Hero flight: this plane was clicked and the project page asked it to fly
+    // to its measured DOM slot. The plane itself carries the whole transition —
+    // same texture, same object, tweening bounds like the persistent-plane
+    // pattern — and stays pinned at the slot until the DOM takes over.
+    const heroTw = getHeroTween(regKey);
+    if (heroTw) {
+      const now = performance.now();
+      let run = heroRunRef.current;
+      if (!run) {
+        const cam = _state.camera as THREE.PerspectiveCamera;
+        const { width: vw, height: vh } = _state.size;
+        const zOff = ((state.absoluteZOffset % tuning.depthFadeEnd) + tuning.depthFadeEnd) % tuning.depthFadeEnd;
+        const worldPerPx = (2 * HERO_DEPTH * Math.tan((cam.fov * Math.PI) / 360)) / vh;
+        const r = heroTw.target;
+        run = heroRunRef.current = {
+          start: now,
+          aspect: mesh.scale.y !== 0 ? mesh.scale.x / mesh.scale.y : 1,
+          from: { x: state.cycleX, y: state.cycleY, z: INITIAL_CAMERA_Z - zOff, h: mesh.scale.y, o: material.opacity },
+          to: {
+            x: cam.position.x + (r.x + r.width / 2 - vw / 2) * worldPerPx,
+            y: cam.position.y - (r.y + r.height / 2 - vh / 2) * worldPerPx,
+            z: INITIAL_CAMERA_Z - HERO_DEPTH,
+            h: r.height * worldPerPx,
+          },
+        };
+      }
+
+      const p = Math.min(1, (now - run.start) / heroTw.durationMs);
+      const e = p === 1 ? 1 : 1 - Math.pow(2, -10 * p);
+      const group = groupRef.current;
+      if (group) {
+        group.position.set(lerp(run.from.x, run.to.x, e), lerp(run.from.y, run.to.y, e), lerp(run.from.z, run.to.z, e));
+      }
+      const h = lerp(run.from.h, run.to.h, e);
+      mesh.scale.set(h * run.aspect, h, 1);
+      mesh.renderOrder = 1000;
+
+      const hidden = isPlaneHidden(regKey);
+      state.opacity = hidden ? 0 : lerp(run.from.o, 1, Math.min(1, p * 2.5));
+      material.opacity = state.opacity;
+      mesh.visible = !hidden;
+      if (labelRef.current) labelRef.current.visible = false;
+      registryRef.current.set(regKey, { x: run.to.x, y: run.to.y, z: 0, o: 0 });
+
+      if (p >= 1 && !heroTw.done) {
+        heroTw.done = true;
+        heroTw.onArrive?.();
+      }
+      return;
+    }
+    if (heroRunRef.current) heroRunRef.current = null;
+    if (mesh.renderOrder !== 0) mesh.renderOrder = 0;
 
     // zOffset is the image's depth from the camera within [0, DEPTH_FADE_END).
     // Right images zoom in on scroll-up, left images zoom out — direction is
@@ -259,10 +334,11 @@ function MediaPlane({
 
     // While the project-page overlay owns this image, the plane vanishes instantly
     // (the overlay <img> is painted exactly over it) and fades back in on release.
+    // Non-hero planes fade out softly while a transition is in flight.
     const hidden = isPlaneHidden(regKey);
     if (hidden) state.opacity = 0;
 
-    const target = hidden ? 0 : categoryMatch ? naturalTarget : 0;
+    const target = hidden || isDimmedPlane(regKey) ? 0 : categoryMatch ? naturalTarget : 0;
 
     if (!categoryMatch) state.filterFade = true;
     if (state.filterFade && categoryMatch && state.opacity >= naturalTarget * 0.99) state.filterFade = false;
@@ -364,7 +440,7 @@ function MediaPlane({
           if (shouldDefer) return;
 
           e.stopPropagation();
-          stageTransitionSource(regKey, myOpacity);
+          stageTransitionSource(regKey);
           onMediaClick(media, getMeshScreenRect(mesh, e.camera));
         }}
       >
@@ -645,9 +721,11 @@ const createInitialState = (camZ: number): ControllerState => ({
 });
 
 function SceneController({ media, onTextureProgress, activeCategory = "all", onMediaClick, debugElRef, tuningGenVersion, showGuides, splashSrc, splashAspect, onSplashReady }: { media: MediaItem[]; onTextureProgress?: (progress: number) => void; activeCategory?: string; onMediaClick?: (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => void; debugElRef?: React.RefObject<HTMLDivElement | null>; tuningGenVersion?: number; showGuides?: boolean; splashSrc?: string; splashAspect?: number; onSplashReady?: () => void }) {
-  const { camera, gl } = useThree();
+  const { camera, gl, scene } = useThree();
   const isTouchDevice = useIsTouchDevice();
   const [, getKeys] = useKeyboardControls<keyof KeyboardKeys>();
+  /** Resting background/fog colors, captured once so the transition tint can lerp back. */
+  const homeColorsRef = React.useRef<{ bg: THREE.Color; fog: THREE.Color } | null>(null);
 
   const state = React.useRef<ControllerState>(createInitialState(INITIAL_CAMERA_Z));
   const cameraGridRef = React.useRef<CameraGridState>({
@@ -776,24 +854,49 @@ function SceneController({ media, onTextureProgress, activeCategory = "all", onM
   useFrame(() => {
     const s = state.current;
     const now = performance.now();
+    const frozen = isCanvasFrozen();
 
-    const { left, right, up, down } = getKeys();
-    if (left) s.targetVel.x -= KEYBOARD_SPEED;
-    if (right) s.targetVel.x += KEYBOARD_SPEED;
-    if (down) s.targetVel.y -= KEYBOARD_SPEED;
-    if (up) s.targetVel.y += KEYBOARD_SPEED;
+    // Scene tint: while the project page owns the screen, ease the background
+    // and fog toward the page color so the WebGL→DOM handoff has no color seam.
+    if (!homeColorsRef.current && scene.background instanceof THREE.Color && scene.fog) {
+      homeColorsRef.current = { bg: scene.background.clone(), fog: scene.fog.color.clone() };
+    }
+    const home = homeColorsRef.current;
+    if (home && scene.background instanceof THREE.Color) {
+      const tinted = isTransitionActive();
+      scene.background.lerp(tinted ? PROJECT_BG_COLOR : home.bg, 0.08);
+      scene.fog?.color.lerp(tinted ? PROJECT_BG_COLOR : home.fog, 0.08);
+    }
 
-    // Z velocity driven by scroll — applied to image depth offsets, NOT camera Z
-    s.targetVel.z += s.scrollAccum;
-    s.scrollAccum *= 0.8;
+    if (frozen) {
+      // Kill all motion the moment a transition starts — the hero plane's
+      // start rect must stay valid, and a static scene reads calmer under it.
+      s.targetVel.x = 0;
+      s.targetVel.y = 0;
+      s.targetVel.z = 0;
+      s.velocity.x = 0;
+      s.velocity.y = 0;
+      s.velocity.z = 0;
+      s.scrollAccum = 0;
+    } else {
+      const { left, right, up, down } = getKeys();
+      if (left) s.targetVel.x -= KEYBOARD_SPEED;
+      if (right) s.targetVel.x += KEYBOARD_SPEED;
+      if (down) s.targetVel.y -= KEYBOARD_SPEED;
+      if (up) s.targetVel.y += KEYBOARD_SPEED;
+
+      // Z velocity driven by scroll — applied to image depth offsets, NOT camera Z
+      s.targetVel.z += s.scrollAccum;
+      s.scrollAccum *= 0.8;
+    }
 
     const isZooming = Math.abs(s.velocity.z) > 0.05;
     const zoomFactor = clamp(s.basePos.z / 50, 0.3, 2.0);
     const driftAmount = 8.0 * zoomFactor;
     const driftLerp = isZooming ? 0.2 : 0.12;
 
-    if (s.isDragging) {
-      // Freeze drift during drag
+    if (s.isDragging || frozen) {
+      // Freeze drift during drag and while a transition holds the canvas
     } else if (isTouchDevice) {
       s.drift.x = lerp(s.drift.x, 0, driftLerp);
       s.drift.y = lerp(s.drift.y, 0, driftLerp);
