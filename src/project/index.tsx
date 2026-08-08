@@ -17,6 +17,10 @@ const GAP = 4;
 /** Row height never exceeds this fraction of the viewport (small projects). */
 const MAX_ROW_HEIGHT_FRAC = 0.5;
 const FLIGHT_MS = 1000;
+const ENTRY_EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
+/** Supporting images rise this far into their slots after the hero lands. */
+const RISE_PX = 32;
+const SAT_STAGGER_S = 0.07;
 
 export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }) {
   // Capture once on mount — clears the module-level store
@@ -55,6 +59,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
 
     if (t?.sourceKey && hero) {
       const sourceKey = t.sourceKey;
+      let canceled = false;
       // StrictMode runs this effect twice with a releaseTransition in between —
       // re-assert the hold, and only ever restore styles to "" (the class value)
       // so the second run can't capture the first run's frozen "0".
@@ -62,34 +67,45 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       overlay.style.background = "transparent";
       hero.style.opacity = "0";
 
-      const others = Array.from(
-        overlay.querySelectorAll<HTMLElement>(`.${styles.image}, .${styles.close}`),
+      const satellites = Array.from(
+        overlay.querySelectorAll<HTMLElement>(`.${styles.image}`),
       ).filter((el) => el !== hero);
-      for (const el of others) {
+      const closeBtn = overlay.querySelector<HTMLElement>(`.${styles.close}`);
+      for (const el of satellites) {
         el.style.transition = "none";
         el.style.opacity = "0";
+        el.style.transform = `translateY(${RISE_PX}px)`;
+      }
+      if (closeBtn) {
+        closeBtn.style.transition = "none";
+        closeBtn.style.opacity = "0";
       }
 
       // Warm every row image's decoder now, so the bitmaps are ready on
-      // background threads before the staggered fades (and the hero handoff)
-      // need them — mid-flight decode spikes read as stutter.
+      // background threads long before anything needs to paint them —
+      // decode spikes during the flight read as stutter.
       for (const el of overlay.querySelectorAll("img")) {
         (el as HTMLImageElement).decode().catch(() => {});
       }
 
-      // Supporting images fade in while the hero is still in flight (out and in
-      // overlap), staggered left to right: 0.25s + j * 0.08s.
-      let raf = requestAnimationFrame(() => {
-        raf = requestAnimationFrame(() => {
-          others.forEach((el, j) => {
-            el.style.transition = `opacity 0.5s ease ${(0.25 + j * 0.08).toFixed(2)}s`;
-            el.style.opacity = "";
-          });
+      // Only after the hero has landed do the supporting images enter: each
+      // rises from below into its slot, staggered left to right.
+      const enterSatellites = () => {
+        satellites.forEach((el, j) => {
+          const delay = (j * SAT_STAGGER_S).toFixed(2);
+          el.style.transition = `opacity 0.45s ease ${delay}s, transform 0.7s ${ENTRY_EASE} ${delay}s`;
+          el.style.opacity = "";
+          el.style.transform = "";
         });
-      });
+        if (closeBtn) {
+          closeBtn.style.transition = "opacity 0.4s ease 0.3s";
+          closeBtn.style.opacity = "";
+        }
+      };
 
       const reveal = () => {
         requestAnimationFrame(() => {
+          if (canceled) return;
           hero.style.transition = "none";
           hero.style.opacity = "";
           // Two frames of overlap before dropping the plane: the DOM image must
@@ -97,9 +113,11 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
           // perfectly in phase), or the handoff flashes white.
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
+              if (canceled) return;
               hideTransitionSource(sourceKey);
               overlay.style.background = "";
               hero.style.transition = "";
+              enterSatellites();
             });
           });
         });
@@ -124,23 +142,33 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
         hero.style.opacity = "";
         hideTransitionSource(sourceKey);
         overlay.style.background = "";
+        enterSatellites();
       }, FLIGHT_MS + 800);
 
-      const cleanup = setTimeout(() => {
-        for (const el of others) el.style.transition = "";
-      }, 2500);
+      const cleanup = setTimeout(
+        () => {
+          for (const el of satellites) el.style.transition = "";
+          if (closeBtn) closeBtn.style.transition = "";
+        },
+        FLIGHT_MS + 1000 * (satellites.length * SAT_STAGGER_S + 0.7) + 500,
+      );
 
       return () => {
-        cancelAnimationFrame(raf);
+        canceled = true;
         clearTimeout(failSafe);
         clearTimeout(cleanup);
         // Undo every inline style this run set, so a re-run starts clean
         overlay.style.background = "";
         hero.style.transition = "";
         hero.style.opacity = "";
-        for (const el of others) {
+        for (const el of satellites) {
           el.style.transition = "";
           el.style.opacity = "";
+          el.style.transform = "";
+        }
+        if (closeBtn) {
+          closeBtn.style.transition = "";
+          closeBtn.style.opacity = "";
         }
       };
     }
