@@ -70,6 +70,13 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
         el.style.opacity = "0";
       }
 
+      // Warm every row image's decoder now, so the bitmaps are ready on
+      // background threads before the staggered fades (and the hero handoff)
+      // need them — mid-flight decode spikes read as stutter.
+      for (const el of overlay.querySelectorAll("img")) {
+        (el as HTMLImageElement).decode().catch(() => {});
+      }
+
       // Supporting images fade in while the hero is still in flight (out and in
       // overlap), staggered left to right: 0.25s + j * 0.08s.
       let raf = requestAnimationFrame(() => {
@@ -85,10 +92,15 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
         requestAnimationFrame(() => {
           hero.style.transition = "none";
           hero.style.opacity = "";
+          // Two frames of overlap before dropping the plane: the DOM image must
+          // have actually painted (DOM compositing and the WebGL loop aren't
+          // perfectly in phase), or the handoff flashes white.
           requestAnimationFrame(() => {
-            hideTransitionSource(sourceKey);
-            overlay.style.background = "";
-            hero.style.transition = "";
+            requestAnimationFrame(() => {
+              hideTransitionSource(sourceKey);
+              overlay.style.background = "";
+              hero.style.transition = "";
+            });
           });
         });
       };
@@ -99,8 +111,10 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
         { x: heroRect.x, y: heroRect.y, width: heroRect.width, height: heroRect.height },
         FLIGHT_MS,
         () => {
-          if (hero.complete && hero.naturalWidth > 0) reveal();
-          else hero.decode().then(reveal, reveal);
+          // Always decode() — `complete` means the bytes arrived, not that the
+          // bitmap is rasterizable; revealing an undecoded image paints nothing
+          // for a few frames (the white flicker). Resolves instantly if warm.
+          hero.decode().then(reveal, reveal);
         },
       );
 

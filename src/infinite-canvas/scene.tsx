@@ -7,6 +7,7 @@ import {
   isCanvasFrozen,
   isDimmedPlane,
   isPlaneHidden,
+  isTransitionActive,
   stageTransitionSource,
 } from "~/src/project/transition-origin";
 import { useIsTouchDevice } from "~/src/use-is-touch-device";
@@ -526,7 +527,9 @@ function SplashPlane({
           ? 1
           : Math.max(0, 1 - (zOffset - depthFadeStart) / Math.max(depthFadeEnd - depthFadeStart, 0.0001));
 
-    const target = depthFade * depthFade;
+    // The splash frame dims with everything else during a project transition —
+    // it isn't a MediaPlane, so it doesn't go through the dim system.
+    const target = isTransitionActive() ? 0 : depthFade * depthFade;
     state.opacity =
       target < INVIS_THRESHOLD && state.opacity < INVIS_THRESHOLD
         ? 0

@@ -80,6 +80,10 @@ export function isCanvasFrozen(): boolean {
   return active;
 }
 
+export function isTransitionActive(): boolean {
+  return active;
+}
+
 /** Re-assert an in-flight transition on mount. StrictMode double-invokes effects,
  *  and the intervening cleanup runs releaseTransition — this undoes that. */
 export function holdTransition(): void {
