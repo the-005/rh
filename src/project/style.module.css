@@ -1,7 +1,7 @@
 .overlay {
   position: fixed;
   inset: 0;
-  background: #eae8e4;
+  background: #ffffff;
   z-index: 100;
   cursor: pointer;
   overflow: hidden;
@@ -30,14 +30,14 @@
 
 .row {
   position: absolute;
-  left: 40px;
-  right: 40px;
-  top: 36%;
+  left: 32px;
+  right: 32px;
+  top: 50%;
   transform: translateY(-50%);
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
 }
 
 .image {

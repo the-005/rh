@@ -7,7 +7,6 @@ import {
   isCanvasFrozen,
   isDimmedPlane,
   isPlaneHidden,
-  isTransitionActive,
   stageTransitionSource,
 } from "~/src/project/transition-origin";
 import { useIsTouchDevice } from "~/src/use-is-touch-device";
@@ -35,10 +34,6 @@ const PLANE_GEOMETRY = new THREE.PlaneGeometry(1, 1);
 /** Camera distance at which the flying hero plane parks — inside the fog-free
  *  zone and close enough that nothing meaningfully overlaps it. */
 const HERO_DEPTH = 120;
-
-/** Scene background/fog tint while the project page owns the screen. Must match
- *  the project overlay background so the DOM handoff is invisible. */
-const PROJECT_BG_COLOR = new THREE.Color("#eae8e4");
 
 /** Live positions/depths of mounted planes, for rest-time depth de-confliction. */
 type PlaneRegistry = Map<string, { x: number; y: number; z: number; o: number }>;
@@ -721,11 +716,9 @@ const createInitialState = (camZ: number): ControllerState => ({
 });
 
 function SceneController({ media, onTextureProgress, activeCategory = "all", onMediaClick, debugElRef, tuningGenVersion, showGuides, splashSrc, splashAspect, onSplashReady }: { media: MediaItem[]; onTextureProgress?: (progress: number) => void; activeCategory?: string; onMediaClick?: (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => void; debugElRef?: React.RefObject<HTMLDivElement | null>; tuningGenVersion?: number; showGuides?: boolean; splashSrc?: string; splashAspect?: number; onSplashReady?: () => void }) {
-  const { camera, gl, scene } = useThree();
+  const { camera, gl } = useThree();
   const isTouchDevice = useIsTouchDevice();
   const [, getKeys] = useKeyboardControls<keyof KeyboardKeys>();
-  /** Resting background/fog colors, captured once so the transition tint can lerp back. */
-  const homeColorsRef = React.useRef<{ bg: THREE.Color; fog: THREE.Color } | null>(null);
 
   const state = React.useRef<ControllerState>(createInitialState(INITIAL_CAMERA_Z));
   const cameraGridRef = React.useRef<CameraGridState>({
@@ -855,18 +848,6 @@ function SceneController({ media, onTextureProgress, activeCategory = "all", onM
     const s = state.current;
     const now = performance.now();
     const frozen = isCanvasFrozen();
-
-    // Scene tint: while the project page owns the screen, ease the background
-    // and fog toward the page color so the WebGL→DOM handoff has no color seam.
-    if (!homeColorsRef.current && scene.background instanceof THREE.Color && scene.fog) {
-      homeColorsRef.current = { bg: scene.background.clone(), fog: scene.fog.color.clone() };
-    }
-    const home = homeColorsRef.current;
-    if (home && scene.background instanceof THREE.Color) {
-      const tinted = isTransitionActive();
-      scene.background.lerp(tinted ? PROJECT_BG_COLOR : home.bg, 0.08);
-      scene.fog?.color.lerp(tinted ? PROJECT_BG_COLOR : home.fog, 0.08);
-    }
 
     if (frozen) {
       // Kill all motion the moment a transition starts — the hero plane's

@@ -5,14 +5,15 @@ import {
   beginHeroTween,
   consumePendingTransition,
   hideTransitionSource,
+  holdTransition,
   releaseTransition,
 } from "./transition-origin";
 import styles from "./style.module.css";
 
 const ALL_MEDIA = allManifest as MediaItem[];
 
-const MARGIN = 40;
-const GAP = 8;
+const MARGIN = 32;
+const GAP = 4;
 /** Row height never exceeds this fraction of the viewport (small projects). */
 const MAX_ROW_HEIGHT_FRAC = 0.5;
 const FLIGHT_MS = 1000;
@@ -54,26 +55,28 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
 
     if (t?.sourceKey && hero) {
       const sourceKey = t.sourceKey;
+      // StrictMode runs this effect twice with a releaseTransition in between —
+      // re-assert the hold, and only ever restore styles to "" (the class value)
+      // so the second run can't capture the first run's frozen "0".
+      holdTransition();
       overlay.style.background = "transparent";
       hero.style.opacity = "0";
 
       const others = Array.from(
         overlay.querySelectorAll<HTMLElement>(`.${styles.image}, .${styles.close}`),
       ).filter((el) => el !== hero);
-      const restore = others.map((el) => {
-        const orig = el.style.opacity;
+      for (const el of others) {
         el.style.transition = "none";
         el.style.opacity = "0";
-        return { el, orig };
-      });
+      }
 
       // Supporting images fade in while the hero is still in flight (out and in
       // overlap), staggered left to right: 0.25s + j * 0.08s.
       let raf = requestAnimationFrame(() => {
         raf = requestAnimationFrame(() => {
-          restore.forEach(({ el, orig }, j) => {
+          others.forEach((el, j) => {
             el.style.transition = `opacity 0.5s ease ${(0.25 + j * 0.08).toFixed(2)}s`;
-            el.style.opacity = orig;
+            el.style.opacity = "";
           });
         });
       });
@@ -110,13 +113,21 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       }, FLIGHT_MS + 800);
 
       const cleanup = setTimeout(() => {
-        for (const { el } of restore) el.style.transition = "";
+        for (const el of others) el.style.transition = "";
       }, 2500);
 
       return () => {
         cancelAnimationFrame(raf);
         clearTimeout(failSafe);
         clearTimeout(cleanup);
+        // Undo every inline style this run set, so a re-run starts clean
+        overlay.style.background = "";
+        hero.style.transition = "";
+        hero.style.opacity = "";
+        for (const el of others) {
+          el.style.transition = "";
+          el.style.opacity = "";
+        }
       };
     }
 
