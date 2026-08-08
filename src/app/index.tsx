@@ -19,7 +19,9 @@ export function App() {
   const [textureProgress, setTextureProgress] = React.useState(0);
   const [splashFrame, setSplashFrame] = React.useState<string | null>(null);
   const [splashAspect, setSplashAspect] = React.useState(16 / 9);
-  const [splashDismissed, setSplashDismissed] = React.useState(false);
+  // Deep links (e.g. /project/x) skip the splash entirely — the intro video is
+  // reserved for visits that actually start at the homepage.
+  const [splashDismissed, setSplashDismissed] = React.useState(() => window.location.pathname !== "/");
 
   const projectId = React.useMemo(() => {
     const m = location.match(/^\/project\/([^/]+)$/);
