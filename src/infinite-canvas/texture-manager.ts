@@ -29,8 +29,12 @@ export const getTexture = (item: MediaItem, onLoad?: (texture: THREE.Texture) =>
   if (onLoad) callbacks.add(onLoad);
   loadCallbacks.set(key, callbacks);
 
+  // Manifest URLs are relative — resolve from the site root, not the current
+  // route, or every texture 404s when the app is entered via /project/x.
+  const src = key.startsWith("/") || key.includes("://") ? key : `/${key}`;
+
   const texture = loader.load(
-    key,
+    src,
     (tex) => {
       tex.minFilter = THREE.LinearMipmapLinearFilter;
       tex.magFilter = THREE.LinearFilter;

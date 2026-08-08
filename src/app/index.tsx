@@ -13,15 +13,18 @@ type Category = "all" | "art" | "commerce";
 
 const ALL_MEDIA = allManifest as MediaItem[];
 
+// Whether this visit started somewhere other than the homepage (e.g. /project/x).
+// Deep links skip the intro splash and the texture progress overlay — the project
+// page is already covering the canvas while it loads.
+const DEEP_LINKED = window.location.pathname !== "/";
+
 export function App() {
   const [location, navigate] = useLocation();
   const [category, setCategory] = React.useState<Category>("all");
   const [textureProgress, setTextureProgress] = React.useState(0);
   const [splashFrame, setSplashFrame] = React.useState<string | null>(null);
   const [splashAspect, setSplashAspect] = React.useState(16 / 9);
-  // Deep links (e.g. /project/x) skip the splash entirely — the intro video is
-  // reserved for visits that actually start at the homepage.
-  const [splashDismissed, setSplashDismissed] = React.useState(() => window.location.pathname !== "/");
+  const [splashDismissed, setSplashDismissed] = React.useState(DEEP_LINKED);
 
   const projectId = React.useMemo(() => {
     const m = location.match(/^\/project\/([^/]+)$/);
@@ -45,7 +48,7 @@ export function App() {
         onDismiss={(frame, aspect) => { setSplashFrame(frame); setSplashAspect(aspect); }}
       />
       <Frame category={category} onCategoryChange={setCategory} />
-      <PageLoader progress={textureProgress} />
+      {!DEEP_LINKED && <PageLoader progress={textureProgress} />}
       <InfiniteCanvas
         media={ALL_MEDIA}
         activeCategory={category}
