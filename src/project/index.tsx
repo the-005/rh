@@ -29,6 +29,8 @@ const TURN_EASE = "cubic-bezier(0.42, 0, 0.58, 1)";
 const TURN_MS = 600;
 const ADV_MS = 500;
 const SETTLE_MS = 600;
+/** Exit beat 2: the settled row travels left to centre the image you came from. */
+const SHIFT_MS = 500;
 /** Beat between the arrival settling and the strip turning over. */
 const FUSE_PAUSE_MS = 260;
 
@@ -36,9 +38,10 @@ const FUSE_PAUSE_MS = 260;
  * arrive — flat row, manifest rotated so the clicked image leads (part 1).
  * hero   — reversed order, one image at HERO_HEIGHT_FRAC, centred (parts 2+3).
  * settle — reversed order, everything back to row height (exit beat 1).
- * out    — same positions, supporting images dropping away (exit beat 2).
+ * centre — settled row slid left so the arrival image is centred (exit beat 2).
+ * out    — same positions, supporting images dropping away (exit beat 3).
  */
-type Phase = "arrive" | "hero" | "settle" | "out";
+type Phase = "arrive" | "hero" | "settle" | "centre" | "out";
 
 interface Slot {
   x: number;
@@ -111,9 +114,13 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       xs.push(cursor);
       cursor += widths[k] + GAP;
     }
-    // Centre the enlarged image; otherwise the row sits on the left margin.
+    // Centre whichever image the moment is about — the enlarged one while
+    // browsing, the one you arrived on once you are leaving. Otherwise the row
+    // sits on the left margin, exactly as it arrived.
+    const centred =
+      phase === "hero" ? heroIdx : phase === "centre" || phase === "out" ? arrivalSlotIdx : -1;
     const shift =
-      phase === "hero" ? viewport.w / 2 - (xs[heroIdx] + widths[heroIdx] / 2) : MARGIN;
+      centred >= 0 ? viewport.w / 2 - (xs[centred] + widths[centred] / 2) : MARGIN;
     seq.forEach((imgI, k) => {
       const dropping = phase === "out" && k !== arrivalSlotIdx;
       slots[imgI] = {
@@ -315,10 +322,12 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   };
 
   /**
-   * Exit. No second reversal: settling to row height is enough, because the row
-   * is fit-to-width and refills the viewport, putting the image you arrived on
-   * back at the right margin. It then flies to its own plane while the rest
-   * drop 32px away — the exact reverse of how they rose.
+   * Exit, in three beats. No second reversal: settling to row height is enough,
+   * because the row is fit-to-width and refills the viewport, putting the image
+   * you arrived on back at the right margin. The row then travels left to bring
+   * it to centre — a pure translation, nothing scaling — and only then does it
+   * fly to its own plane while the rest drop 32px away, the exact reverse of
+   * how they rose.
    */
   const runExit = () => {
     if (busy) return;
@@ -327,6 +336,11 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     setPhase("settle");
 
     after(SETTLE_MS, () => {
+      setMotion({ ms: SHIFT_MS, ease: TURN_EASE });
+      setPhase("centre");
+    });
+
+    after(SETTLE_MS + SHIFT_MS, () => {
       const t = transitionRef.current;
       const overlay = overlayRef.current;
       const hero = heroImgRef.current;
