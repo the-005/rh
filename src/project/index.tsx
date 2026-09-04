@@ -29,8 +29,10 @@ const TURN_EASE = "cubic-bezier(0.42, 0, 0.58, 1)";
 const TURN_MS = 600;
 const ADV_MS = 500;
 const SETTLE_MS = 600;
-/** Exit beat 2: the settled row travels left to centre the image you came from. */
-const SHIFT_MS = 500;
+/** Exit beat 2: the settled row travels left to centre the image you came from,
+ *  while the images it passes drop away one by one. */
+const SHIFT_MS = 600;
+const EXIT_FADE_MS = 350;
 /** Beat between the arrival settling and the strip turning over. */
 const FUSE_PAUSE_MS = 260;
 
@@ -45,9 +47,7 @@ type Phase = "arrive" | "hero" | "settle" | "centre" | "out";
 
 interface Slot {
   x: number;
-  y: number;
   scale: number;
-  faded: boolean;
 }
 
 export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }) {
@@ -114,21 +114,20 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       xs.push(cursor);
       cursor += widths[k] + GAP;
     }
-    // Centre whichever image the moment is about — the enlarged one while
-    // browsing, the one you arrived on once you are leaving. Otherwise the row
-    // sits on the left margin, exactly as it arrived.
+    // Centre whichever image the moment is about. Settling keeps the image you
+    // were looking at where it is, so it shrinks in place — anchoring the row to
+    // the margin instead would throw it out to the right only to walk it back,
+    // and would do nothing at all when you were already on the last one.
     const centred =
-      phase === "hero" ? heroIdx : phase === "centre" || phase === "out" ? arrivalSlotIdx : -1;
+      phase === "hero" || phase === "settle"
+        ? heroIdx
+        : phase === "centre" || phase === "out"
+          ? arrivalSlotIdx
+          : -1;
     const shift =
       centred >= 0 ? viewport.w / 2 - (xs[centred] + widths[centred] / 2) : MARGIN;
     seq.forEach((imgI, k) => {
-      const dropping = phase === "out" && k !== arrivalSlotIdx;
-      slots[imgI] = {
-        x: xs[k] + shift,
-        y: dropping ? RISE_PX : 0,
-        scale: scales[k],
-        faded: dropping,
-      };
+      slots[imgI] = { x: xs[k] + shift, scale: scales[k] };
     });
   }
 
@@ -338,6 +337,25 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     after(SETTLE_MS, () => {
       setMotion({ ms: SHIFT_MS, ease: TURN_EASE });
       setPhase("centre");
+
+      // The row travels as one object, but the images leave one at a time —
+      // furthest from the departing image first, so by the time it flies most
+      // of what was beside it has gone. Mirrors the entry stagger.
+      const overlay = overlayRef.current;
+      const hero = heroImgRef.current;
+      if (!overlay) return;
+      const imgs = Array.from(overlay.querySelectorAll<HTMLElement>(`.${styles.image}`));
+      for (const el of imgs) {
+        if (el === hero) continue;
+        // DOM order is the arrival order; the row reads it backwards, so the
+        // leftmost on screen is the last in the DOM.
+        const domIdx = imgs.indexOf(el);
+        const visualIdx = count - 1 - domIdx;
+        const delay = (visualIdx * SAT_STAGGER_S).toFixed(2);
+        el.style.transition = `opacity ${EXIT_FADE_MS}ms ease ${delay}s, transform 0.5s ${TURN_EASE} ${delay}s`;
+        el.style.opacity = "0";
+        el.style.transform = `translateY(${RISE_PX}px)`;
+      }
     });
 
     after(SETTLE_MS + SHIFT_MS, () => {
@@ -425,11 +443,8 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
               width: aspects[i] * rowH,
               height: rowH,
               marginTop: -rowH / 2,
-              opacity: slots[i].faded ? 0 : 1,
-              transform: `translate(${slots[i].x}px, ${slots[i].y}px) scale(${slots[i].scale})`,
-              transition: motion.ms
-                ? `transform ${motion.ms}ms ${motion.ease}, opacity ${motion.ms}ms ${motion.ease}`
-                : "none",
+              transform: `translate(${slots[i].x}px, 0) scale(${slots[i].scale})`,
+              transition: motion.ms ? `transform ${motion.ms}ms ${motion.ease}` : "none",
               zIndex: phase === "hero" && seq[heroIdx] === i ? 2 : 1,
             }}
           >

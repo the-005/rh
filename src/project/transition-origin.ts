@@ -25,6 +25,17 @@ interface HeroTween {
   onArrive: (() => void) | null;
 }
 
+/** Where the camera should ease to while the hero flies home, so the image it
+ *  is returning to ends up centred rather than wherever you left it. */
+interface CameraGoal {
+  x: number;
+  y: number;
+  start: number;
+  durationMs: number;
+  /** Captured on the first frame that reads it, not at creation. */
+  from: { x: number; y: number; driftX: number; driftY: number } | null;
+}
+
 let staged: string | null = null;
 let pending: PendingTransition | null = null;
 let heroTween: HeroTween | null = null;
@@ -32,6 +43,7 @@ let hiddenKey: string | null = null;
 /** True from click until the project page fully releases the canvas: freezes
  *  input, dims non-hero planes, and tints the scene background. */
 let active = false;
+let cameraGoal: CameraGoal | null = null;
 
 /** Called by the clicked MediaPlane, synchronously before onMediaClick fires. */
 export function stageTransitionSource(key: string): void {
@@ -82,6 +94,15 @@ export function isDimmedPlane(key: string): boolean {
   return active && heroTween !== null && heroTween.key !== key;
 }
 
+/** Nudge the canvas so the returning plane lands in the middle of the screen. */
+export function setCameraGoal(x: number, y: number, durationMs: number): void {
+  cameraGoal = { x, y, start: performance.now(), durationMs, from: null };
+}
+
+export function getCameraGoal(): CameraGoal | null {
+  return cameraGoal;
+}
+
 export function isCanvasFrozen(): boolean {
   return active;
 }
@@ -102,5 +123,6 @@ export function releaseTransition(): void {
   pending = null;
   heroTween = null;
   hiddenKey = null;
+  cameraGoal = null;
   active = false;
 }

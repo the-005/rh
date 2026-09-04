@@ -3,8 +3,10 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as React from "react";
 import * as THREE from "three";
 import {
+  getCameraGoal,
   getHeroTween,
   isCanvasFrozen,
+  setCameraGoal,
   isDimmedPlane,
   isPlaneHidden,
   isTransitionActive,
@@ -225,6 +227,9 @@ function MediaPlane({
           h: run?.from.h ?? mesh.scale.y,
           o: run?.from.o ?? material.opacity,
         };
+        // Flying home: bring the canvas with it, so the plane lands centred
+        // rather than back at whatever corner you happened to leave it in.
+        if (heroTw.mode === "out") setCameraGoal(home.x, home.y, heroTw.durationMs);
         run = heroRunRef.current = {
           start: now,
           mode: heroTw.mode,
@@ -883,6 +888,22 @@ function SceneController({ media, onTextureProgress, activeCategory = "all", onM
       s.velocity.y = 0;
       s.velocity.z = 0;
       s.scrollAccum = 0;
+
+      const goal = getCameraGoal();
+      if (goal) {
+        // Captured lazily: the goal is set from a plane's frame callback, which
+        // may land mid-frame relative to this one.
+        if (!goal.from) {
+          goal.from = { x: s.basePos.x, y: s.basePos.y, driftX: s.drift.x, driftY: s.drift.y };
+        }
+        const gp = Math.min(1, (now - goal.start) / goal.durationMs);
+        const ge = gp === 1 ? 1 : 1 - 2 ** (-10 * gp);
+        s.basePos.x = lerp(goal.from.x, goal.x, ge);
+        s.basePos.y = lerp(goal.from.y, goal.y, ge);
+        // Unwind the parallax too, or the landing sits off-centre by its offset.
+        s.drift.x = lerp(goal.from.driftX, 0, ge);
+        s.drift.y = lerp(goal.from.driftY, 0, ge);
+      }
     } else {
       const { left, right, up, down } = getKeys();
       if (left) s.targetVel.x -= KEYBOARD_SPEED;
