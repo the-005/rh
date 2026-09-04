@@ -3,7 +3,6 @@
   inset: 0;
   background: #ffffff;
   z-index: 100;
-  cursor: pointer;
   overflow: hidden;
   user-select: none;
 }
@@ -20,7 +19,7 @@
   cursor: pointer;
   padding: 0.25rem 0.5rem;
   opacity: 0.45;
-  z-index: 10;
+  z-index: 20;
   transition: opacity 0.15s;
 }
 
@@ -28,20 +27,46 @@
   opacity: 1;
 }
 
+/* Left half is previous, right half is next. The split sits on the viewport
+   centre, which is also the enlarged image's centre — so the image obeys the
+   same rule as the space around it, with no special case. */
+.zones {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+}
+
+.zone {
+  flex: 1;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.zone:disabled {
+  cursor: default;
+}
+
 .row {
   position: absolute;
-  left: 32px;
-  right: 32px;
+  inset: 0;
+}
+
+/* Positioned by transform so every state — the turn, the blow-up, an advance —
+   is one interpolation over the same fit-to-width row, never a relayout. */
+.slot {
+  position: absolute;
+  left: 0;
   top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 4px;
+  transform-origin: 0 50%;
+  will-change: transform, opacity;
 }
 
 .image {
   display: block;
-  flex: none;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
 }

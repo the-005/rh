@@ -180,9 +180,10 @@ function MediaPlane({
 
   const heroRunRef = React.useRef<{
     start: number;
+    mode: "in" | "out";
     aspect: number;
     from: { x: number; y: number; z: number; h: number; o: number };
-    to: { x: number; y: number; z: number; h: number };
+    to: { x: number; y: number; z: number; h: number; o: number };
   } | null>(null);
 
   useFrame((_state, delta) => {
@@ -200,22 +201,38 @@ function MediaPlane({
     if (heroTw) {
       const now = performance.now();
       let run = heroRunRef.current;
-      if (!run) {
+      if (!run || run.mode !== heroTw.mode) {
         const cam = _state.camera as THREE.PerspectiveCamera;
         const { width: vw, height: vh } = _state.size;
         const zOff = ((state.absoluteZOffset % tuning.depthFadeEnd) + tuning.depthFadeEnd) % tuning.depthFadeEnd;
         const worldPerPx = (2 * HERO_DEPTH * Math.tan((cam.fov * Math.PI) / 360)) / vh;
         const r = heroTw.target;
+        // The page's rect for this image, in world units at the parked depth.
+        const slot = {
+          x: cam.position.x + (r.x + r.width / 2 - vw / 2) * worldPerPx,
+          y: cam.position.y - (r.y + r.height / 2 - vh / 2) * worldPerPx,
+          z: INITIAL_CAMERA_Z - HERO_DEPTH,
+          h: r.height * worldPerPx,
+          o: 1,
+        };
+        // The canvas slot this plane belongs to. cycleX/cycleY and the depth
+        // offset stop updating the moment this branch takes over, so they still
+        // hold the position the plane had when it was clicked — that is home.
+        const home = {
+          x: state.cycleX,
+          y: state.cycleY,
+          z: INITIAL_CAMERA_Z - zOff,
+          h: run?.from.h ?? mesh.scale.y,
+          o: run?.from.o ?? material.opacity,
+        };
         run = heroRunRef.current = {
           start: now,
-          aspect: mesh.scale.y !== 0 ? mesh.scale.x / mesh.scale.y : 1,
-          from: { x: state.cycleX, y: state.cycleY, z: INITIAL_CAMERA_Z - zOff, h: mesh.scale.y, o: material.opacity },
-          to: {
-            x: cam.position.x + (r.x + r.width / 2 - vw / 2) * worldPerPx,
-            y: cam.position.y - (r.y + r.height / 2 - vh / 2) * worldPerPx,
-            z: INITIAL_CAMERA_Z - HERO_DEPTH,
-            h: r.height * worldPerPx,
-          },
+          mode: heroTw.mode,
+          // Keep the aspect from the inbound run: on the way out the mesh has
+          // already been rescaled, so reading it back would compound.
+          aspect: run?.aspect ?? (mesh.scale.y !== 0 ? mesh.scale.x / mesh.scale.y : 1),
+          from: heroTw.mode === "out" ? slot : home,
+          to: heroTw.mode === "out" ? home : slot,
         };
       }
 
@@ -230,7 +247,11 @@ function MediaPlane({
       mesh.renderOrder = 1000;
 
       const hidden = isPlaneHidden(regKey);
-      state.opacity = hidden ? 0 : lerp(run.from.o, 1, Math.min(1, p * 2.5));
+      state.opacity = hidden
+        ? 0
+        : run.mode === "out"
+          ? lerp(1, run.to.o, e)
+          : lerp(run.from.o, 1, Math.min(1, p * 2.5));
       material.opacity = state.opacity;
       mesh.visible = !hidden;
       if (labelRef.current) labelRef.current.visible = false;

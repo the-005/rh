@@ -16,17 +16,43 @@ const MARGIN = 32;
 const GAP = 4;
 /** Row height never exceeds this fraction of the viewport (small projects). */
 const MAX_ROW_HEIGHT_FRAC = 0.5;
+/** Part 3's enlarged image, as a fraction of viewport height. */
+const HERO_HEIGHT_FRAC = 0.5;
 const FLIGHT_MS = 1000;
 const ENTRY_EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
 /** Supporting images rise this far into their slots after the hero lands. */
 const RISE_PX = 32;
 const SAT_STAGGER_S = 0.07;
 
+/** The turn and every part-3 advance share one curve — measured, not chosen. */
+const TURN_EASE = "cubic-bezier(0.42, 0, 0.58, 1)";
+const TURN_MS = 600;
+const ADV_MS = 500;
+const SETTLE_MS = 600;
+/** Beat between the arrival settling and the strip turning over. */
+const FUSE_PAUSE_MS = 260;
+
+/**
+ * arrive — flat row, manifest rotated so the clicked image leads (part 1).
+ * hero   — reversed order, one image at HERO_HEIGHT_FRAC, centred (parts 2+3).
+ * settle — reversed order, everything back to row height (exit beat 1).
+ * out    — same positions, supporting images dropping away (exit beat 2).
+ */
+type Phase = "arrive" | "hero" | "settle" | "out";
+
+interface Slot {
+  x: number;
+  y: number;
+  scale: number;
+  faded: boolean;
+}
+
 export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }) {
   // Capture once on mount — clears the module-level store
   const transitionRef = React.useRef(consumePendingTransition());
 
-  // Rotate the project's images so the clicked one is always first (leftmost)
+  // Rotate the project's images so the clicked one is always first (leftmost).
+  // Part 2 then reverses this, which is why the clicked image ends up last.
   const filtered = ALL_MEDIA.filter((item) => item.project === id);
   const start = transitionRef.current?.startIndex ?? 0;
   const images = start > 0 ? [...filtered.slice(start), ...filtered.slice(0, start)] : filtered;
@@ -38,11 +64,66 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  const [phase, setPhase] = React.useState<Phase>("arrive");
+  const [heroIdx, setHeroIdx] = React.useState(0);
+  const [motion, setMotion] = React.useState({ ms: 0, ease: TURN_EASE });
+  // Nothing is clickable while a move runs — the canvas half of this already
+  // lives in transition-origin; this is the DOM half.
+  const [busy, setBusy] = React.useState(true);
+
+  const timersRef = React.useRef<number[]>([]);
+  const after = (ms: number, fn: () => void) => {
+    timersRef.current.push(window.setTimeout(fn, ms));
+  };
+  React.useEffect(
+    () => () => {
+      for (const t of timersRef.current) clearTimeout(t);
+      timersRef.current = [];
+    },
+    [],
+  );
+
   // One row, all images at equal height, scaled down until the row fits the screen
   const aspects = images.map((img) => img.width / img.height);
   const sumAspect = aspects.reduce((sum, a) => sum + a, 0);
   const availW = viewport.w - MARGIN * 2 - GAP * (images.length - 1);
   const rowH = Math.min(viewport.h * MAX_ROW_HEIGHT_FRAC, availW / Math.max(sumAspect, 0.0001));
+  const heroH = viewport.h * HERO_HEIGHT_FRAC;
+
+  // Visual order. Part 2 is a full reverse, so past the arrival every phase
+  // reads the row backwards and the image you came from sits last.
+  const count = images.length;
+  const seq =
+    phase === "arrive"
+      ? images.map((_, i) => i)
+      : images.map((_, i) => count - 1 - i);
+  const arrivalSlotIdx = phase === "arrive" ? 0 : count - 1;
+
+  // Per-image x / scale. Every state is a permutation or a scale of the same
+  // fit-to-width row, so the row width is invariant and nothing relayouts.
+  const slots: Slot[] = new Array(count);
+  {
+    const scales = seq.map((_, k) => (phase === "hero" && k === heroIdx ? heroH / rowH : 1));
+    const widths = seq.map((imgI, k) => aspects[imgI] * rowH * scales[k]);
+    const xs: number[] = [];
+    let cursor = 0;
+    for (let k = 0; k < count; k++) {
+      xs.push(cursor);
+      cursor += widths[k] + GAP;
+    }
+    // Centre the enlarged image; otherwise the row sits on the left margin.
+    const shift =
+      phase === "hero" ? viewport.w / 2 - (xs[heroIdx] + widths[heroIdx] / 2) : MARGIN;
+    seq.forEach((imgI, k) => {
+      const dropping = phase === "out" && k !== arrivalSlotIdx;
+      slots[imgI] = {
+        x: xs[k] + shift,
+        y: dropping ? RISE_PX : 0,
+        scale: scales[k],
+        faded: dropping,
+      };
+    });
+  }
 
   const overlayRef = React.useRef<HTMLDivElement>(null);
   const heroImgRef = React.useRef<HTMLImageElement>(null);
@@ -191,24 +272,102 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     };
   }, []);
 
+  // Parts 2 and 3 run as one move once the arrival has settled: the strip
+  // reverses and the leading image blows up to hero height together.
+  React.useEffect(() => {
+    const flew = Boolean(transitionRef.current?.sourceKey);
+    const settleAt = flew
+      ? FLIGHT_MS + (images.length - 1) * SAT_STAGGER_S * 1000 + 700 + FUSE_PAUSE_MS
+      : 500;
+    const timer = window.setTimeout(() => {
+      setMotion({ ms: TURN_MS, ease: TURN_EASE });
+      setHeroIdx(0);
+      setPhase("hero");
+      after(TURN_MS, () => setBusy(false));
+    }, settleAt);
+    return () => clearTimeout(timer);
+  }, []);
+
   // Whatever the exit path, give the canvas back
   React.useEffect(() => releaseTransition, []);
 
-  const handleClose = () => {
+  const fadeClose = () => {
     releaseTransition();
     const overlay = overlayRef.current;
     if (overlay) {
       overlay.style.transition = "opacity 0.3s ease";
       overlay.style.opacity = "0";
-      setTimeout(onClose, 320);
+      after(320, onClose);
     } else {
       onClose();
     }
   };
 
+  /** Left half is previous, right half is next — the strip already runs that way. */
+  const step = (dir: -1 | 1) => {
+    if (busy || phase !== "hero") return;
+    const to = heroIdx + dir;
+    if (to < 0 || to >= count) return;
+    setBusy(true);
+    setMotion({ ms: ADV_MS, ease: TURN_EASE });
+    setHeroIdx(to);
+    after(ADV_MS, () => setBusy(false));
+  };
+
+  /**
+   * Exit. No second reversal: settling to row height is enough, because the row
+   * is fit-to-width and refills the viewport, putting the image you arrived on
+   * back at the right margin. It then flies to its own plane while the rest
+   * drop 32px away — the exact reverse of how they rose.
+   */
+  const runExit = () => {
+    if (busy) return;
+    setBusy(true);
+    setMotion({ ms: SETTLE_MS, ease: TURN_EASE });
+    setPhase("settle");
+
+    after(SETTLE_MS, () => {
+      const t = transitionRef.current;
+      const overlay = overlayRef.current;
+      const hero = heroImgRef.current;
+      if (!t?.sourceKey || !hero || !overlay) {
+        fadeClose();
+        return;
+      }
+      const r = hero.getBoundingClientRect();
+      // Re-pin the plane to wherever the row has carried this image, then fly
+      // it home. Setting the tween before un-hiding means the plane never
+      // draws a frame at its old pin.
+      beginHeroTween(
+        t.sourceKey,
+        { x: r.x, y: r.y, width: r.width, height: r.height },
+        FLIGHT_MS,
+        () => {
+          releaseTransition();
+          onClose();
+        },
+        "out",
+      );
+      hideTransitionSource(null);
+      hero.style.opacity = "0";
+      overlay.style.background = "transparent";
+      setMotion({ ms: FLIGHT_MS, ease: TURN_EASE });
+      setPhase("out");
+      // If the plane never reports arrival, leave anyway.
+      after(FLIGHT_MS + 400, () => {
+        releaseTransition();
+        onClose();
+      });
+    });
+  };
+
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") handleClose();
+      // Escape is a bail-out, so it stays live even mid-move — the choreographed
+      // exit needs a settled row to work from, so interrupt with a plain fade.
+      if (e.key === "Escape") (busy ? fadeClose : runExit)();
+      if (e.key === "ArrowRight") step(1);
+      if (e.key === "ArrowLeft") step(-1);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -216,33 +375,59 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
 
   if (!images.length) return null;
 
+  const browsing = phase === "hero" && !busy;
+
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: Escape handled via window keydown
-    // biome-ignore lint/a11y/useKeyWithClickEvents: Escape handled via window keydown
-    <div className={styles.overlay} ref={overlayRef} onClick={handleClose}>
-      <button
-        type="button"
-        className={styles.close}
-        onClick={(e) => {
-          e.stopPropagation();
-          handleClose();
-        }}
-      >
+    <div className={styles.overlay} ref={overlayRef}>
+      <button type="button" className={styles.close} onClick={runExit}>
         ×
       </button>
 
+      {browsing && (
+        <div className={styles.zones}>
+          <button
+            type="button"
+            className={styles.zone}
+            aria-label="Previous image"
+            disabled={heroIdx <= 0}
+            onClick={() => step(-1)}
+          />
+          <button
+            type="button"
+            className={styles.zone}
+            aria-label="Next image"
+            disabled={heroIdx >= count - 1}
+            onClick={() => step(1)}
+          />
+        </div>
+      )}
+
       <div className={styles.row}>
         {images.map((img, i) => (
-          <img
+          <div
             key={img.url}
-            ref={i === 0 ? heroImgRef : null}
-            src={`/${img.url}`}
-            alt=""
-            draggable={false}
-            decoding="async"
-            className={styles.image}
-            style={{ width: aspects[i] * rowH, height: rowH }}
-          />
+            className={styles.slot}
+            style={{
+              width: aspects[i] * rowH,
+              height: rowH,
+              marginTop: -rowH / 2,
+              opacity: slots[i].faded ? 0 : 1,
+              transform: `translate(${slots[i].x}px, ${slots[i].y}px) scale(${slots[i].scale})`,
+              transition: motion.ms
+                ? `transform ${motion.ms}ms ${motion.ease}, opacity ${motion.ms}ms ${motion.ease}`
+                : "none",
+              zIndex: phase === "hero" && seq[heroIdx] === i ? 2 : 1,
+            }}
+          >
+            <img
+              ref={i === 0 ? heroImgRef : null}
+              src={`/${img.url}`}
+              alt=""
+              draggable={false}
+              decoding="async"
+              className={styles.image}
+            />
+          </div>
         ))}
       </div>
     </div>

@@ -15,9 +15,12 @@ export interface PendingTransition {
 
 interface HeroTween {
   key: string;
-  /** Destination slot rect in screen pixels, measured from the project-page DOM. */
+  /** Screen-pixel rect measured from the project-page DOM. On the way in it is
+   *  where the plane flies to; on the way out it is where it flies from. */
   target: TransitionRect;
   durationMs: number;
+  /** "in" — canvas to the page. "out" — back to the plane's own canvas slot. */
+  mode: "in" | "out";
   done: boolean;
   onArrive: (() => void) | null;
 }
@@ -48,14 +51,17 @@ export function consumePendingTransition(): PendingTransition | null {
 }
 
 /** Fly the source plane (in-scene) to the given screen rect. The plane itself
- *  performs the tween in its frame loop and stays pinned there afterwards. */
+ *  performs the tween in its frame loop and stays pinned there afterwards.
+ *  mode "out" reverses it: the plane re-pins to `target` (wherever the row has
+ *  since carried the image) and flies home to the canvas slot it came from. */
 export function beginHeroTween(
   key: string,
   target: TransitionRect,
   durationMs: number,
   onArrive: () => void,
+  mode: "in" | "out" = "in",
 ): void {
-  heroTween = { key, target, durationMs, done: false, onArrive };
+  heroTween = { key, target, durationMs, mode, done: false, onArrive };
 }
 
 export function getHeroTween(key: string): HeroTween | null {
