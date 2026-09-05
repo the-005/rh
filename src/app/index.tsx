@@ -1,8 +1,9 @@
 import * as React from "react";
 import { useLocation } from "wouter";
 import allManifest from "~/src/images/manifest.json";
-import { Frame } from "~/src/frame";
+import { Frame, type View } from "~/src/frame";
 import { InfiniteCanvas } from "~/src/infinite-canvas";
+import { IndexPage } from "~/src/index-page";
 import type { MediaItem } from "~/src/infinite-canvas/types";
 import { PageLoader } from "~/src/loader";
 import { ProjectPage } from "~/src/project";
@@ -31,8 +32,15 @@ export function App() {
     return m ? m[1] : null;
   }, [location]);
 
+  // The index is a route so it survives a reload and the back button, and so a
+  // row can hand straight off to /project/:id.
+  const view: View = location === "/index" ? "index" : "gallery";
+  // Closing a project returns you to whichever view opened it.
+  const openedFromIndexRef = React.useRef(false);
+
   const handleMediaClick = (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => {
     if (item.project) {
+      openedFromIndexRef.current = false;
       const projectImages = ALL_MEDIA.filter((m) => m.project === item.project);
       const startIndex = Math.max(0, projectImages.findIndex((m) => m.url === item.url));
       setPendingTransition(rect, startIndex);
@@ -47,7 +55,13 @@ export function App() {
         videoSrc="/PR-01_DE_58.mp4"
         onDismiss={(frame, aspect) => { setSplashFrame(frame); setSplashAspect(aspect); }}
       />
-      <Frame category={category} onCategoryChange={setCategory} />
+      <Frame
+        category={category}
+        onCategoryChange={setCategory}
+        view={view}
+        onViewChange={(v) => navigate(v === "index" ? "/index" : "/")}
+        showViewToggle={!projectId}
+      />
       {!DEEP_LINKED && <PageLoader progress={textureProgress} />}
       <InfiniteCanvas
         media={ALL_MEDIA}
@@ -59,7 +73,22 @@ export function App() {
         splashAspect={splashAspect}
         onSplashReady={() => setSplashDismissed(true)}
       />
-      {projectId && <ProjectPage key={projectId} id={projectId} onClose={() => navigate("/")} />}
+      {view === "index" && !projectId && (
+        <IndexPage
+          category={category}
+          onOpenProject={(id) => {
+            openedFromIndexRef.current = true;
+            navigate(`/project/${id}`);
+          }}
+        />
+      )}
+      {projectId && (
+        <ProjectPage
+          key={projectId}
+          id={projectId}
+          onClose={() => navigate(openedFromIndexRef.current ? "/index" : "/")}
+        />
+      )}
     </>
   );
 }
