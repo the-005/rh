@@ -22,6 +22,9 @@
 /* Clears the frame's top row, which sits above this at z-index 1000. */
 .inner {
   padding: 5rem var(--page-padding, 1.5rem) 6rem;
+  /* The list keeps to the left half; the preview lives in the right. */
+  width: 52%;
+  min-width: 24rem;
 }
 
 /* One grid shared by the header and every row, so the columns line up without
@@ -113,5 +116,51 @@
 
   .row {
     font-size: 1.15rem;
+  }
+}
+
+/* Fixed, so it holds its place while the list scrolls under it. Right-anchored
+   and vertically centred: the image grows leftward at its own aspect, so a
+   portrait and a landscape cover both sit correctly with no box around them. */
+.preview {
+  position: fixed;
+  top: 50%;
+  right: var(--page-padding, 1.5rem);
+  transform: translateY(-50%);
+  width: 34vw;
+  height: 62vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.previewImg {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  display: block;
+  animation: previewIn 0.3s ease both;
+}
+
+@keyframes previewIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* No hover to speak of — the list takes the full width and the preview goes. */
+@media (hover: none), screen and (max-width: 53em) {
+  .inner {
+    width: auto;
+    min-width: 0;
+  }
+
+  .preview {
+    display: none;
   }
 }
