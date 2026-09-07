@@ -102,11 +102,11 @@
 }
 
 /* --- controls -------------------------------------------------------------
-   Two navs sit in the frame's top row: the category filter at the left, the
-   gallery/index toggle at the right. They inherit the frame's difference
-   blend, so they read white over the canvas and black over the index. */
+   The frame's top row carries the wordmark at the left and the view nav at the
+   right. Both inherit the frame's difference blend, so they read white over the
+   canvas and black over the index, about and project pages. */
 
-.frame__filter,
+.frame__home,
 .frame__view {
   grid-row: 1;
   display: flex;
@@ -114,8 +114,17 @@
   pointer-events: auto;
 }
 
-.frame__filter {
+.frame__home {
   grid-column: 1;
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 0.9rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
 }
 
 .frame__view {

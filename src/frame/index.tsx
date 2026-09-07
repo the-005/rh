@@ -1,39 +1,29 @@
 import styles from "./style.module.css";
 
-type Category = "all" | "art" | "commerce";
-export type View = "gallery" | "index";
+export type View = "gallery" | "index" | "about";
+
+const NAV: View[] = ["gallery", "index", "about"];
 
 export function Frame({
-  category,
-  onCategoryChange,
   view,
   onViewChange,
-  showViewToggle = true,
+  showNav = true,
 }: {
-  category: Category;
-  onCategoryChange: (c: Category) => void;
   view: View;
   onViewChange: (v: View) => void;
-  showViewToggle?: boolean;
+  showNav?: boolean;
 }) {
   return (
     <header className={`frame ${styles.frame}`}>
-      <nav className={styles.frame__filter}>
-        {(["all", "art", "commerce"] as Category[]).map((c) => (
-          <button
-            key={c}
-            type="button"
-            className={`${styles.frame__btn} ${category === c ? styles.frame__btnActive : ""}`}
-            onClick={() => onCategoryChange(c)}
-          >
-            {c}
-          </button>
-        ))}
-      </nav>
+      {/* Stands in for the logo: a wordmark holding the mark's corner, and the
+          way back to the canvas from anywhere. */}
+      <button type="button" className={styles.frame__home} onClick={() => onViewChange("gallery")}>
+        Home
+      </button>
 
-      {showViewToggle && (
+      {showNav && (
         <nav className={styles.frame__view}>
-          {(["gallery", "index"] as View[]).map((v) => (
+          {NAV.map((v) => (
             <button
               key={v}
               type="button"

@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useLocation } from "wouter";
 import allManifest from "~/src/images/manifest.json";
+import { AboutPage } from "~/src/about";
 import { Frame, type View } from "~/src/frame";
 import { InfiniteCanvas } from "~/src/infinite-canvas";
 import { IndexPage } from "~/src/index-page";
@@ -10,9 +11,14 @@ import { ProjectPage } from "~/src/project";
 import { setPendingIndex, setPendingTransition } from "~/src/project/transition-origin";
 import { SplashVideo } from "~/src/splash";
 
-type Category = "all" | "art" | "commerce";
-
 const ALL_MEDIA = allManifest as MediaItem[];
+
+// The category filter is off the frame — the top-left corner is the wordmark
+// now. The canvas and the index still filter, so this is the one value they
+// read; give it "art" or "commerce" to scope the whole site to a category.
+const ACTIVE_CATEGORY = "all";
+
+const VIEW_PATHS: Record<View, string> = { gallery: "/", index: "/index", about: "/about" };
 
 // Whether this visit started somewhere other than the homepage (e.g. /project/x).
 // Deep links skip the intro splash and the texture progress overlay — the project
@@ -21,7 +27,6 @@ const DEEP_LINKED = window.location.pathname !== "/";
 
 export function App() {
   const [location, navigate] = useLocation();
-  const [category, setCategory] = React.useState<Category>("all");
   const [textureProgress, setTextureProgress] = React.useState(0);
   const [splashFrame, setSplashFrame] = React.useState<string | null>(null);
   const [splashAspect, setSplashAspect] = React.useState(16 / 9);
@@ -32,9 +37,9 @@ export function App() {
     return m ? m[1] : null;
   }, [location]);
 
-  // The index is a route so it survives a reload and the back button, and so a
-  // row can hand straight off to /project/:id.
-  const view: View = location === "/index" ? "index" : "gallery";
+  // The index and about are routes, so they survive a reload and the back
+  // button, and so an index row can hand straight off to /project/:id.
+  const view: View = location === "/index" ? "index" : location === "/about" ? "about" : "gallery";
   // Closing a project returns you to whichever view opened it.
   const openedFromIndexRef = React.useRef(false);
 
@@ -55,17 +60,11 @@ export function App() {
         videoSrc="/PR-01_DE_58.mp4"
         onDismiss={(frame, aspect) => { setSplashFrame(frame); setSplashAspect(aspect); }}
       />
-      <Frame
-        category={category}
-        onCategoryChange={setCategory}
-        view={view}
-        onViewChange={(v) => navigate(v === "index" ? "/index" : "/")}
-        showViewToggle={!projectId}
-      />
+      <Frame view={view} onViewChange={(v) => navigate(VIEW_PATHS[v])} showNav={!projectId} />
       {!DEEP_LINKED && <PageLoader progress={textureProgress} />}
       <InfiniteCanvas
         media={ALL_MEDIA}
-        activeCategory={category}
+        activeCategory={ACTIVE_CATEGORY}
         onTextureProgress={setTextureProgress}
         onMediaClick={handleMediaClick}
         cameraFov={48}
@@ -73,9 +72,10 @@ export function App() {
         splashAspect={splashAspect}
         onSplashReady={() => setSplashDismissed(true)}
       />
+      {view === "about" && !projectId && <AboutPage />}
       {view === "index" && !projectId && (
         <IndexPage
-          category={category}
+          category={ACTIVE_CATEGORY}
           onOpenProject={(id, startIndex) => {
             openedFromIndexRef.current = true;
             // Scrubbed to an image, so open on it — same startIndex the canvas
