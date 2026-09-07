@@ -13,6 +13,8 @@ export interface ProjectEntry {
   count: number;
   /** First image in manifest order; the natural thumbnail if the index grows one. */
   cover: string;
+  /** Every image in manifest order. The index scrubs along these. */
+  images: string[];
 }
 
 /**
@@ -52,5 +54,6 @@ export const PROJECTS: ProjectEntry[] = (() => {
     category: items[0].category ?? "",
     count: items.length,
     cover: items[0].url,
+    images: items.map((item) => item.url),
   }));
 })();

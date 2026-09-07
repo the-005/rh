@@ -7,7 +7,7 @@ import { IndexPage } from "~/src/index-page";
 import type { MediaItem } from "~/src/infinite-canvas/types";
 import { PageLoader } from "~/src/loader";
 import { ProjectPage } from "~/src/project";
-import { setPendingTransition } from "~/src/project/transition-origin";
+import { setPendingIndex, setPendingTransition } from "~/src/project/transition-origin";
 import { SplashVideo } from "~/src/splash";
 
 type Category = "all" | "art" | "commerce";
@@ -76,8 +76,11 @@ export function App() {
       {view === "index" && !projectId && (
         <IndexPage
           category={category}
-          onOpenProject={(id) => {
+          onOpenProject={(id, startIndex) => {
             openedFromIndexRef.current = true;
+            // Scrubbed to an image, so open on it — same startIndex the canvas
+            // hands over, minus the plane flight.
+            setPendingIndex(startIndex);
             navigate(`/project/${id}`);
           }}
         />

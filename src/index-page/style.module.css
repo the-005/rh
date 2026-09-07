@@ -60,6 +60,7 @@
 
 .row {
   appearance: none;
+  position: relative;
   background: none;
   border: none;
   border-top: 1px solid transparent;
@@ -84,6 +85,66 @@
   color: #111111;
   transform: translateX(0.5rem);
   outline: none;
+}
+
+/* --- scrub ----------------------------------------------------------------
+   Each row is a timeline. The rule under a row is its track: ticks divide it
+   into one cell per image, the marker snaps to the cell under the cursor, the
+   counter reads it back. All of it is absolutely positioned inside the row, so
+   the list's grid never sees it — and because it is a child of the row, it
+   rides the hover slide instead of fighting it. */
+.track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  /* Sits exactly on the next row's border-top, which is the line you see. */
+  bottom: -1px;
+  height: 1px;
+  pointer-events: none;
+  animation: trackIn 0.18s ease both;
+}
+
+@keyframes trackIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.tick {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  height: 4px;
+  background: #cfcfcf;
+}
+
+/* Cells behind the head read as covered ground. */
+.tickPast {
+  background: #111111;
+}
+
+.marker {
+  position: absolute;
+  bottom: -2px;
+  width: 1px;
+  height: 9px;
+  background: #111111;
+  transition: left 0.08s cubic-bezier(0.42, 0, 0.58, 1);
+}
+
+.counter {
+  position: absolute;
+  bottom: 0.75rem;
+  transform: translateX(-50%);
+  font-size: 0.875rem;
+  letter-spacing: 0.04em;
+  color: #999999;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  transition: left 0.08s cubic-bezier(0.42, 0, 0.58, 1);
 }
 
 .num {
@@ -161,6 +222,10 @@
   }
 
   .preview {
+    display: none;
+  }
+
+  .track {
     display: none;
   }
 }
