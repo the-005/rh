@@ -26,13 +26,13 @@ import styles from "./style.module.css";
  * number to turn if the scrub feels wrong.
  */
 const COMMIT_MS = 90;
-/** Slideshow pace while a row is playing. */
-const PLAY_MS = 1500;
+/** Slideshow pace while a row is playing (the owner found 1.5s too fast). */
+const PLAY_MS = 3000;
 /** How the bar follows a scrub: a short glide instead of a snap from cell to cell. */
 const GLIDE = "350ms cubic-bezier(0.22, 1, 0.36, 1)";
 /** Crossfade layers kept at once; only the oldest (already fading out) get cut. */
 const MAX_LAYERS = 4;
-/** The crossfade's length in `style.module.css`, plus slack: an outgoing layer is gone by then. */
+/** The longest fade-out in `style.module.css`, plus slack: an outgoing layer is gone by then. */
 const FADE_CLEANUP_MS = 900;
 
 /** Where the bar ends, in cells (image i's centre is i + 0.5), and how it gets there. */
@@ -190,7 +190,7 @@ export function IndexPage() {
         </ul>
       </div>
 
-      <div className={styles.preview} aria-hidden="true">
+      <div className={`${styles.preview} ${playing ? styles.previewPlaying : ""}`} aria-hidden="true">
         <Crossfade src={src} />
       </div>
     </main>
@@ -218,13 +218,13 @@ function Playhead({ count, bar, playing }: { count: number; bar: Bar; playing: b
 }
 
 /**
- * Image changes crossfade, after Estudio Além (estudioalem.com), whose loop is
- * Swiper's `fade` effect: every image stacked in one place, the incoming one
- * fading in on top on an ease-out while the outgoing stays put beneath, so it
- * never dips to white. Our images differ in shape, so the outgoing one can't
- * just stay put — its edges would stick out, then vanish at once. Instead it
- * fades out on an ease-in while the incoming fades in on an ease-out: where
- * they overlap the picture stays covered, and the old edges melt away.
+ * Image changes dissolve. Started from Estudio Além (estudioalem.com), whose loop
+ * is Swiper's `fade` effect: images stacked in one place, the incoming fading in
+ * over the outgoing. On these dark photos that double exposure read as mud, so
+ * the owner asked for a cleaner one. Layers still stack (a one-cell grid), but
+ * the timing lives in CSS and keeps the two images from sharing the screen at
+ * half strength: while playing, the old image clears first and the new one comes
+ * up just after; while scrubbing, a quick dissolve that keeps up with the cursor.
  */
 function Crossfade({ src }: { src: string | null }) {
   const [layers, setLayers] = React.useState<{ id: number; src: string; leaving: boolean }[]>([]);

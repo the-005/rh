@@ -159,8 +159,7 @@
 }
 
 /* 66% of the window's height, like the project page's enlarged image; its width
-   follows its own aspect, capped so a wide one still fits between the margins.
-   Incoming layers fade in on an ease-out (from @starting-style). */
+   follows its own aspect, capped so a wide one still fits between the margins. */
 .previewImg {
   grid-area: 1 / 1;
   height: 66vh;
@@ -169,7 +168,8 @@
   object-fit: contain;
   display: block;
   opacity: 1;
-  transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  /* Scrubbing: a quick dissolve that keeps up with the cursor. */
+  transition: opacity 0.25s ease-out;
 }
 
 @starting-style {
@@ -178,10 +178,21 @@
   }
 }
 
-/* Outgoing layers fade out on an ease-in, so they hold while the new one arrives. */
 .previewLeaving {
   opacity: 0;
-  transition: opacity 0.7s cubic-bezier(0.64, 0, 0.78, 0);
+  transition: opacity 0.25s ease-in;
+}
+
+/* Playing: a slower, cleaner dissolve with no double exposure (which read as mud
+   on dark photos). The old image clears on a fast ease-out; the new one waits
+   0.15s, catching the old one's tail, then comes up over 1s. The two are never
+   both past a quarter strength, and the picture never blanks out. */
+.previewPlaying .previewImg {
+  transition: opacity 1s cubic-bezier(0.22, 1, 0.36, 1) 0.15s;
+}
+
+.previewPlaying .previewLeaving {
+  transition: opacity 0.45s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* No hover to speak of — the list takes the full width and the preview goes. */
