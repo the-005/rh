@@ -33,13 +33,13 @@ const SETTLE_MS = 600;
  *  while the images it passes drop away one by one. */
 const SHIFT_MS = 600;
 const EXIT_FADE_MS = 350;
-/** Beat between the arrival settling and the strip turning over. */
+/** Beat between the arrival settling and the first image scaling up. */
 const FUSE_PAUSE_MS = 260;
 
 /**
  * arrive — flat row, manifest rotated so the clicked image leads (part 1).
- * hero   — reversed order, one image at HERO_HEIGHT_FRAC, centred (parts 2+3).
- * settle — reversed order, everything back to row height (exit beat 1).
+ * hero   — same order, one image at HERO_HEIGHT_FRAC, centred (part 2).
+ * settle — same order, everything back to row height (exit beat 1).
  * centre — settled row slid left so the arrival image is centred (exit beat 2).
  * out    — same positions, supporting images dropping away (exit beat 3).
  */
@@ -55,7 +55,8 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   const transitionRef = React.useRef(consumePendingTransition());
 
   // Rotate the project's images so the clicked one is always first (leftmost).
-  // Part 2 then reverses this, which is why the clicked image ends up last.
+  // The row keeps this order throughout — no flip — so the clicked image is
+  // the one that scales up, and "next" is always the image to its right.
   const filtered = ALL_MEDIA.filter((item) => item.project === id);
   const start = transitionRef.current?.startIndex ?? 0;
   const images = start > 0 ? [...filtered.slice(start), ...filtered.slice(0, start)] : filtered;
@@ -93,14 +94,11 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   const rowH = Math.min(viewport.h * MAX_ROW_HEIGHT_FRAC, availW / Math.max(sumAspect, 0.0001));
   const heroH = viewport.h * HERO_HEIGHT_FRAC;
 
-  // Visual order. Part 2 is a full reverse, so past the arrival every phase
-  // reads the row backwards and the image you came from sits last.
+  // Visual order is the arrival order in every phase; the image you came from
+  // stays in slot 0.
   const count = images.length;
-  const seq =
-    phase === "arrive"
-      ? images.map((_, i) => i)
-      : images.map((_, i) => count - 1 - i);
-  const arrivalSlotIdx = phase === "arrive" ? 0 : count - 1;
+  const seq = images.map((_, i) => i);
+  const arrivalSlotIdx = 0;
 
   // Per-image x / scale. Every state is a permutation or a scale of the same
   // fit-to-width row, so the row width is invariant and nothing relayouts.
@@ -278,8 +276,8 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     };
   }, []);
 
-  // Parts 2 and 3 run as one move once the arrival has settled: the strip
-  // reverses and the leading image blows up to hero height together.
+  // Part 2, once the arrival has settled: the first image — the one you clicked —
+  // scales up to hero height and moves to centre, the row sliding along with it.
   React.useEffect(() => {
     const flew = Boolean(transitionRef.current?.sourceKey);
     const settleAt = flew
@@ -321,10 +319,9 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   };
 
   /**
-   * Exit, in three beats. No second reversal: settling to row height is enough,
-   * because the row is fit-to-width and refills the viewport, putting the image
-   * you arrived on back at the right margin. The row then travels left to bring
-   * it to centre — a pure translation, nothing scaling — and only then does it
+   * Exit, in three beats. Settling to row height keeps the current image
+   * centred. The row then travels to bring the image you arrived on (slot 0)
+   * to centre — a pure translation, nothing scaling — and only then does it
    * fly to its own plane while the rest drop 32px away, the exact reverse of
    * how they rose.
    */
@@ -347,11 +344,10 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       const imgs = Array.from(overlay.querySelectorAll<HTMLElement>(`.${styles.image}`));
       for (const el of imgs) {
         if (el === hero) continue;
-        // DOM order is the arrival order; the row reads it backwards, so the
-        // leftmost on screen is the last in the DOM.
-        const domIdx = imgs.indexOf(el);
-        const visualIdx = count - 1 - domIdx;
-        const delay = (visualIdx * SAT_STAGGER_S).toFixed(2);
+        // DOM order is the visual order and the departing image is leftmost,
+        // so the furthest is the last in the DOM: it gets no delay.
+        const fromFar = count - 1 - imgs.indexOf(el);
+        const delay = (fromFar * SAT_STAGGER_S).toFixed(2);
         el.style.transition = `opacity ${EXIT_FADE_MS}ms ease ${delay}s, transform 0.5s ${TURN_EASE} ${delay}s`;
         el.style.opacity = "0";
         el.style.transform = `translateY(${RISE_PX}px)`;
