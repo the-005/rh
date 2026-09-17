@@ -183,16 +183,16 @@
   transition: opacity 0.25s ease-in;
 }
 
-/* Playing: a slower, cleaner dissolve with no double exposure (which read as mud
-   on dark photos). The old image clears on a fast ease-out; the new one waits
-   0.15s, catching the old one's tail, then comes up over 1s. The two are never
-   both past a quarter strength, and the picture never blanks out. */
+/* Playing: a long crossfade that keeps the double exposure (the owner preferred
+   it to a lift towards white between images). Both run 2s from the same moment;
+   the new image comes up on an ease while the old one holds on an ease-in, so
+   together they always cover the frame and it never flashes to the page. */
 .previewPlaying .previewImg {
-  transition: opacity 1s cubic-bezier(0.22, 1, 0.36, 1) 0.15s;
+  transition: opacity 2s ease;
 }
 
 .previewPlaying .previewLeaving {
-  transition: opacity 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: opacity 2s cubic-bezier(0.55, 0, 1, 0.45);
 }
 
 /* No hover to speak of — the list takes the full width and the preview goes. */

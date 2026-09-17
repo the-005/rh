@@ -33,7 +33,7 @@ const GLIDE = "350ms cubic-bezier(0.22, 1, 0.36, 1)";
 /** Crossfade layers kept at once; only the oldest (already fading out) get cut. */
 const MAX_LAYERS = 4;
 /** The longest fade-out in `style.module.css`, plus slack: an outgoing layer is gone by then. */
-const FADE_CLEANUP_MS = 900;
+const FADE_CLEANUP_MS = 2300;
 
 /** Where the bar ends, in cells (image i's centre is i + 0.5), and how it gets there. */
 type Bar = { pos: number; transition: string };
@@ -218,13 +218,12 @@ function Playhead({ count, bar, playing }: { count: number; bar: Bar; playing: b
 }
 
 /**
- * Image changes dissolve. Started from Estudio Além (estudioalem.com), whose loop
- * is Swiper's `fade` effect: images stacked in one place, the incoming fading in
- * over the outgoing. On these dark photos that double exposure read as mud, so
- * the owner asked for a cleaner one. Layers still stack (a one-cell grid), but
- * the timing lives in CSS and keeps the two images from sharing the screen at
- * half strength: while playing, the old image clears first and the new one comes
- * up just after; while scrubbing, a quick dissolve that keeps up with the cursor.
+ * Image changes crossfade, after Estudio Além (estudioalem.com), whose loop is
+ * Swiper's `fade` effect: images stacked in one place, the incoming fading in
+ * over the outgoing. The timing lives in CSS. While playing it's a long 2s
+ * crossfade that keeps the double exposure — the owner tried a cleaner dissolve
+ * and preferred this to the lift towards white it caused. While scrubbing it's a
+ * quick dissolve that keeps up with the cursor.
  */
 function Crossfade({ src }: { src: string | null }) {
   const [layers, setLayers] = React.useState<{ id: number; src: string; leaving: boolean }[]>([]);
