@@ -17,7 +17,7 @@ const GAP = 4;
 /** Row height never exceeds this fraction of the viewport (small projects). */
 const MAX_ROW_HEIGHT_FRAC = 0.5;
 /** Part 3's enlarged image, as a fraction of viewport height. */
-const HERO_HEIGHT_FRAC = 0.5;
+const HERO_HEIGHT_FRAC = 0.66;
 const FLIGHT_MS = 1000;
 const ENTRY_EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
 /** Supporting images rise this far into their slots after the hero lands. */
