@@ -33,6 +33,15 @@ const SETTLE_MS = 600;
  *  while the images it passes drop away one by one. */
 const SHIFT_MS = 600;
 const EXIT_FADE_MS = 350;
+/**
+ * Wheel and trackpad browse like the arrow keys: down / right is next. One
+ * gesture moves one image — a step needs WHEEL_STEP px of travel one way, and
+ * after it the wheel stays locked until it has been quiet for WHEEL_QUIET_MS,
+ * so a trackpad's glide (or a wheel spun in one go) can't run through the album.
+ * A notch that arrives mid-move is queued, not dropped.
+ */
+const WHEEL_STEP = 40;
+const WHEEL_QUIET_MS = 180;
 /** Beat between the arrival settling and the first image scaling up. */
 const FUSE_PAUSE_MS = 260;
 
@@ -307,15 +316,27 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     }
   };
 
+  const wheelRef = React.useRef({ last: 0, accum: 0, locked: false, queued: 0 as -1 | 0 | 1 });
+
+  const advance = (to: number) => {
+    setBusy(true);
+    setMotion({ ms: ADV_MS, ease: TURN_EASE });
+    setHeroIdx(to);
+    after(ADV_MS, () => {
+      const queued = wheelRef.current.queued;
+      wheelRef.current.queued = 0;
+      const next = to + queued;
+      if (queued && next >= 0 && next < count) advance(next);
+      else setBusy(false);
+    });
+  };
+
   /** Left half is previous, right half is next — the strip already runs that way. */
   const step = (dir: -1 | 1) => {
     if (busy || phase !== "hero") return;
     const to = heroIdx + dir;
     if (to < 0 || to >= count) return;
-    setBusy(true);
-    setMotion({ ms: ADV_MS, ease: TURN_EASE });
-    setHeroIdx(to);
-    after(ADV_MS, () => setBusy(false));
+    advance(to);
   };
 
   /**
@@ -399,6 +420,37 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  });
+
+  React.useEffect(() => {
+    const onWheel = (e: WheelEvent) => {
+      // Nothing behind the page should scroll, and a sideways trackpad swipe
+      // must not turn into the browser's back gesture.
+      e.preventDefault();
+      const w = wheelRef.current;
+      const quiet = e.timeStamp - w.last > WHEEL_QUIET_MS;
+      w.last = e.timeStamp;
+      if (quiet) {
+        w.locked = false;
+        w.accum = 0;
+      }
+      if (w.locked) return;
+
+      const raw = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+      const px = e.deltaMode === 1 ? raw * 16 : e.deltaMode === 2 ? raw * window.innerHeight : raw;
+      if (Math.sign(px) !== Math.sign(w.accum)) w.accum = 0;
+      w.accum += px;
+      if (Math.abs(w.accum) < WHEEL_STEP) return;
+
+      const dir = w.accum > 0 ? 1 : -1;
+      w.accum = 0;
+      w.locked = true;
+      if (phase !== "hero") return;
+      if (busy) w.queued = dir;
+      else step(dir);
+    };
+    window.addEventListener("wheel", onWheel, { passive: false });
+    return () => window.removeEventListener("wheel", onWheel);
   });
 
   if (!images.length) return null;
