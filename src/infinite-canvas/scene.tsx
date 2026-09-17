@@ -11,6 +11,7 @@ import {
   isDimmedPlane,
   isPlaneHidden,
   isTransitionActive,
+  setHeroScreenRect,
   stageTransitionSource,
   takeSwapWaiter,
 } from "~/src/project/transition-origin";
@@ -99,6 +100,9 @@ type CameraGridState = {
    *  absoluteZOffset when a MediaPlane remounts after its chunk leaves/re-enters view. */
   cumulativeScroll: number;
 };
+
+/** Scratch vector for projecting the homeward plane to screen space. */
+const SCREEN_PROBE = new THREE.Vector3();
 
 function MediaPlane({
   position,
@@ -264,6 +268,19 @@ function MediaPlane({
       }
       const h = lerp(run.from.h, run.to.h, e);
       mesh.scale.set(h * run.aspect, h, 1);
+      // On the way home, publish where the plane is on screen so the page's row
+      // closes in around it instead of leaving the gap the enlarged image made.
+      if (run.mode === "out" && group) {
+        const cam = _state.camera as THREE.PerspectiveCamera;
+        const { width: vw, height: vh } = _state.size;
+        SCREEN_PROBE.copy(group.position).project(cam);
+        const dist = cam.position.z - group.position.z;
+        const pxH = (h / (2 * dist * Math.tan((cam.fov * Math.PI) / 360))) * vh;
+        const pxW = pxH * run.aspect;
+        const cx = ((SCREEN_PROBE.x + 1) / 2) * vw;
+        const cy = ((1 - SCREEN_PROBE.y) / 2) * vh;
+        setHeroScreenRect({ x: cx - pxW / 2, y: cy - pxH / 2, width: pxW, height: pxH });
+      }
       mesh.renderOrder = 1000;
 
       const hidden = isPlaneHidden(regKey);

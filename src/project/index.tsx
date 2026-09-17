@@ -4,6 +4,7 @@ import type { MediaItem } from "~/src/infinite-canvas/types";
 import {
   beginHeroTween,
   consumePendingTransition,
+  getHeroScreenRect,
   hideTransitionSource,
   holdTransition,
   releaseTransition,
@@ -95,10 +96,12 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   const after = (ms: number, fn: () => void) => {
     timersRef.current.push(window.setTimeout(fn, ms));
   };
+  const rafRef = React.useRef(0);
   React.useEffect(
     () => () => {
       for (const t of timersRef.current) clearTimeout(t);
       timersRef.current = [];
+      cancelAnimationFrame(rafRef.current);
     },
     [],
   );
@@ -389,7 +392,39 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     }
     const sourceKey = t.sourceKey;
     setBusy(true);
+    // The row is moved by hand from here on, frame by frame, so no CSS transition.
+    setMotion({ ms: 0, ease: TURN_EASE });
     setPhase("leaving");
+
+    // As the plane shrinks home, the rest of the row closes in to stay GAP from
+    // its edges (and level with its centre), instead of holding the places it
+    // had around the enlarged image.
+    const slotOf = (el: HTMLElement) => el.parentElement as HTMLElement;
+    const after0 = new Map<number, number>();
+    const before0 = new Map<number, number>();
+    for (let k = heroPos + 1, acc = 0; k <= kMax; k++) {
+      after0.set(k, acc);
+      acc += baseW(k) + GAP;
+    }
+    for (let k = heroPos - 1, acc = 0; k >= kMin; k--) {
+      acc += baseW(k);
+      before0.set(k, acc);
+      acc += GAP;
+    }
+    const neighbours = Array.from(overlay.querySelectorAll<HTMLElement>("img[data-pos]")).filter((el) => el !== hero);
+    const hug = () => {
+      const r = getHeroScreenRect();
+      if (r) {
+        const dy = r.y + r.height / 2 - viewport.h / 2;
+        for (const el of neighbours) {
+          const k = Number(el.dataset.pos);
+          const x = k > heroPos ? r.x + r.width + GAP + (after0.get(k) ?? 0) : r.x - GAP - (before0.get(k) ?? 0);
+          slotOf(el).style.transform = `translate(${x}px, ${dy}px)`;
+        }
+      }
+      rafRef.current = requestAnimationFrame(hug);
+    };
+    rafRef.current = requestAnimationFrame(hug);
 
     const imgs = Array.from(overlay.querySelectorAll<HTMLElement>(`.${styles.image}`)).filter((el) => el !== hero);
     const onScreen = imgs.filter((el) => {

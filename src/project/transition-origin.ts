@@ -55,6 +55,17 @@ let cameraGoal: CameraGoal | null = null;
  */
 const mediaOverrides = new Map<string, { item: MediaItem; cycle: number | null }>();
 let swapWaiter: { key: string; item: MediaItem; onReady: () => void } | null = null;
+/** Where the plane flying home is on screen this frame, so the page's row can
+ *  keep hugging it as it shrinks. */
+let heroScreenRect: TransitionRect | null = null;
+
+export function setHeroScreenRect(rect: TransitionRect | null): void {
+  heroScreenRect = rect;
+}
+
+export function getHeroScreenRect(): TransitionRect | null {
+  return heroScreenRect;
+}
 
 /** Put `item` on plane `key`; `onReady` fires once the plane is drawing it. */
 export function swapTransitionSource(key: string, item: MediaItem, onReady: () => void): void {
@@ -170,5 +181,6 @@ export function releaseTransition(): void {
   hiddenKey = null;
   cameraGoal = null;
   swapWaiter = null;
+  heroScreenRect = null;
   active = false;
 }
