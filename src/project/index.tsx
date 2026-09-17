@@ -35,13 +35,17 @@ const SHIFT_MS = 600;
 const EXIT_FADE_MS = 350;
 /**
  * Wheel and trackpad browse like the arrow keys: down / right is next. One
- * gesture moves one image — a step needs WHEEL_STEP px of travel one way, and
- * after it the wheel stays locked until it has been quiet for WHEEL_QUIET_MS,
- * so a trackpad's glide (or a wheel spun in one go) can't run through the album.
- * A notch that arrives mid-move is queued, not dropped.
+ * gesture moves one image — a step needs WHEEL_STEP px of travel one way, then
+ * the wheel locks so a trackpad's glide (or a wheel spun in one go) can't run
+ * through the album. The lock lifts after WHEEL_QUIET_MS of silence, or as soon
+ * as a new swipe starts inside the glide: a glide only ever slows down and never
+ * turns round, so the wheel speeding back up (by WHEEL_RESWIPE_PX and double
+ * its slowest) or reversing is fingers back on the trackpad. A step that
+ * arrives mid-move is queued, not dropped.
  */
 const WHEEL_STEP = 40;
 const WHEEL_QUIET_MS = 180;
+const WHEEL_RESWIPE_PX = 6;
 /** Beat between the arrival settling and the first image scaling up. */
 const FUSE_PAUSE_MS = 260;
 
@@ -316,7 +320,18 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     }
   };
 
-  const wheelRef = React.useRef({ last: 0, accum: 0, locked: false, queued: 0 as -1 | 0 | 1 });
+  const wheelRef = React.useRef({
+    last: 0,
+    accum: 0,
+    locked: false,
+    queued: 0 as -1 | 0 | 1,
+    // The gesture that set the lock: its direction, its fastest delta, and —
+    // once it has started to slow — its slowest since.
+    dir: 0,
+    peak: 0,
+    trough: 0,
+    decaying: false,
+  });
 
   const advance = (to: number) => {
     setBusy(true);
@@ -428,16 +443,32 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       // must not turn into the browser's back gesture.
       e.preventDefault();
       const w = wheelRef.current;
+      const raw = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+      const px = e.deltaMode === 1 ? raw * 16 : e.deltaMode === 2 ? raw * window.innerHeight : raw;
+      const speed = Math.abs(px);
       const quiet = e.timeStamp - w.last > WHEEL_QUIET_MS;
       w.last = e.timeStamp;
-      if (quiet) {
+
+      let fresh = quiet;
+      if (w.locked && !fresh && speed > 0) {
+        if (Math.sign(px) !== w.dir) fresh = true;
+        else if (!w.decaying) {
+          w.peak = Math.max(w.peak, speed);
+          if (speed < w.peak * 0.6) {
+            w.decaying = true;
+            w.trough = speed;
+          }
+        } else {
+          w.trough = Math.min(w.trough, speed);
+          fresh = speed >= w.trough * 2 && speed >= w.trough + WHEEL_RESWIPE_PX;
+        }
+      }
+      if (fresh) {
         w.locked = false;
         w.accum = 0;
       }
       if (w.locked) return;
 
-      const raw = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
-      const px = e.deltaMode === 1 ? raw * 16 : e.deltaMode === 2 ? raw * window.innerHeight : raw;
       if (Math.sign(px) !== Math.sign(w.accum)) w.accum = 0;
       w.accum += px;
       if (Math.abs(w.accum) < WHEEL_STEP) return;
@@ -445,6 +476,9 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       const dir = w.accum > 0 ? 1 : -1;
       w.accum = 0;
       w.locked = true;
+      w.dir = dir;
+      w.peak = speed;
+      w.decaying = false;
       if (phase !== "hero") return;
       if (busy) w.queued = dir;
       else step(dir);
