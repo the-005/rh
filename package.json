@@ -12,6 +12,7 @@
     "lint": "npm run check:biome",
     "format": "biome check --write --unsafe",
     "preview": "vite preview",
+    "work:images": "node scripts/prepare-work.ts",
     "research:images": "node scripts/prepare-research.ts"
   },
   "dependencies": {

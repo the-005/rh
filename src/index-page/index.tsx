@@ -27,14 +27,8 @@ import styles from "./style.module.css";
  */
 const COMMIT_MS = 90;
 
-export function IndexPage({
-  category,
-  onOpenProject,
-}: {
-  category: string;
-  onOpenProject: (id: string, startIndex: number) => void;
-}) {
-  const projects = category === "all" ? PROJECTS : PROJECTS.filter((p) => p.category === category);
+export function IndexPage({ onOpenProject }: { onOpenProject: (id: string, startIndex: number) => void }) {
+  const projects = PROJECTS;
   const [hovered, setHovered] = React.useState<string | null>(null);
   /** Where the marker sits — moves the instant you cross a cell. */
   const [head, setHead] = React.useState(0);

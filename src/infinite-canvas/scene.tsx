@@ -96,7 +96,6 @@ type CameraGridState = {
   /** Running sum of all scrollDelta values since session start. Used to sync
    *  absoluteZOffset when a MediaPlane remounts after its chunk leaves/re-enters view. */
   cumulativeScroll: number;
-  activeCategory: string;
 };
 
 function MediaPlane({
@@ -168,8 +167,6 @@ function MediaPlane({
     ready: false,
     absoluteZOffset: initialAbsoluteZ,
     lastCycle: initialCycle,
-    swapPending: false,
-    filterFade: false,
     cycleX: initPos.x,
     cycleY: initPos.y,
   });
@@ -188,7 +185,7 @@ function MediaPlane({
     to: { x: number; y: number; z: number; h: number; o: number };
   } | null>(null);
 
-  useFrame((_state, delta) => {
+  useFrame((_state) => {
     const material = materialRef.current;
     const mesh = meshRef.current;
     const state = localState.current;
@@ -291,7 +288,6 @@ function MediaPlane({
     if (newCycle !== state.lastCycle) {
       state.lastCycle = newCycle;
       state.opacity = 0;
-      state.swapPending = false;
       setCycleIndex(newCycle);
       const pos = getChunkCyclePositions(chunkCx, chunkCy, chunkCz, newCycle)[chunkIndex];
       state.cycleX = pos.x;
@@ -331,42 +327,14 @@ function MediaPlane({
 
     const naturalTarget = Math.min(gridFade, depthFade * depthFade);
 
-    // Category filter: planes whose current image doesn't match the active filter fade to 0.
-    // Once invisible they advance to the next matching image in the pool and fade back in.
-    const poolLen = mediaPool.length;
-    const effectiveMedia = mediaPool[((mediaIndex + state.lastCycle) % poolLen + poolLen) % poolLen];
-    const categoryMatch =
-      cam.activeCategory === "all" || !effectiveMedia?.category || effectiveMedia.category === cam.activeCategory;
-
-    if (!categoryMatch && !state.swapPending) state.swapPending = true;
-    if (categoryMatch) state.swapPending = false;
-
-    if (state.swapPending && state.opacity <= INVIS_THRESHOLD) {
-      state.swapPending = false;
-      for (let i = 1; i <= poolLen; i++) {
-        const candidate = mediaPool[((mediaIndex + state.lastCycle + i) % poolLen + poolLen) % poolLen];
-        if (cam.activeCategory === "all" || !candidate.category || candidate.category === cam.activeCategory) {
-          state.lastCycle += i;
-          state.opacity = 0;
-          setCycleIndex(state.lastCycle);
-          break;
-        }
-      }
-    }
-
     // While the project-page overlay owns this image, the plane vanishes instantly
     // (the overlay <img> is painted exactly over it) and fades back in on release.
     // Non-hero planes fade out softly while a transition is in flight.
     const hidden = isPlaneHidden(regKey);
     if (hidden) state.opacity = 0;
 
-    const target = hidden || isDimmedPlane(regKey) ? 0 : categoryMatch ? naturalTarget : 0;
-
-    if (!categoryMatch) state.filterFade = true;
-    if (state.filterFade && categoryMatch && state.opacity >= naturalTarget * 0.99) state.filterFade = false;
-
-    const alpha = state.filterFade ? 1 - Math.pow(INVIS_THRESHOLD, delta / 1.6) : 0.1;
-    state.opacity = target < INVIS_THRESHOLD && state.opacity < INVIS_THRESHOLD ? 0 : lerp(state.opacity, target, alpha);
+    const target = hidden || isDimmedPlane(regKey) ? 0 : naturalTarget;
+    state.opacity = target < INVIS_THRESHOLD && state.opacity < INVIS_THRESHOLD ? 0 : lerp(state.opacity, target, 0.1);
 
     material.opacity = state.opacity;
     const isVisible = state.opacity > INVIS_THRESHOLD;
@@ -744,7 +712,7 @@ const createInitialState = (camZ: number): ControllerState => ({
   pendingChunk: null,
 });
 
-function SceneController({ media, onTextureProgress, activeCategory = "all", onMediaClick, debugElRef, tuningGenVersion, showGuides, splashSrc, splashAspect, onSplashReady }: { media: MediaItem[]; onTextureProgress?: (progress: number) => void; activeCategory?: string; onMediaClick?: (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => void; debugElRef?: React.RefObject<HTMLDivElement | null>; tuningGenVersion?: number; showGuides?: boolean; splashSrc?: string; splashAspect?: number; onSplashReady?: () => void }) {
+function SceneController({ media, onTextureProgress, onMediaClick, debugElRef, tuningGenVersion, showGuides, splashSrc, splashAspect, onSplashReady }: { media: MediaItem[]; onTextureProgress?: (progress: number) => void; onMediaClick?: (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => void; debugElRef?: React.RefObject<HTMLDivElement | null>; tuningGenVersion?: number; showGuides?: boolean; splashSrc?: string; splashAspect?: number; onSplashReady?: () => void }) {
   const { camera, gl } = useThree();
   const isTouchDevice = useIsTouchDevice();
   const [, getKeys] = useKeyboardControls<keyof KeyboardKeys>();
@@ -758,7 +726,6 @@ function SceneController({ media, onTextureProgress, activeCategory = "all", onM
     camX: 0,
     scrollDelta: 0,
     cumulativeScroll: 0,
-    activeCategory: "all",
   });
   const planeRegistryRef = React.useRef<PlaneRegistry>(new Map());
 
@@ -963,7 +930,6 @@ function SceneController({ media, onTextureProgress, activeCategory = "all", onM
       camX: s.basePos.x,
       scrollDelta: s.velocity.z,
       cumulativeScroll: newCumScroll,
-      activeCategory,
     };
 
     const debugEl = debugElRef?.current;
@@ -1051,7 +1017,6 @@ export function InfiniteCanvasScene({
   fogFar = 480,
   backgroundColor = "#ffffff",
   fogColor = "#ffffff",
-  activeCategory = "all",
   splashSrc,
   splashAspect,
   onSplashReady,
@@ -1095,7 +1060,7 @@ export function InfiniteCanvasScene({
           <color attach="background" args={[backgroundColor]} />
           <fog attach="fog" args={[fogColor, fogNear, fogFar]} />
           <AdaptiveFov baseFov={cameraFov} />
-          <SceneController media={media} onTextureProgress={onTextureProgress} activeCategory={activeCategory} onMediaClick={onMediaClick} debugElRef={showDebug ? debugElRef : undefined} tuningGenVersion={tuningGenVersion} showGuides={showGuides} splashSrc={splashSrc} splashAspect={splashAspect} onSplashReady={onSplashReady} />
+          <SceneController media={media} onTextureProgress={onTextureProgress} onMediaClick={onMediaClick} debugElRef={showDebug ? debugElRef : undefined} tuningGenVersion={tuningGenVersion} showGuides={showGuides} splashSrc={splashSrc} splashAspect={splashAspect} onSplashReady={onSplashReady} />
           {showFps && <Stats className={styles.stats} />}
         </Canvas>
 

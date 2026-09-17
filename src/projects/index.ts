@@ -1,14 +1,14 @@
-import allManifest from "~/src/images/manifest.json";
 import type { MediaItem } from "~/src/infinite-canvas/types";
+import allManifest from "~/src/work/manifest.json";
 
 const ALL_MEDIA = allManifest as MediaItem[];
 
 export interface ProjectEntry {
-  /** Slug used by the /project/:id route and the `project` field in the manifest. */
+  /** The client's folder name — the `project` field in the manifest and the /project/:id route. */
   id: string;
+  /** The folder name as-is: renaming the folder retitles the project. */
   title: string;
   year: string;
-  category: string;
   /** How many images the project holds — handy for an index that wants a count. */
   count: number;
   /** First image in manifest order; the natural thumbnail if the index grows one. */
@@ -18,21 +18,13 @@ export interface ProjectEntry {
 }
 
 /**
- * The manifest carries no titles and no dates, so everything below is derived
- * from the slug and the filenames. Real names and years go here, keyed by slug —
- * one entry overrides one field, anything absent keeps the derived value.
+ * The title is the client's folder name. The manifest carries no dates, so the
+ * year is read from filenames when one holds it; real years go here, keyed by
+ * folder name, and anything absent keeps the derived value.
  */
-const OVERRIDES: Record<string, Partial<Pick<ProjectEntry, "title" | "year">>> = {};
+const YEARS: Record<string, string> = {};
 
-/** "art-11" → "Art 11" — a legible stand-in until the real titles land. */
-function titleFromId(id: string): string {
-  return id
-    .split("-")
-    .map((part) => (/^\d+$/.test(part) ? part.padStart(2, "0") : part.charAt(0).toUpperCase() + part.slice(1)))
-    .join(" ");
-}
-
-/** Filenames look like RH_ART2025_061.jpg — the only date the manifest carries. */
+/** A four-digit year anywhere in the path, if the client's filenames carry one. */
 function yearFromUrl(url: string): string {
   return url.match(/(?:19|20)\d{2}/)?.[0] ?? "—";
 }
@@ -49,9 +41,8 @@ export const PROJECTS: ProjectEntry[] = (() => {
 
   return [...byId].map(([id, items]) => ({
     id,
-    title: OVERRIDES[id]?.title ?? titleFromId(id),
-    year: OVERRIDES[id]?.year ?? yearFromUrl(items[0].url),
-    category: items[0].category ?? "",
+    title: id,
+    year: YEARS[id] ?? yearFromUrl(items[0].url),
     count: items.length,
     cover: items[0].url,
     images: items.map((item) => item.url),

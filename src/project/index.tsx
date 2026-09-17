@@ -1,5 +1,5 @@
 import * as React from "react";
-import allManifest from "~/src/images/manifest.json";
+import allManifest from "~/src/work/manifest.json";
 import type { MediaItem } from "~/src/infinite-canvas/types";
 import {
   beginHeroTween,

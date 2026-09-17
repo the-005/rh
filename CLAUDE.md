@@ -29,30 +29,38 @@ npm run check        # type check + lint (run before committing)
 npm run check:types  # TypeScript only
 npm run check:biome  # Biome lint only
 npm run format       # auto-format with Biome
-npm run research:images -- "<folder>"  # web copies of Research page images (see below)
+npm run work:images -- "<client folder>"  # web copies of the Work images (see Media)
+npm run research:images -- "<folder>"      # web copies of the Research images (see Media)
 ```
 
 Linting/formatting is **Biome** (not ESLint/Prettier). Config in `biome.jsonc`.
 
-## Research media
+## Media
 
-The Research page's images go through `scripts/prepare-research.ts`, which follows the owner's manual Squoosh process so a scripted batch matches a hand-made one. Treat these settings as fixed; change them only when asked:
+The site has two sets of images. **Work** is what the canvas (gallery), the project pages and the index show; they share `src/work/manifest.json`. **Research** is the outlier: its own page and its own `src/research/manifest.json`. Say "Work" for the first set. "Project" means a single one.
+
+Both scripts encode through `scripts/media.ts`, which follows the owner's manual Squoosh process so a scripted batch matches a hand-made one. Treat these settings as fixed; change them only when asked:
 
 - **JPEG through MozJPEG (Squoosh's JPEG encoder), quality 85**, progressive.
 - **Longest side 3000px, never enlarged.** It's a photography site, so keep the most resolution the cap allows; don't lower it to save bytes.
 - Turned upright from the camera's rotation tag, converted to sRGB from any embedded profile, metadata stripped — as Squoosh does.
-- **Order comes from the number in the filename**, natural sort (`_2` before `_10`). Don't reorder by hand; rename the source.
+- **Order comes from the name**, natural sort (`_2` before `_10`). Don't reorder by hand; rename the source.
+- Images only. Videos have no process yet.
 
-`npm run research:images -- "<source folder>"` reads the folder (originals are never written), writes `public/research/<name>.jpg`, skips copies newer than their source (`--force` redoes them), then rebuilds `src/research/manifest.json` — `{ url, width, height }[]` in order — from everything in `public/research/`. Run it once per source folder. Videos have no process yet.
+Originals are never written. Copies newer than their source are skipped (`--force` redoes them).
 
-Source material lives outside the repo, shaped `[optimize + format]/PR-XX_YY/PR-XX_IMAGES` and `PR-XX_VIDEO`. Images and videos mostly share one number sequence per project: the gaps in the image numbers are videos. Not every file follows it; PR-01 has `_64`/`_65` as both a JPEG and an MP4, and some videos have unnumbered names (`DFC_P20_04.mp4`).
+**Work** — `npm run work:images -- "<client folder>"`. The client folder holds one folder per project. **The folder name is the project's title, used as-is** (`PR-02_HE`), and also its `/project/:id`. Images sit in subfolders (`PR-02_IMG`, `PR-01_IMAGES`) or loose; subfolders with `VID` in the name are skipped. Each image gets two copies: `public/work/<project>/<name>.jpg` at 3000px for the project page and index, and `public/work/<project>/canvas/<name>.jpg` at **1000px for the canvas**, which holds every texture on the GPU at once (3000px would be about 8GB for 245 images). The client folder is the source of truth: anything in `public/work/` it no longer accounts for is deleted, and `src/work/manifest.json` — `{ url, canvasUrl, width, height, project }[]` — is rebuilt every run. The client folder today is `~/Downloads/[optimize + format]`: 11 projects, PR-01_DE … PR-012_PV (no PR-10), 245 images.
+
+**Research** — `npm run research:images -- "<source folder>"` writes `public/research/<name>.jpg`, then rebuilds `src/research/manifest.json` — `{ url, width, height }[]` — from everything in `public/research/`. Run it once per source folder. Its images are placeholders (PR-01_DE, which is also a Work project).
+
+In the client's folders, images and videos mostly share one number sequence per project: the gaps in the image numbers are videos. Not every file follows it; PR-01 has `_64`/`_65` as both a JPEG and an MP4, some videos have unnumbered names (`DFC_P20_04.mp4`), and PR-04_FC's images aren't numbered at all (`FASHIONCLASH COVER.jpg`, `FC24_01.jpg` … `spatial 02.jpg`), so they sort by name.
 
 ## Architecture
 
 ### Data flow
-`src/images/manifest.json` → `App` → `InfiniteCanvas` → Three.js scene
+`src/work/manifest.json` → `App` → `InfiniteCanvas` → Three.js scene
 
-Media items are `{ url, width, height, project?, category? }`. Images live in `public/images/`. Items with a matching `project` field are grouped into a project page accessible by clicking the image.
+Media items are `{ url, canvasUrl, width, height, project }`. Images live in `public/work/`; the canvas loads `canvasUrl` (1000px), everything else loads `url` (3000px). Items with a matching `project` field are grouped into a project page accessible by clicking the image. There is no category split (the old art/commerce filter is gone).
 
 ### Key modules
 
@@ -60,7 +68,7 @@ Media items are `{ url, width, height, project?, category? }`. Images live in `p
 - `scene.tsx` — four components: `InfiniteCanvasScene` (Canvas setup, fog, DPR, tuning panel UI), `SceneController` (input + chunk management), `Chunk` (spatial cell + debug labels), `MediaPlane` (single image plane with depth cycling + fade). Also contains `ChunkLabel` (debug wireframe + coord sprite).
 - `constants.ts` — physics/render constants. `CHUNK_OFFSETS` defines the 3D grid of visible chunks (currently dz = −1..1, dx/dy = −3..3).
 - `tuning.ts` — mutable singleton `tuning` object read live by `useFrame` and `generateChunkPlanes`. Sliders in the tuning panel write directly to this object; changes take effect without remounting except for generation params (density, size, cycle length, Z spacing) which call `bumpGen()` to clear the plane cache and increment `tuningGenVersion`.
-- `texture-manager.ts` — texture loading/caching; calls `onTextureProgress`.
+- `texture-manager.ts` — texture loading/caching, from each item's `canvasUrl` (the 1000px copy); calls `onTextureProgress`.
 - `utils.ts` — `generateChunkPlanes` (seeded RNG, QMC depth phases, staggered-lattice XY placement), LRU plane cache (max 256 entries), chunk update throttle logic.
 
 **`src/app/index.tsx`** — root `App`; wires manifest → `InfiniteCanvas` + `PageLoader` + `Frame`.
@@ -71,21 +79,21 @@ Media items are `{ url, width, height, project?, category? }`. Images live in `p
   Phases are `arrive | hero | settle | centre | out`; slot transforms carry x and scale only — the staggered drop/fade rides the inner `<img>`, mirroring the entry rise and keeping React's layout out of the imperative animation's way.  `busy` freezes DOM input for the duration of any move (the canvas half of that freeze is `isCanvasFrozen`). The turn and every advance share one measured curve, `cubic-bezier(0.42, 0, 0.58, 1)`; only the flight is expo-out. Escape stays live mid-move and falls back to a plain fade, since the choreographed exit needs a settled row.
 - `transition-origin.ts` — module-level store coordinating the persistent-plane transition (modeled on Codrops "persistent page transitions"): the clicked WebGL plane itself flies (expo-out, 1s) to the hero slot rect measured from the DOM, other planes dim, and canvas input freezes. Only when the plane is pinned at rest is the DOM `<img>` revealed and the plane hidden (`hideTransitionSource`), so the handoff is invisible. Supporting images stay hidden during flight and enter only after the hero lands: each rises 32px into its slot (0.7s expo-out) with a 0.07s left-to-right stagger. `releaseTransition()` (on close/unmount) un-hides, un-dims, and un-freezes; `holdTransition()` re-asserts the hold because StrictMode's double-invoked mount runs that release in between. The entry effect must only ever restore inline styles to `""` (the class value) — capturing "original" inline values breaks under StrictMode re-runs. The flight itself runs in `MediaPlane.useFrame` (`getHeroTween(regKey)` branch in `scene.tsx`); planes are addressed by registry key, not URL, because one image can appear on several planes. `beginHeroTween` takes a `mode`: `"in"` flies the plane from the canvas to a measured DOM rect, `"out"` re-pins it to wherever the row has since carried the image and flies it home. The run rebuilds whenever the mode changes, and `cycleX`/`cycleY`/`absoluteZOffset` stop updating once the branch takes over, so they still hold the plane's canvas slot — that is what "home" means.
 
-**`src/frame/index.tsx`** — HTML overlay header. The top row carries a `Home` wordmark at the left — a placeholder for the logo, and the way back to the canvas — and the view nav (gallery / index / research / about) at the right. Both inherit the frame's `mix-blend-mode: difference`, so they read white over the canvas and black over the index, about and project pages. The nav is hidden while a project is open (`showNav`). The category filter that used to sit at the left is gone; the canvas and index still filter, off the single `ACTIVE_CATEGORY` constant in `src/app/index.tsx`.
+**`src/frame/index.tsx`** — HTML overlay header. The top row carries a `Home` wordmark at the left — a placeholder for the logo, and the way back to the canvas — and the view nav (gallery / index / research / about) at the right. Both inherit the frame's `mix-blend-mode: difference`, so they read white over the canvas and black over the index, about and project pages. The nav is hidden while a project is open (`showNav`).
 
 **`src/about/index.tsx`** — `AboutPage`: the third view, and the only one that is words rather than pictures. Same paper as the index (white, DM Sans) so gallery → index → about is one material change. A statement column and a right-hand rail of contact / studio / services / clients. All the copy is placeholder standing in for the real text; the layout does not depend on its length. Lives at `/about`, sits at `z-index: 100` under the frame.
 
-**`src/research/index.tsx`** — `ResearchPage`: the Research images as a grid, at `/research`, on the same white as the index and about. Started as the Codrops grid-layout-transition demo (MIT), with its numbering and GSAP FLIP tween removed and its scale buttons replaced by a slider (50–150%, centred in the frame's top row). The slider sets a target tile width (`BASE_TILE` 150px × scale). The grid is `repeat(auto-fill, minmax(--tile, 1fr))`, so it fits as many columns as the row holds, stretches them to fill it, and moves a column at a time with both edges fixed. Each change lands in a single frame, the way Eagle's zoom does (checked frame by frame against a recording); tweening tiles between cells read as lag. **Stops** at 50/75/100/125/150 **snap on release**: a drag moves freely, and letting go within `SNAP` (6) of a stop lands on it. Anything further out stays where it was released; `SNAP` 12.5 would make every release snap. Arrow keys never snap, or 101 would snap back to 100 and the thumb would stick. No value readout. Images keep their own aspect ratios and **hang from the top of each row** (`align-items: start`), not centred. Phones get 3 fixed columns and no slider. It reads `src/research/manifest.json` (see Research media).
+**`src/research/index.tsx`** — `ResearchPage`: the Research images as a grid, at `/research`, on the same white as the index and about. Started as the Codrops grid-layout-transition demo (MIT), with its numbering and GSAP FLIP tween removed and its scale buttons replaced by a slider (50–150%, centred in the frame's top row). The slider sets a target tile width (`BASE_TILE` 150px × scale). The grid is `repeat(auto-fill, minmax(--tile, 1fr))`, so it fits as many columns as the row holds, stretches them to fill it, and moves a column at a time with both edges fixed. Each change lands in a single frame, the way Eagle's zoom does (checked frame by frame against a recording); tweening tiles between cells read as lag. **Stops** at 50/75/100/125/150 **snap on release**: a drag moves freely, and letting go within `SNAP` (6) of a stop lands on it. Anything further out stays where it was released; `SNAP` 12.5 would make every release snap. Arrow keys never snap, or 101 would snap back to 100 and the thumb would stick. No value readout. Images keep their own aspect ratios and **hang from the top of each row** (`align-items: start`), not centred. Phones get 3 fixed columns and no slider. It reads `src/research/manifest.json` (see Media).
 
-**`src/projects/index.ts`** — the manifest grouped into one entry per project slug, in manifest order: `{ id, title, year, category, count, cover }`. The manifest carries no titles and no dates, so titles are derived from the slug (`art-11` → "Art 11") and years from the filenames (`RH_ART2025_061.jpg` → 2025). Real names and dates go in the `OVERRIDES` map, keyed by slug — one field at a time, anything absent keeps the derived value.
+**`src/projects/index.ts`** — the Work manifest grouped into one entry per project, in manifest order: `{ id, title, year, count, cover, images }`. `id` and `title` are both the client's folder name, as-is, so renaming the folder retitles the project; routes encode it (`encodeURIComponent`) in case a name holds spaces. The manifest carries no dates: a year is read from a filename if one holds a 19xx/20xx, and none do today, so the index shows "—". Real years go in the `YEARS` map, keyed by folder name.
 
-**`src/index-page/index.tsx`** — `IndexPage`: the same projects read as a list instead of a space, on the white the project page uses. One row per project — number, title, year — sharing a single grid between header and rows so the columns line up. Hovering the list dims every row but the one under the cursor. It lives at the `/index` route (a route, not state, so it survives a reload and the back button), sits at `z-index: 100` under the frame, and respects the active category filter. A row hands off to `/project/:id` with no pending transition, so the project page takes its plain-fade fallback; closing returns you to whichever view opened it.
+**`src/index-page/index.tsx`** — `IndexPage`: the same projects read as a list instead of a space, on the white the project page uses. One row per project — number, title, year — sharing a single grid between header and rows so the columns line up. Hovering the list dims every row but the one under the cursor. It lives at the `/index` route (a route, not state, so it survives a reload and the back button), and sits at `z-index: 100` under the frame. A row hands off to `/project/:id` with no pending transition, so the project page takes its plain-fade fallback; closing returns you to whichever view opened it.
 
 **`src/loader/index.tsx`** — loading progress overlay (0–1 driven by texture load).
 
 ### Performance patterns
 
-**`cameraGridRef`**: A `React.RefObject<CameraGridState>` shared with every `MediaPlane`. Updated each frame in `SceneController.useFrame`; planes read `scrollDelta`, `camX`, `cumulativeScroll`, and `activeCategory` without causing React re-renders.
+**`cameraGridRef`**: A `React.RefObject<CameraGridState>` shared with every `MediaPlane`. Updated each frame in `SceneController.useFrame`; planes read `scrollDelta`, `camX`, and `cumulativeScroll` without causing React re-renders.
 
 **Two-stage velocity**: Input accumulates into `targetVel`. Each frame, `velocity` lerps toward `targetVel` (smoothing), then `targetVel` is multiplied by `VELOCITY_DECAY` (friction). Mouse parallax `drift` is separate.
 

@@ -2,7 +2,6 @@ import * as React from "react";
 import { useLocation } from "wouter";
 import { AboutPage } from "~/src/about";
 import { Frame, type View } from "~/src/frame";
-import allManifest from "~/src/images/manifest.json";
 import { IndexPage } from "~/src/index-page";
 import { InfiniteCanvas } from "~/src/infinite-canvas";
 import type { MediaItem } from "~/src/infinite-canvas/types";
@@ -11,13 +10,9 @@ import { ProjectPage } from "~/src/project";
 import { setPendingIndex, setPendingTransition } from "~/src/project/transition-origin";
 import { ResearchPage } from "~/src/research";
 import { SplashVideo } from "~/src/splash";
+import allManifest from "~/src/work/manifest.json";
 
 const ALL_MEDIA = allManifest as MediaItem[];
-
-// The category filter is off the frame — the top-left corner is the wordmark
-// now. The canvas and the index still filter, so this is the one value they
-// read; give it "art" or "commerce" to scope the whole site to a category.
-const ACTIVE_CATEGORY = "all";
 
 const VIEW_PATHS: Record<View, string> = { gallery: "/", index: "/index", research: "/research", about: "/about" };
 
@@ -34,8 +29,9 @@ export function App() {
   const [splashDismissed, setSplashDismissed] = React.useState(DEEP_LINKED);
 
   const projectId = React.useMemo(() => {
+    // Project ids are the client's folder names, which may hold spaces.
     const m = location.match(/^\/project\/([^/]+)$/);
-    return m ? m[1] : null;
+    return m ? decodeURIComponent(m[1]) : null;
   }, [location]);
 
   // The index, research and about are routes, so they survive a reload and the back
@@ -53,7 +49,7 @@ export function App() {
         projectImages.findIndex((m) => m.url === item.url)
       );
       setPendingTransition(rect, startIndex);
-      navigate(`/project/${item.project}`);
+      navigate(`/project/${encodeURIComponent(item.project)}`);
     }
   };
 
@@ -71,7 +67,6 @@ export function App() {
       {!DEEP_LINKED && <PageLoader progress={textureProgress} />}
       <InfiniteCanvas
         media={ALL_MEDIA}
-        activeCategory={ACTIVE_CATEGORY}
         onTextureProgress={setTextureProgress}
         onMediaClick={handleMediaClick}
         cameraFov={48}
@@ -83,13 +78,12 @@ export function App() {
       {view === "about" && !projectId && <AboutPage />}
       {view === "index" && !projectId && (
         <IndexPage
-          category={ACTIVE_CATEGORY}
           onOpenProject={(id, startIndex) => {
             openedFromIndexRef.current = true;
             // Scrubbed to an image, so open on it — same startIndex the canvas
             // hands over, minus the plane flight.
             setPendingIndex(startIndex);
-            navigate(`/project/${id}`);
+            navigate(`/project/${encodeURIComponent(id)}`);
           }}
         />
       )}

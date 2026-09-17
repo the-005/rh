@@ -1,10 +1,12 @@
 import type * as THREE from "three";
 
 export type MediaItem = {
+  /** Full-size copy (3000px long side): the project page and the index. */
   url: string;
+  /** Small copy (1000px long side) for the canvas, which holds every texture at once. */
+  canvasUrl: string;
   width: number;
   height: number;
-  category?: string;
   project?: string;
 };
 
@@ -23,7 +25,6 @@ export type InfiniteCanvasProps = {
   fogFar?: number;
   backgroundColor?: string;
   fogColor?: string;
-  activeCategory?: string;
   splashSrc?: string;
   splashAspect?: number;
   onSplashReady?: () => void;

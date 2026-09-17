@@ -11,7 +11,7 @@ const isTextureLoaded = (tex: THREE.Texture): boolean => {
 };
 
 export const getTexture = (item: MediaItem, onLoad?: (texture: THREE.Texture) => void): THREE.Texture => {
-  const key = item.url;
+  const key = item.canvasUrl;
   const existing = textureCache.get(key);
 
   if (existing) {
