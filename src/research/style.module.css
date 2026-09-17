@@ -19,8 +19,8 @@
   }
 }
 
-/* Centred in the frame's top row, set like the view nav beside it. The frame
-   above is pointer-events: none outside its own buttons, so clicks reach this. */
+/* Centred in the frame's top row, beside the view nav. The frame above is
+   pointer-events: none outside its own buttons, so the slider gets the drag. */
 .scale {
   position: fixed;
   top: 1rem;
@@ -28,38 +28,67 @@
   transform: translateX(-50%);
   z-index: 1;
   display: flex;
+  align-items: center;
   gap: 1rem;
-}
-
-.step {
-  appearance: none;
-  background: none;
-  border: none;
-  padding: 0;
-  font: inherit;
+  height: 1.2em;
   font-size: 0.9rem;
   letter-spacing: 0.06em;
-  color: inherit;
+}
+
+.slider {
+  appearance: none;
+  width: 160px;
+  height: 1.2em;
+  margin: 0;
+  background: transparent;
   cursor: pointer;
-  opacity: 0.5;
 }
 
-.step:hover,
-.stepActive {
-  opacity: 1;
+.slider::-webkit-slider-runnable-track {
+  height: 1px;
+  background: #bbbbbb;
 }
 
-.stepActive {
-  text-decoration: underline;
-  text-underline-offset: 0.35em;
+.slider::-moz-range-track {
+  height: 1px;
+  background: #bbbbbb;
 }
 
-/* Clears the frame's top row. align-items: start hangs every image from the
-   top of its row instead of centring it in the row's height. No transitions:
-   a scale step is a column change and should land in a single frame. */
+.slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 9px;
+  height: 9px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: #111111;
+}
+
+.slider::-moz-range-thumb {
+  width: 9px;
+  height: 9px;
+  border: none;
+  border-radius: 50%;
+  background: #111111;
+}
+
+.slider:focus-visible {
+  outline: 1px solid #111111;
+  outline-offset: 4px;
+}
+
+/* Fixed width and tabular figures, so the slider doesn't shuffle as 99 becomes 100. */
+.readout {
+  min-width: 4ch;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Clears the frame's top row. auto-fill + minmax fits as many columns of at
+   least --tile as the row holds and stretches them to fill it; align-items:
+   start hangs every image from the top of its row. No transitions: a change
+   lands in a single frame. */
 .grid {
   display: grid;
-  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(var(--tile), 100%), 1fr));
   align-items: start;
   gap: 1.5rem;
   padding: 5rem var(--page-padding, 1.5rem) 6rem;
@@ -72,46 +101,11 @@
   background: #f2f2f2;
 }
 
-/* Column counts per step, from the demo. */
-.grid[data-size="50%"] {
-  --cols: 16;
-}
-.grid[data-size="75%"] {
-  --cols: 10;
-}
-.grid[data-size="100%"] {
-  --cols: 8;
-}
-.grid[data-size="125%"] {
-  --cols: 6;
-}
-.grid[data-size="150%"] {
-  --cols: 4;
-}
-
-@media screen and (min-width: 768px) and (max-width: 1024px) {
-  .grid[data-size="50%"] {
-    --cols: 10;
-  }
-  .grid[data-size="75%"] {
-    --cols: 8;
-  }
-  .grid[data-size="100%"] {
-    --cols: 6;
-  }
-  .grid[data-size="125%"] {
-    --cols: 5;
-  }
-  .grid[data-size="150%"] {
-    --cols: 3;
-  }
-}
-
-/* Phones get three columns at every step, as in the demo, so the steps have
-   nothing to do there. */
+/* Phones get three columns, as in the demo, and no slider — there's no room
+   for it beside the nav. */
 @media screen and (max-width: 767px) {
-  .grid[data-size] {
-    --cols: 3;
+  .grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0.75rem;
   }
 
