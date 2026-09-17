@@ -65,18 +65,13 @@ const FUSE_PAUSE_MS = 260;
  */
 type Phase = "arrive" | "hero" | "settle" | "centre" | "out";
 
-interface Slot {
-  x: number;
-  scale: number;
-}
-
 export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }) {
   // Capture once on mount — clears the module-level store
   const transitionRef = React.useRef(consumePendingTransition());
 
   // Rotate the project's images so the clicked one is always first (leftmost).
   // The row keeps this order throughout — no flip — so the clicked image is
-  // the one that scales up, and "next" is always the image to its right.
+  // the one that scales up; after that the row is revealed to be endless.
   const filtered = ALL_MEDIA.filter((item) => item.project === id);
   const start = transitionRef.current?.startIndex ?? 0;
   const images = start > 0 ? [...filtered.slice(start), ...filtered.slice(0, start)] : filtered;
@@ -89,7 +84,8 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   }, []);
 
   const [phase, setPhase] = React.useState<Phase>("arrive");
-  const [heroIdx, setHeroIdx] = React.useState(0);
+  // Virtual position of the enlarged image. Unbounded: the row loops.
+  const [heroPos, setHeroPos] = React.useState(0);
   const [motion, setMotion] = React.useState({ ms: 0, ease: TURN_EASE });
   // Nothing is clickable while a move runs — the canvas half of this already
   // lives in transition-origin; this is the DOM half.
@@ -114,40 +110,54 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   const rowH = Math.min(viewport.h * MAX_ROW_HEIGHT_FRAC, availW / Math.max(sumAspect, 0.0001));
   const heroH = viewport.h * HERO_HEIGHT_FRAC;
 
-  // Visual order is the arrival order in every phase; the image you came from
-  // stays in slot 0.
+  // The row is endless: virtual position k shows images[mod(k)], so positions
+  // below 0 are the images before the one you clicked and positions past the
+  // end come round again. Arrival lays out 0..count-1 from the margin exactly as
+  // a finite row; the copies either side are already in place, only hidden, and
+  // slide in with the row when the first image scales up.
   const count = images.length;
-  const seq = images.map((_, i) => i);
-  const arrivalSlotIdx = 0;
+  const mod = (k: number) => ((k % count) + count) % count;
+  // The copy of the image you arrived on nearest to where you are — the exit
+  // travels to it the short way round.
+  const nearestStart = heroPos - mod(heroPos);
+  const arrivalPos = mod(heroPos) <= count / 2 ? nearestStart : nearestStart + count;
+  const centred =
+    phase === "hero" || phase === "settle" ? heroPos : phase === "centre" || phase === "out" ? arrivalPos : null;
+  const scaleOf = (k: number) => (phase === "hero" && k === heroPos ? heroH / rowH : 1);
+  const baseW = (k: number) => aspects[mod(k)] * rowH;
 
-  // Per-image x / scale. Every state is a permutation or a scale of the same
-  // fit-to-width row, so the row width is invariant and nothing relayouts.
-  const slots: Slot[] = new Array(count);
-  {
-    const scales = seq.map((_, k) => (phase === "hero" && k === heroIdx ? heroH / rowH : 1));
-    const widths = seq.map((imgI, k) => aspects[imgI] * rowH * scales[k]);
-    const xs: number[] = [];
-    let cursor = 0;
-    for (let k = 0; k < count; k++) {
-      xs.push(cursor);
-      cursor += widths[k] + GAP;
+  // Render a screen and a quarter past each side of every position the row can
+  // be anchored on, so images only ever enter or leave the DOM off-screen.
+  const reach = viewport.w * 1.25;
+  const edge = (from: number, dir: -1 | 1) => {
+    let k = from;
+    for (let covered = 0, n = 0; covered < reach && n < count * 8 + 16; n++) {
+      k += dir;
+      covered += baseW(k) + GAP;
     }
-    // Centre whichever image the moment is about. Settling keeps the image you
-    // were looking at where it is, so it shrinks in place — anchoring the row to
-    // the margin instead would throw it out to the right only to walk it back,
-    // and would do nothing at all when you were already on the last one.
-    const centred =
-      phase === "hero" || phase === "settle"
-        ? heroIdx
-        : phase === "centre" || phase === "out"
-          ? arrivalSlotIdx
-          : -1;
-    const shift =
-      centred >= 0 ? viewport.w / 2 - (xs[centred] + widths[centred] / 2) : MARGIN;
-    seq.forEach((imgI, k) => {
-      slots[imgI] = { x: xs[k] + shift, scale: scales[k] };
-    });
+    return k;
+  };
+  const anchors = phase === "arrive" ? [0] : [heroPos, arrivalPos];
+  const kMin = Math.min(...anchors.map((a) => edge(a, -1)));
+  const kMax = Math.max(...anchors.map((a) => edge(a, 1)));
+  const positions = Array.from({ length: kMax - kMin + 1 }, (_, i) => kMin + i);
+
+  // Per-position x. Centre whichever image the moment is about — settling keeps
+  // the image you were looking at where it is, so it shrinks in place. Before
+  // the scale-up nothing is centred and position 0 sits on the margin.
+  const anchorK = centred ?? 0;
+  const xs = new Map<number, number>();
+  xs.set(anchorK, centred === null ? MARGIN : viewport.w / 2 - (baseW(anchorK) * scaleOf(anchorK)) / 2);
+  for (let k = anchorK + 1; k <= kMax; k++) {
+    xs.set(k, (xs.get(k - 1) ?? 0) + baseW(k - 1) * scaleOf(k - 1) + GAP);
   }
+  for (let k = anchorK - 1; k >= kMin; k--) {
+    xs.set(k, (xs.get(k + 1) ?? 0) - GAP - baseW(k) * scaleOf(k));
+  }
+
+  // The counter reads the project's own order, not the rotated one.
+  const digits = Math.max(2, String(count).length);
+  const counter = `${String(((start + mod(heroPos)) % count) + 1).padStart(digits, "0")} / ${String(count).padStart(digits, "0")}`;
 
   const overlayRef = React.useRef<HTMLDivElement>(null);
   const heroImgRef = React.useRef<HTMLImageElement>(null);
@@ -172,8 +182,9 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       overlay.style.background = "transparent";
       hero.style.opacity = "0";
 
+      // Only the arrival row enters; the copies either side stay hidden until the reveal.
       const satellites = Array.from(
-        overlay.querySelectorAll<HTMLElement>(`.${styles.image}`),
+        overlay.querySelectorAll<HTMLElement>("[data-arrival]"),
       ).filter((el) => el !== hero);
       const closeBtn = overlay.querySelector<HTMLElement>(`.${styles.close}`);
       for (const el of satellites) {
@@ -305,7 +316,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       : 500;
     const timer = window.setTimeout(() => {
       setMotion({ ms: TURN_MS, ease: TURN_EASE });
-      setHeroIdx(0);
+      setHeroPos(0);
       setPhase("hero");
       after(TURN_MS, () => setBusy(false));
     }, settleAt);
@@ -343,28 +354,26 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   const advance = (to: number) => {
     setBusy(true);
     setMotion({ ms: ADV_MS, ease: TURN_EASE });
-    setHeroIdx(to);
+    setHeroPos(to);
     after(ADV_MS, () => {
       const queued = wheelRef.current.queued;
       wheelRef.current.queued = 0;
-      const next = to + queued;
-      if (queued && next >= 0 && next < count) advance(next);
+      if (queued) advance(to + queued);
       else setBusy(false);
     });
   };
 
-  /** Left half is previous, right half is next — the strip already runs that way. */
+  /** Left half is previous, right half is next. The row loops, so neither ends. */
   const step = (dir: -1 | 1) => {
     if (busy || phase !== "hero") return;
-    const to = heroIdx + dir;
-    if (to < 0 || to >= count) return;
-    advance(to);
+    advance(heroPos + dir);
   };
 
   /**
    * Exit, in three beats. Settling to row height keeps the current image
-   * centred. The row then travels to bring the image you arrived on (slot 0)
-   * to centre — a pure translation, nothing scaling — and only then does it
+   * centred. The row then travels the short way round the loop to bring the
+   * image you arrived on to centre — a pure translation, nothing scaling — and
+   * only then does it
    * fly to its own plane while the rest drop 32px away, the exact reverse of
    * how they rose.
    */
@@ -379,18 +388,20 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       setPhase("centre");
 
       // The row travels as one object, but the images leave one at a time —
-      // furthest from the departing image first, so by the time it flies most
-      // of what was beside it has gone. Mirrors the entry stagger.
+      // furthest (of those on screen) from the departing image first, so by the
+      // time it flies most of what was beside it has gone. Mirrors the entry.
       const overlay = overlayRef.current;
-      const hero = heroImgRef.current;
       if (!overlay) return;
       const imgs = Array.from(overlay.querySelectorAll<HTMLElement>(`.${styles.image}`));
+      const distance = (el: HTMLElement) => Math.abs(Number(el.dataset.pos) - arrivalPos);
+      const onScreen = imgs.filter((el) => {
+        const r = el.getBoundingClientRect();
+        return r.right > 0 && r.left < window.innerWidth;
+      });
+      const farthest = Math.max(0, ...onScreen.map(distance));
       for (const el of imgs) {
-        if (el === hero) continue;
-        // DOM order is the visual order and the departing image is leftmost,
-        // so the furthest is the last in the DOM: it gets no delay.
-        const fromFar = count - 1 - imgs.indexOf(el);
-        const delay = (fromFar * SAT_STAGGER_S).toFixed(2);
+        if (Number(el.dataset.pos) === arrivalPos) continue;
+        const delay = (Math.max(0, farthest - distance(el)) * SAT_STAGGER_S).toFixed(2);
         el.style.transition = `opacity ${EXIT_FADE_MS}ms ease ${delay}s, transform 0.5s ${TURN_EASE} ${delay}s`;
         el.style.opacity = "0";
         el.style.transform = `translateY(${RISE_PX}px)`;
@@ -400,7 +411,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     after(SETTLE_MS + SHIFT_MS, () => {
       const t = transitionRef.current;
       const overlay = overlayRef.current;
-      const hero = heroImgRef.current;
+      const hero = overlay?.querySelector<HTMLImageElement>(`[data-pos="${arrivalPos}"]`);
       if (!t?.sourceKey || !hero || !overlay) {
         fadeClose();
         return;
@@ -505,47 +516,46 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
 
       {browsing && (
         <div className={styles.zones}>
-          <button
-            type="button"
-            className={styles.zone}
-            aria-label="Previous image"
-            disabled={heroIdx <= 0}
-            onClick={() => step(-1)}
-          />
-          <button
-            type="button"
-            className={styles.zone}
-            aria-label="Next image"
-            disabled={heroIdx >= count - 1}
-            onClick={() => step(1)}
-          />
+          <button type="button" className={styles.zone} aria-label="Previous image" onClick={() => step(-1)} />
+          <button type="button" className={styles.zone} aria-label="Next image" onClick={() => step(1)} />
         </div>
       )}
 
+      <div className={`${styles.counter} ${phase === "hero" ? styles.counterShown : ""}`}>{counter}</div>
+
       <div className={styles.row}>
-        {images.map((img, i) => (
-          <div
-            key={img.url}
-            className={styles.slot}
-            style={{
-              width: aspects[i] * rowH,
-              height: rowH,
-              marginTop: -rowH / 2,
-              transform: `translate(${slots[i].x}px, 0) scale(${slots[i].scale})`,
-              transition: motion.ms ? `transform ${motion.ms}ms ${motion.ease}` : "none",
-              zIndex: phase === "hero" && seq[heroIdx] === i ? 2 : 1,
-            }}
-          >
-            <img
-              ref={i === 0 ? heroImgRef : null}
-              src={`/${img.url}`}
-              alt=""
-              draggable={false}
-              decoding="async"
-              className={styles.image}
-            />
-          </div>
-        ))}
+        {positions.map((k) => {
+          const img = images[mod(k)];
+          const inArrivalRow = k >= 0 && k < count;
+          return (
+            <div
+              key={k}
+              className={styles.slot}
+              style={{
+                width: baseW(k),
+                height: rowH,
+                marginTop: -rowH / 2,
+                transform: `translate(${xs.get(k) ?? 0}px, 0) scale(${scaleOf(k)})`,
+                transition: motion.ms ? `transform ${motion.ms}ms ${motion.ease}` : "none",
+                zIndex: phase === "hero" && k === heroPos ? 2 : 1,
+              }}
+            >
+              <img
+                ref={k === 0 ? heroImgRef : null}
+                data-pos={k}
+                data-arrival={inArrivalRow ? "" : undefined}
+                src={`/${img.url}`}
+                alt=""
+                draggable={false}
+                decoding="async"
+                className={styles.image}
+                // The copies are in place from the start, hidden, and appear the
+                // moment the row starts to move — so they slide in with it.
+                style={phase === "arrive" && !inArrivalRow ? { opacity: 0 } : undefined}
+              />
+            </div>
+          );
+        })}
       </div>
     </div>
   );

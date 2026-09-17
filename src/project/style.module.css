@@ -48,6 +48,35 @@
   cursor: inherit;
 }
 
+/* Which image you're on, in the project's own order. Centred in the frame's top
+   row, level with the wordmark; shown once the loop is revealed. */
+.counter {
+  position: absolute;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  font-weight: 300;
+  color: #111111;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.counterShown {
+  opacity: 1;
+}
+
+@media screen and (min-width: 53em) {
+  .counter {
+    top: var(--page-padding, 1.5rem);
+  }
+}
+
 .row {
   position: absolute;
   inset: 0;
