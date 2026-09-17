@@ -56,8 +56,8 @@
   font-size: 1.4rem;
   color: inherit;
   cursor: pointer;
-  /* Below the preview by default… */
-  z-index: 0;
+  /* No z-index, so the row isn't a stacking context: its name and year can rise
+     above the preview while its bar, playhead and lines stay under it. */
   transition: color 0.2s ease;
 }
 
@@ -67,71 +67,62 @@
   color: #bbbbbb;
 }
 
-/* …but the row you're on sits above it, so its title, year and track read over
-   the image while every other row stays underneath. */
 .list .row:hover,
 .list .row:focus-visible {
   color: #111111;
-  z-index: 2;
   outline: none;
 }
 
-/* --- scrub ----------------------------------------------------------------
-   Each row is a timeline. The rule under a row is its track: ticks divide it
-   into one cell per image, the marker snaps to the cell under the cursor, the
-   counter reads it back. All of it is absolutely positioned inside the row, so
-   the list's grid never sees it, and it layers with the row above the preview. */
-.track {
+/* Layering, top to bottom: the hovered row's name and year, the preview, then
+   everything else — other rows, and the hovered row's bar, playhead and lines. */
+.title,
+.year {
+  position: relative;
+  z-index: 0;
+}
+
+.list .row:hover .title,
+.list .row:hover .year,
+.list .row:focus-visible .title,
+.list .row:focus-visible .year {
+  z-index: 2;
+}
+
+/* --- player ---------------------------------------------------------------
+   The hovered row is a progress bar. Both parts are absolutely positioned in
+   the row's padding box — from just under the line above to just over the line
+   below — so the grid never sees them. */
+.progress {
   position: absolute;
+  top: 0;
+  bottom: 0;
   left: 0;
-  right: 0;
-  /* Sits exactly on the next row's border-top, which is the line you see. */
-  bottom: -1px;
-  height: 1px;
+  background: rgba(17, 17, 17, 0.07);
   pointer-events: none;
-  animation: trackIn 0.18s ease both;
+  transition: width 0.08s cubic-bezier(0.42, 0, 0.58, 1);
 }
 
-@keyframes trackIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-.tick {
+/* Sits on the line under the row, centred on the end of the bar. */
+.playhead {
   position: absolute;
   bottom: 0;
-  width: 1px;
-  height: 4px;
-  background: #cfcfcf;
-}
-
-/* Cells behind the head read as covered ground. */
-.tickPast {
-  background: #111111;
-}
-
-.marker {
-  position: absolute;
-  bottom: -2px;
-  width: 1px;
-  height: 9px;
-  background: #111111;
-  transition: left 0.08s cubic-bezier(0.42, 0, 0.58, 1);
-}
-
-.counter {
-  position: absolute;
-  bottom: 0.75rem;
   transform: translateX(-50%);
-  font-size: 0.875rem;
-  color: #999999;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
+  pointer-events: none;
   transition: left 0.08s cubic-bezier(0.42, 0, 0.58, 1);
+}
+
+.stop {
+  width: 8px;
+  height: 8px;
+  background: #111111;
+}
+
+.play {
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 9px solid #111111;
 }
 
 .title {
@@ -193,7 +184,8 @@
     display: none;
   }
 
-  .track {
+  .progress,
+  .playhead {
     display: none;
   }
 }

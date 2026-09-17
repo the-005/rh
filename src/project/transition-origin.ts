@@ -103,15 +103,6 @@ export function setPendingTransition(rect: TransitionRect, startIndex: number): 
   active = true;
 }
 
-/** Open a project at a chosen image with nothing flying. The index list has no
- *  canvas plane to hand over, so ProjectPage takes its plain-fade fallback (it
- *  gates every flight on `sourceKey`) while still honouring `startIndex`.
- *  Deliberately leaves `active` alone: there is no transition to freeze the
- *  canvas for, and setting it would strand the freeze with nothing to release it. */
-export function setPendingIndex(startIndex: number): void {
-  pending = { rect: { x: 0, y: 0, width: 0, height: 0 }, startIndex, sourceKey: null };
-}
-
 export function consumePendingTransition(): PendingTransition | null {
   const p = pending;
   pending = null;

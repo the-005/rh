@@ -6,7 +6,7 @@ import { IndexPage } from "~/src/index-page";
 import { InfiniteCanvas } from "~/src/infinite-canvas";
 import type { MediaItem } from "~/src/infinite-canvas/types";
 import { ProjectPage } from "~/src/project";
-import { setPendingIndex, setPendingTransition } from "~/src/project/transition-origin";
+import { setPendingTransition } from "~/src/project/transition-origin";
 import { ResearchPage } from "~/src/research";
 import { hasSeenSplash, SplashVideo } from "~/src/splash";
 import allManifest from "~/src/work/manifest.json";
@@ -31,15 +31,11 @@ export function App() {
     return m ? decodeURIComponent(m[1]) : null;
   }, [location]);
 
-  // The index, research and about are routes, so they survive a reload and the back
-  // button, and so an index row can hand straight off to /project/:id.
+  // The index, research and about are routes, so they survive a reload and the back button.
   const view: View = (Object.keys(VIEW_PATHS) as View[]).find((v) => VIEW_PATHS[v] === location) ?? "gallery";
-  // Closing a project returns you to whichever view opened it.
-  const openedFromIndexRef = React.useRef(false);
 
   const handleMediaClick = (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => {
     if (item.project) {
-      openedFromIndexRef.current = false;
       const projectImages = ALL_MEDIA.filter((m) => m.project === item.project);
       const startIndex = Math.max(
         0,
@@ -74,18 +70,10 @@ export function App() {
       {view === "research" && !projectId && <ResearchPage />}
       {view === "about" && !projectId && <AboutPage />}
       {view === "index" && !projectId && (
-        <IndexPage
-          onOpenProject={(id, startIndex) => {
-            openedFromIndexRef.current = true;
-            // Scrubbed to an image, so open on it — same startIndex the canvas
-            // hands over, minus the plane flight.
-            setPendingIndex(startIndex);
-            navigate(`/project/${encodeURIComponent(id)}`);
-          }}
-        />
+        <IndexPage />
       )}
       {projectId && (
-        <ProjectPage key={projectId} id={projectId} onClose={() => navigate(openedFromIndexRef.current ? "/index" : "/")} />
+        <ProjectPage key={projectId} id={projectId} onClose={() => navigate("/")} />
       )}
     </>
   );

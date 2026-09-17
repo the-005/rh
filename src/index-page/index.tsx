@@ -4,17 +4,17 @@ import styles from "./style.module.css";
 
 /**
  * The index: the same projects the gallery holds, read as a list instead of a
- * space. One row per project — number, title, year — on the white the project
- * page already uses, so the toggle reads as canvas → paper. The list keeps to
- * the left half; hovering a row shows that project's cover in the right.
+ * space. One full-width row per project, title and year, on white. Hovering a
+ * row shows its images centred on screen, above every other row but under that
+ * row's own name and year.
  *
- * Each row is also a timeline. Cursor x across the row maps to an image in that
- * project, so the row's middle is the album's middle: sweeping left to right
- * reads the whole project without opening it. The row's own hairline is the
- * track — ticks divide it into one cell per image, a marker snaps to the cell
- * under the cursor, and a counter reads it back. Clicking opens the project on
- * whichever image the marker is on, which ProjectPage already supports through
- * `startIndex`.
+ * Each row is also a player. Cursor x across the row maps to an image, so
+ * sweeping left to right reads the whole album. A grey bar fills the row from
+ * its left edge to the current image, ending at the centre of the playhead
+ * sitting on the row's line: a square while stopped, a triangle while playing.
+ * Clicking the row plays the album as a slideshow from there (looping) or stops
+ * it. While it plays the cursor doesn't scrub, so the slideshow isn't knocked
+ * about by a twitch of the hand. The index doesn't open projects.
  */
 
 /**
@@ -26,28 +26,43 @@ import styles from "./style.module.css";
  * number to turn if the scrub feels wrong.
  */
 const COMMIT_MS = 90;
+/** Slideshow pace while a row is playing. */
+const PLAY_MS = 1500;
 
-export function IndexPage({ onOpenProject }: { onOpenProject: (id: string, startIndex: number) => void }) {
+export function IndexPage() {
   const projects = PROJECTS;
   const [hovered, setHovered] = React.useState<string | null>(null);
-  /** Where the marker sits — moves the instant you cross a cell. */
+  /** Where the playhead sits — moves the instant you cross a cell. */
   const [head, setHead] = React.useState(0);
   /** Which image the preview is showing — follows the head after COMMIT_MS. */
   const [shown, setShown] = React.useState(0);
+  const [playing, setPlaying] = React.useState(false);
 
   // The head is mirrored in a ref because two mousemoves can land inside one
   // render, and the second must compare against the first, not the stale prop.
-  // It is also what a click reads: the marker is the promise, so clicking
-  // mid-commit must open the image under the head, not the last one committed.
+  // It is also where playback starts: clicking mid-commit plays from the image
+  // under the playhead, not the last one committed.
   const headRef = React.useRef(0);
   const commitRef = React.useRef<number | null>(null);
+  const playRef = React.useRef<number | null>(null);
   const warmedRef = React.useRef<Set<string>>(new Set());
 
   const clearCommit = () => {
     if (commitRef.current !== null) window.clearTimeout(commitRef.current);
     commitRef.current = null;
   };
-  React.useEffect(() => clearCommit, []);
+  const stop = () => {
+    if (playRef.current !== null) window.clearInterval(playRef.current);
+    playRef.current = null;
+    setPlaying(false);
+  };
+  React.useEffect(
+    () => () => {
+      clearCommit();
+      if (playRef.current !== null) window.clearInterval(playRef.current);
+    },
+    [],
+  );
 
   /**
    * The canvas has already fetched most of these as textures, so this mostly
@@ -65,6 +80,7 @@ export function IndexPage({ onOpenProject }: { onOpenProject: (id: string, start
 
   const enter = (project: ProjectEntry) => {
     clearCommit();
+    stop();
     headRef.current = 0;
     setHovered(project.id);
     setHead(0);
@@ -73,6 +89,7 @@ export function IndexPage({ onOpenProject }: { onOpenProject: (id: string, start
   };
 
   const scrub = (e: React.MouseEvent<HTMLButtonElement>, project: ProjectEntry) => {
+    if (playRef.current !== null) return;
     const n = project.images.length;
     // Measured live rather than cached on enter, so the mapping stays true if
     // the list scrolls or the window resizes mid-sweep.
@@ -85,8 +102,28 @@ export function IndexPage({ onOpenProject }: { onOpenProject: (id: string, start
     commitRef.current = window.setTimeout(() => setShown(i), COMMIT_MS);
   };
 
+  /** Play from the current image, or stop where it is. */
+  const toggle = (project: ProjectEntry) => {
+    if (hovered !== project.id) enter(project);
+    if (playRef.current !== null) {
+      stop();
+      return;
+    }
+    clearCommit();
+    setShown(headRef.current);
+    setPlaying(true);
+    const n = project.images.length;
+    playRef.current = window.setInterval(() => {
+      const next = (headRef.current + 1) % n;
+      headRef.current = next;
+      setHead(next);
+      setShown(next);
+    }, PLAY_MS);
+  };
+
   const leave = () => {
     clearCommit();
+    stop();
     setHovered(null);
   };
 
@@ -105,12 +142,12 @@ export function IndexPage({ onOpenProject }: { onOpenProject: (id: string, start
               <button
                 type="button"
                 className={styles.row}
-                onClick={() => onOpenProject(project.id, headRef.current)}
+                aria-pressed={hovered === project.id && playing}
+                onClick={() => toggle(project)}
                 onMouseEnter={() => enter(project)}
                 onMouseMove={(e) => scrub(e, project)}
                 // Keyboard focus lands on the project, not a position in it —
-                // there is no cursor to read, so the row opens at its first
-                // image the way it always has.
+                // there is no cursor to read, so it starts at the first image.
                 onFocus={() => {
                   if (hovered === project.id) return;
                   enter(project);
@@ -118,7 +155,7 @@ export function IndexPage({ onOpenProject }: { onOpenProject: (id: string, start
               >
                 <span className={styles.title}>{project.title}</span>
                 <span className={styles.year}>{project.year}</span>
-                {hovered === project.id && <Track project={project} head={head} />}
+                {hovered === project.id && <Playhead project={project} head={head} playing={playing} />}
               </button>
             </li>
           ))}
@@ -134,24 +171,17 @@ export function IndexPage({ onOpenProject }: { onOpenProject: (id: string, start
   );
 }
 
-/** The row's hairline, read as a filmstrip: one cell per image, head on top. */
-function Track({ project, head }: { project: ProjectEntry; head: number }) {
-  const n = project.images.length;
-  const at = `${((head + 0.5) / n) * 100}%`;
-
+/**
+ * The row as a progress bar: a grey fill from the left edge to the centre of
+ * the current image's cell, and the playhead sitting on the row's line at that
+ * point — a triangle while playing, a square while stopped.
+ */
+function Playhead({ project, head, playing }: { project: ProjectEntry; head: number; playing: boolean }) {
+  const at = `${((head + 0.5) / project.images.length) * 100}%`;
   return (
-    <span className={styles.track} aria-hidden="true">
-      {Array.from({ length: n + 1 }, (_, i) => (
-        <span
-          key={project.images[i] ?? "end"}
-          className={`${styles.tick} ${i <= head ? styles.tickPast : ""}`}
-          style={{ left: `${(i / n) * 100}%` }}
-        />
-      ))}
-      <span className={styles.marker} style={{ left: at }} />
-      <span className={styles.counter} style={{ left: at }}>
-        {String(head + 1).padStart(2, "0")} / {n}
-      </span>
-    </span>
+    <>
+      <span className={styles.progress} style={{ width: at }} aria-hidden="true" />
+      <span className={`${styles.playhead} ${playing ? styles.play : styles.stop}`} style={{ left: at }} aria-hidden="true" />
+    </>
   );
 }
