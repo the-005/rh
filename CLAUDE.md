@@ -29,9 +29,23 @@ npm run check        # type check + lint (run before committing)
 npm run check:types  # TypeScript only
 npm run check:biome  # Biome lint only
 npm run format       # auto-format with Biome
+npm run research:images -- "<folder>"  # web copies of Research page images (see below)
 ```
 
 Linting/formatting is **Biome** (not ESLint/Prettier). Config in `biome.jsonc`.
+
+## Research media
+
+The Research page's images go through `scripts/prepare-research.ts`, which follows the owner's manual Squoosh process so a scripted batch matches a hand-made one. Treat these settings as fixed; change them only when asked:
+
+- **JPEG through MozJPEG (Squoosh's JPEG encoder), quality 85**, progressive.
+- **Longest side 3000px, never enlarged.** It's a photography site, so keep the most resolution the cap allows; don't lower it to save bytes.
+- Turned upright from the camera's rotation tag, converted to sRGB from any embedded profile, metadata stripped — as Squoosh does.
+- **Order comes from the number in the filename**, natural sort (`_2` before `_10`). Don't reorder by hand; rename the source.
+
+`npm run research:images -- "<source folder>"` reads the folder (originals are never written), writes `public/research/<name>.jpg`, skips copies newer than their source (`--force` redoes them), then rebuilds `src/research/manifest.json` — `{ url, width, height }[]` in order — from everything in `public/research/`. Run it once per source folder. Videos have no process yet.
+
+Source material lives outside the repo, shaped `[optimize + format]/PR-XX_YY/PR-XX_IMAGES` and `PR-XX_VIDEO`. Images and videos mostly share one number sequence per project: the gaps in the image numbers are videos. Not every file follows it; PR-01 has `_64`/`_65` as both a JPEG and an MP4, and some videos have unnumbered names (`DFC_P20_04.mp4`).
 
 ## Architecture
 

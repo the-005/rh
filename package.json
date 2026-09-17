@@ -11,7 +11,8 @@
     "check": "npm run check:types && npm run check:biome",
     "lint": "npm run check:biome",
     "format": "biome check --write --unsafe",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "research:images": "node scripts/prepare-research.ts"
   },
   "dependencies": {
     "@react-three/drei": "10.7.7",
@@ -29,6 +30,7 @@
     "@types/three": "0.182.0",
     "@vitejs/plugin-react": "^5.1.2",
     "babel-plugin-react-compiler": "^1.0.0",
+    "sharp": "0.35.4",
     "typescript": "~5.9.3",
     "vite": "^7.2.7"
   }
