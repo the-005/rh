@@ -12,7 +12,6 @@ export type MediaItem = {
 
 export type InfiniteCanvasProps = {
   media: MediaItem[];
-  onTextureProgress?: (progress: number) => void;
   onMediaClick?: (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => void;
   showFps?: boolean;
   showControls?: boolean;
@@ -28,6 +27,8 @@ export type InfiniteCanvasProps = {
   splashSrc?: string;
   splashAspect?: number;
   onSplashReady?: () => void;
+  /** The splash plane has left sight for good (scrolled away or behind the camera). */
+  onSplashGone?: () => void;
 };
 
 export type ChunkData = {

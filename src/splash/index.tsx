@@ -1,6 +1,27 @@
 import * as React from "react";
 import styles from "./style.module.css";
 
+// A visitor sees the intro once. Kept in localStorage — a cookie in effect, but
+// never sent to a server. Storage can be unavailable (private windows, blocked
+// site data); then the splash simply plays, as it would on a first visit.
+const SEEN_KEY = "rh:splash-seen";
+
+export function hasSeenSplash() {
+  try {
+    return localStorage.getItem(SEEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function markSplashSeen() {
+  try {
+    localStorage.setItem(SEEN_KEY, "1");
+  } catch {
+    // Nothing to do: next visit plays it again.
+  }
+}
+
 type Props = {
   visible: boolean;
   videoSrc: string;
@@ -33,7 +54,8 @@ export function SplashVideo({ visible, videoSrc, onDismiss }: Props) {
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: full-screen splash overlay
     <div className={styles.overlay} onWheel={handleWheel}>
-      <video ref={videoRef} src={videoSrc} autoPlay muted loop playsInline className={styles.video} />
+      {/* Seen once it actually plays, not merely once the page opened. */}
+      <video ref={videoRef} src={videoSrc} autoPlay muted loop playsInline className={styles.video} onPlaying={markSplashSeen} />
     </div>
   );
 }

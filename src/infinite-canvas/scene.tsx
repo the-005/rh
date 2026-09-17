@@ -1,4 +1,4 @@
-import { KeyboardControls, Stats, useKeyboardControls, useProgress } from "@react-three/drei";
+import { KeyboardControls, Stats, useKeyboardControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as React from "react";
 import * as THREE from "three";
@@ -450,11 +450,14 @@ function SplashPlane({
   aspect,
   cameraGridRef,
   onReady,
+  onGone,
 }: {
   src: string;
   aspect: number;
   cameraGridRef: React.RefObject<CameraGridState>;
   onReady: () => void;
+  /** Called once, when the plane leaves sight for good. */
+  onGone?: () => void;
 }) {
   const meshRef = React.useRef<THREE.Mesh>(null);
   const materialRef = React.useRef<THREE.MeshBasicMaterial>(null);
@@ -472,18 +475,33 @@ function SplashPlane({
     ? SPLASH_HEIGHT / (2 * tanHalfFov)
     : (SPLASH_HEIGHT * aspect) / (2 * tanHalfFov * viewportAspect);
 
+  const initialAbsoluteZ = startZOffset + cameraGridRef.current.cumulativeScroll;
   const localState = React.useRef({
     opacity: 0,
-    absoluteZOffset: startZOffset + cameraGridRef.current.cumulativeScroll,
+    absoluteZOffset: initialAbsoluteZ,
+    // The depth cycle it starts in. Leaving it means it has faded out past the
+    // far end or passed behind the camera — where a MediaPlane wraps round.
+    cycle: Math.floor(initialAbsoluteZ / tuning.depthFadeEnd),
+    gone: false,
   });
 
   React.useEffect(() => {
-    const loader = new THREE.TextureLoader();
-    loader.load(src, (tex) => {
+    let cancelled = false;
+    let loaded: THREE.Texture | null = null;
+    new THREE.TextureLoader().load(src, (tex) => {
+      if (cancelled) {
+        tex.dispose();
+        return;
+      }
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.needsUpdate = true;
+      loaded = tex;
       setTexture(tex);
     });
+    return () => {
+      cancelled = true;
+      loaded?.dispose();
+    };
   }, [src]);
 
   React.useEffect(() => {
@@ -504,10 +522,23 @@ function SplashPlane({
     if (!mesh || !material || !texture) return;
 
     const state = localState.current;
+    if (state.gone) return;
     const { scrollDelta } = cameraGridRef.current;
     state.absoluteZOffset += scrollDelta;
 
     const { depthFadeEnd, depthFadeStart } = tuning;
+
+    // The splash is seen once. A MediaPlane wraps round its depth cycle and
+    // comes back; the moment this one would — scrolled out past the far fade,
+    // or back behind the camera — it retires instead, and the parent unmounts it.
+    if (Math.floor(state.absoluteZOffset / depthFadeEnd) !== state.cycle) {
+      state.gone = true;
+      state.opacity = 0;
+      material.opacity = 0;
+      mesh.visible = false;
+      onGone?.();
+      return;
+    }
     // The splash starts at cover size, which may sit inside the global near-fade
     // band — clamp the fade-in end below startZOffset so it spawns fully opaque.
     const depthFadeNear = Math.min(tuning.depthFadeNear, startZOffset * 0.8);
@@ -712,7 +743,7 @@ const createInitialState = (camZ: number): ControllerState => ({
   pendingChunk: null,
 });
 
-function SceneController({ media, onTextureProgress, onMediaClick, debugElRef, tuningGenVersion, showGuides, splashSrc, splashAspect, onSplashReady }: { media: MediaItem[]; onTextureProgress?: (progress: number) => void; onMediaClick?: (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => void; debugElRef?: React.RefObject<HTMLDivElement | null>; tuningGenVersion?: number; showGuides?: boolean; splashSrc?: string; splashAspect?: number; onSplashReady?: () => void }) {
+function SceneController({ media, onMediaClick, debugElRef, tuningGenVersion, showGuides, splashSrc, splashAspect, onSplashReady, onSplashGone }: { media: MediaItem[]; onMediaClick?: (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => void; debugElRef?: React.RefObject<HTMLDivElement | null>; tuningGenVersion?: number; showGuides?: boolean; splashSrc?: string; splashAspect?: number; onSplashReady?: () => void; onSplashGone?: () => void }) {
   const { camera, gl } = useThree();
   const isTouchDevice = useIsTouchDevice();
   const [, getKeys] = useKeyboardControls<keyof KeyboardKeys>();
@@ -730,17 +761,6 @@ function SceneController({ media, onTextureProgress, onMediaClick, debugElRef, t
   const planeRegistryRef = React.useRef<PlaneRegistry>(new Map());
 
   const [chunks, setChunks] = React.useState<ChunkData[]>([]);
-
-  const { progress } = useProgress();
-  const maxProgress = React.useRef(0);
-
-  React.useEffect(() => {
-    const rounded = Math.round(progress);
-    if (rounded > maxProgress.current) {
-      maxProgress.current = rounded;
-      onTextureProgress?.(rounded);
-    }
-  }, [progress, onTextureProgress]);
 
   React.useEffect(() => {
     const canvas = gl.domElement;
@@ -997,14 +1017,13 @@ function SceneController({ media, onTextureProgress, onMediaClick, debugElRef, t
       {chunks.map((chunk) => (
         <Chunk key={chunk.key} cx={chunk.cx} cy={chunk.cy} cz={chunk.cz} media={media} cameraGridRef={cameraGridRef} registryRef={planeRegistryRef} onMediaClick={onMediaClick} showLabel={!!debugElRef && (showGuides ?? true)} />
       ))}
-      {splashSrc && onSplashReady && <SplashPlane src={splashSrc} aspect={splashAspect ?? 16 / 9} cameraGridRef={cameraGridRef} onReady={onSplashReady} />}
+      {splashSrc && onSplashReady && <SplashPlane src={splashSrc} aspect={splashAspect ?? 16 / 9} cameraGridRef={cameraGridRef} onReady={onSplashReady} onGone={onSplashGone} />}
     </>
   );
 }
 
 export function InfiniteCanvasScene({
   media,
-  onTextureProgress,
   onMediaClick,
   showFps = false,
   showControls = false,
@@ -1020,6 +1039,7 @@ export function InfiniteCanvasScene({
   splashSrc,
   splashAspect,
   onSplashReady,
+  onSplashGone,
 }: InfiniteCanvasProps) {
   const debugElRef = React.useRef<HTMLDivElement>(null);
   const isTouchDevice = useIsTouchDevice();
@@ -1060,7 +1080,7 @@ export function InfiniteCanvasScene({
           <color attach="background" args={[backgroundColor]} />
           <fog attach="fog" args={[fogColor, fogNear, fogFar]} />
           <AdaptiveFov baseFov={cameraFov} />
-          <SceneController media={media} onTextureProgress={onTextureProgress} onMediaClick={onMediaClick} debugElRef={showDebug ? debugElRef : undefined} tuningGenVersion={tuningGenVersion} showGuides={showGuides} splashSrc={splashSrc} splashAspect={splashAspect} onSplashReady={onSplashReady} />
+          <SceneController media={media} onMediaClick={onMediaClick} debugElRef={showDebug ? debugElRef : undefined} tuningGenVersion={tuningGenVersion} showGuides={showGuides} splashSrc={splashSrc} splashAspect={splashAspect} onSplashReady={onSplashReady} onSplashGone={onSplashGone} />
           {showFps && <Stats className={styles.stats} />}
         </Canvas>
 

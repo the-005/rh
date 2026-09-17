@@ -5,28 +5,25 @@ import { Frame, type View } from "~/src/frame";
 import { IndexPage } from "~/src/index-page";
 import { InfiniteCanvas } from "~/src/infinite-canvas";
 import type { MediaItem } from "~/src/infinite-canvas/types";
-import { PageLoader } from "~/src/loader";
 import { ProjectPage } from "~/src/project";
 import { setPendingIndex, setPendingTransition } from "~/src/project/transition-origin";
 import { ResearchPage } from "~/src/research";
-import { SplashVideo } from "~/src/splash";
+import { hasSeenSplash, SplashVideo } from "~/src/splash";
 import allManifest from "~/src/work/manifest.json";
 
 const ALL_MEDIA = allManifest as MediaItem[];
 
 const VIEW_PATHS: Record<View, string> = { gallery: "/", index: "/index", research: "/research", about: "/about" };
 
-// Whether this visit started somewhere other than the homepage (e.g. /project/x).
-// Deep links skip the intro splash and the texture progress overlay — the project
-// page is already covering the canvas while it loads.
-const DEEP_LINKED = window.location.pathname !== "/";
+// The intro splash plays once: not on a deep link (e.g. /project/x, whose page
+// already covers the canvas), and not for a visitor who has seen it before.
+const SKIP_SPLASH = window.location.pathname !== "/" || hasSeenSplash();
 
 export function App() {
   const [location, navigate] = useLocation();
-  const [textureProgress, setTextureProgress] = React.useState(0);
   const [splashFrame, setSplashFrame] = React.useState<string | null>(null);
   const [splashAspect, setSplashAspect] = React.useState(16 / 9);
-  const [splashDismissed, setSplashDismissed] = React.useState(DEEP_LINKED);
+  const [splashDismissed, setSplashDismissed] = React.useState(SKIP_SPLASH);
 
   const projectId = React.useMemo(() => {
     // Project ids are the client's folder names, which may hold spaces.
@@ -64,15 +61,15 @@ export function App() {
         }}
       />
       <Frame view={view} onViewChange={(v) => navigate(VIEW_PATHS[v])} showNav={!projectId} />
-      {!DEEP_LINKED && <PageLoader progress={textureProgress} />}
       <InfiniteCanvas
         media={ALL_MEDIA}
-        onTextureProgress={setTextureProgress}
         onMediaClick={handleMediaClick}
         cameraFov={48}
         splashSrc={splashFrame ?? undefined}
         splashAspect={splashAspect}
         onSplashReady={() => setSplashDismissed(true)}
+        // Out of sight is gone for the visit: drop the frame and its texture.
+        onSplashGone={() => setSplashFrame(null)}
       />
       {view === "research" && !projectId && <ResearchPage />}
       {view === "about" && !projectId && <AboutPage />}
