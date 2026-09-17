@@ -1,0 +1,128 @@
+.page {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: #ffffff;
+  color: #111111;
+  overflow-y: auto;
+  font-family: "DM Sans", sans-serif;
+  font-weight: 300;
+  animation: fadeIn 0.35s ease both;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Centred in the frame's top row, set like the view nav beside it. The frame
+   above is pointer-events: none outside its own buttons, so clicks reach this. */
+.scale {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1;
+  display: flex;
+  gap: 1rem;
+}
+
+.step {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 0.9rem;
+  letter-spacing: 0.06em;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.5;
+}
+
+.step:hover,
+.stepActive {
+  opacity: 1;
+}
+
+.stepActive {
+  text-decoration: underline;
+  text-underline-offset: 0.35em;
+}
+
+/* Clears the frame's top row. align-items: start hangs every image from the
+   top of its row instead of centring it in the row's height. No transitions:
+   a scale step is a column change and should land in a single frame. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  align-items: start;
+  gap: 1.5rem;
+  padding: 5rem var(--page-padding, 1.5rem) 6rem;
+}
+
+.image {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #f2f2f2;
+}
+
+/* Column counts per step, from the demo. */
+.grid[data-size="50%"] {
+  --cols: 16;
+}
+.grid[data-size="75%"] {
+  --cols: 10;
+}
+.grid[data-size="100%"] {
+  --cols: 8;
+}
+.grid[data-size="125%"] {
+  --cols: 6;
+}
+.grid[data-size="150%"] {
+  --cols: 4;
+}
+
+@media screen and (min-width: 768px) and (max-width: 1024px) {
+  .grid[data-size="50%"] {
+    --cols: 10;
+  }
+  .grid[data-size="75%"] {
+    --cols: 8;
+  }
+  .grid[data-size="100%"] {
+    --cols: 6;
+  }
+  .grid[data-size="125%"] {
+    --cols: 5;
+  }
+  .grid[data-size="150%"] {
+    --cols: 3;
+  }
+}
+
+/* Phones get three columns at every step, as in the demo, so the steps have
+   nothing to do there. */
+@media screen and (max-width: 767px) {
+  .grid[data-size] {
+    --cols: 3;
+    gap: 0.75rem;
+  }
+
+  .scale {
+    display: none;
+  }
+}
+
+@media screen and (min-width: 53em) {
+  /* The frame's desktop padding. */
+  .scale {
+    top: var(--page-padding, 1.5rem);
+  }
+}

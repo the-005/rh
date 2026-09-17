@@ -1,8 +1,8 @@
 import styles from "./style.module.css";
 
-export type View = "gallery" | "index" | "about";
+export type View = "gallery" | "index" | "research" | "about";
 
-const NAV: View[] = ["gallery", "index", "about"];
+const NAV: View[] = ["gallery", "index", "research", "about"];
 
 export function Frame({
   view,

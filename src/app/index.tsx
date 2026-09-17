@@ -1,14 +1,15 @@
 import * as React from "react";
 import { useLocation } from "wouter";
-import allManifest from "~/src/images/manifest.json";
 import { AboutPage } from "~/src/about";
 import { Frame, type View } from "~/src/frame";
-import { InfiniteCanvas } from "~/src/infinite-canvas";
+import allManifest from "~/src/images/manifest.json";
 import { IndexPage } from "~/src/index-page";
+import { InfiniteCanvas } from "~/src/infinite-canvas";
 import type { MediaItem } from "~/src/infinite-canvas/types";
 import { PageLoader } from "~/src/loader";
 import { ProjectPage } from "~/src/project";
 import { setPendingIndex, setPendingTransition } from "~/src/project/transition-origin";
+import { ResearchPage } from "~/src/research";
 import { SplashVideo } from "~/src/splash";
 
 const ALL_MEDIA = allManifest as MediaItem[];
@@ -18,7 +19,7 @@ const ALL_MEDIA = allManifest as MediaItem[];
 // read; give it "art" or "commerce" to scope the whole site to a category.
 const ACTIVE_CATEGORY = "all";
 
-const VIEW_PATHS: Record<View, string> = { gallery: "/", index: "/index", about: "/about" };
+const VIEW_PATHS: Record<View, string> = { gallery: "/", index: "/index", research: "/research", about: "/about" };
 
 // Whether this visit started somewhere other than the homepage (e.g. /project/x).
 // Deep links skip the intro splash and the texture progress overlay — the project
@@ -37,9 +38,9 @@ export function App() {
     return m ? m[1] : null;
   }, [location]);
 
-  // The index and about are routes, so they survive a reload and the back
+  // The index, research and about are routes, so they survive a reload and the back
   // button, and so an index row can hand straight off to /project/:id.
-  const view: View = location === "/index" ? "index" : location === "/about" ? "about" : "gallery";
+  const view: View = (Object.keys(VIEW_PATHS) as View[]).find((v) => VIEW_PATHS[v] === location) ?? "gallery";
   // Closing a project returns you to whichever view opened it.
   const openedFromIndexRef = React.useRef(false);
 
@@ -47,7 +48,10 @@ export function App() {
     if (item.project) {
       openedFromIndexRef.current = false;
       const projectImages = ALL_MEDIA.filter((m) => m.project === item.project);
-      const startIndex = Math.max(0, projectImages.findIndex((m) => m.url === item.url));
+      const startIndex = Math.max(
+        0,
+        projectImages.findIndex((m) => m.url === item.url)
+      );
       setPendingTransition(rect, startIndex);
       navigate(`/project/${item.project}`);
     }
@@ -58,7 +62,10 @@ export function App() {
       <SplashVideo
         visible={!splashDismissed}
         videoSrc="/PR-01_DE_58.mp4"
-        onDismiss={(frame, aspect) => { setSplashFrame(frame); setSplashAspect(aspect); }}
+        onDismiss={(frame, aspect) => {
+          setSplashFrame(frame);
+          setSplashAspect(aspect);
+        }}
       />
       <Frame view={view} onViewChange={(v) => navigate(VIEW_PATHS[v])} showNav={!projectId} />
       {!DEEP_LINKED && <PageLoader progress={textureProgress} />}
@@ -72,6 +79,7 @@ export function App() {
         splashAspect={splashAspect}
         onSplashReady={() => setSplashDismissed(true)}
       />
+      {view === "research" && !projectId && <ResearchPage />}
       {view === "about" && !projectId && <AboutPage />}
       {view === "index" && !projectId && (
         <IndexPage
@@ -86,11 +94,7 @@ export function App() {
         />
       )}
       {projectId && (
-        <ProjectPage
-          key={projectId}
-          id={projectId}
-          onClose={() => navigate(openedFromIndexRef.current ? "/index" : "/")}
-        />
+        <ProjectPage key={projectId} id={projectId} onClose={() => navigate(openedFromIndexRef.current ? "/index" : "/")} />
       )}
     </>
   );
