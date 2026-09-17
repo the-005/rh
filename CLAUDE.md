@@ -57,7 +57,9 @@ In the client's folders, images and videos mostly share one number sequence per 
 
 ## Typeface
 
-The site's sans is **Neue Haas Grotesk Text** (Linotype/Monotype), set as `--font-sans` in `src/index.css`, with DM Sans (Google Fonts) as the fallback. The only files we have are a **desktop licence**: the font's own licence text limits it to the workstation and forbids copying or distributing it. The repo is public, and anything in `public/` is downloadable. So **don't commit or serve the TTFs**. The `@font-face` rules use `local()` sources only: machines with the family installed see it in Chrome (Safari hides user-installed fonts from pages), and everyone else sees DM Sans. With a web licence, add its WOFF2 files as `url()` sources after the `local()` ones. The family has 400/500/700 but no Light, so the site's `font-weight: 300` text renders as Regular. The Neue Haas Grotesk *Display* files in Downloads are `-Trial` builds, also not for production.
+The site's sans is **Neue Haas Grotesk Text** (Linotype/Monotype), set as `--font-sans` in `src/index.css`. It's served from `public/fonts/neue-haas-grotesk-text/`, six WOFF2 files (400/500/700, roman and italic) converted from the owner's desktop TTFs, and `regular.woff2` is preloaded in `index.html`. The fallback is Helvetica Neue/Arial; Google Fonts is no longer loaded. **Licence:** the TTFs are a desktop licence (workstation only, no distribution). The owner chose to serve them anyway while the site is unofficial and shared with friends. **It needs a web licence before launch.** The family has no Light, so the site's `font-weight: 300` renders as Regular.
+
+**Case and tracking:** no `text-transform: uppercase` and no `letter-spacing`. Text is set as written, in sentence case (nav labels come from `LABELS` in `src/frame/index.tsx`), at the font's default spacing.
 
 ## Architecture
 

@@ -43,8 +43,6 @@
   padding: 0 0 0.75rem;
   border-bottom: 1px solid #111111;
   font-size: 0.875rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: #999999;
 }
 
@@ -140,7 +138,6 @@
   bottom: 0.75rem;
   transform: translateX(-50%);
   font-size: 0.875rem;
-  letter-spacing: 0.04em;
   color: #999999;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -149,7 +146,6 @@
 
 .num {
   font-size: 0.875rem;
-  letter-spacing: 0.04em;
   color: #999999;
 }
 
@@ -160,7 +156,6 @@
 .year {
   text-align: right;
   font-size: 0.875rem;
-  letter-spacing: 0.04em;
   color: #999999;
 }
 

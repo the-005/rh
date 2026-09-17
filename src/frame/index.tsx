@@ -3,6 +3,7 @@ import styles from "./style.module.css";
 export type View = "gallery" | "index" | "research" | "about";
 
 const NAV: View[] = ["gallery", "index", "research", "about"];
+const LABELS: Record<View, string> = { gallery: "Gallery", index: "Index", research: "Research", about: "About" };
 
 export function Frame({
   view,
@@ -30,7 +31,7 @@ export function Frame({
               className={`${styles.frame__btn} ${view === v ? styles.frame__btnActive : ""}`}
               onClick={() => onViewChange(v)}
             >
-              {v}
+              {LABELS[v]}
             </button>
           ))}
         </nav>
