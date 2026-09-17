@@ -1,3 +1,51 @@
+/* Neue Haas Grotesk Text (Linotype/Monotype). local() sources only, on purpose:
+   the files we have are a desktop licence — "limited to your workstation", "may
+   not copy or distribute" — and anything under public/ can be downloaded by any
+   visitor. A machine with the family installed renders it (Chrome; Safari hides
+   user-installed fonts from pages); everyone else falls back to DM Sans. With a
+   web licence, add its WOFF2 files as url() sources after the local() ones. */
+@font-face {
+  font-family: "Neue Haas Grotesk Text";
+  src: local("Neue Haas Grotesk Text"), local("NeueHaasGroteskText");
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Neue Haas Grotesk Text";
+  src: local("Neue Haas Grotesk Text Italic"), local("NeueHaasGroteskText-Italic");
+  font-weight: 400;
+  font-style: italic;
+}
+
+@font-face {
+  font-family: "Neue Haas Grotesk Text";
+  src: local("Neue Haas Grotesk Text Medium"), local("NeueHaasGroteskText-Medium");
+  font-weight: 500;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Neue Haas Grotesk Text";
+  src: local("Neue Haas Grotesk Text Medium Italic"), local("NeueHaasGroteskText-MediumItalic");
+  font-weight: 500;
+  font-style: italic;
+}
+
+@font-face {
+  font-family: "Neue Haas Grotesk Text";
+  src: local("Neue Haas Grotesk Text Bold"), local("NeueHaasGroteskText-Bold");
+  font-weight: 700;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Neue Haas Grotesk Text";
+  src: local("Neue Haas Grotesk Text Bold Italic"), local("NeueHaasGroteskText-BoldItalic");
+  font-weight: 700;
+  font-style: italic;
+}
+
 :root {
   font-size: 12px;
   font-family: ui-monospace, monospace;
@@ -9,6 +57,7 @@
   --color-link: #fff;
   --color-link-hover: #fff;
   --page-padding: 1.5rem;
+  --font-sans: "Neue Haas Grotesk Text", "DM Sans", sans-serif;
 }
 
 *,

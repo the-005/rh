@@ -2,7 +2,7 @@ import styles from "./style.module.css";
 
 /**
  * About: the third view, and the only one that is words rather than pictures.
- * Same paper as the index — white, DM Sans, the frame's difference blend reading
+ * Same paper as the index — white, the site's sans, the frame's difference blend reading
  * black over it — so gallery → index → about is one material change, not three.
  *
  * Everything below is placeholder copy standing in for the real text. Swap the

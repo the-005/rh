@@ -16,7 +16,7 @@
     "sponsor sponsor sponsor sponsor";
   color: #fff;
   mix-blend-mode: difference;
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--font-sans);
   font-weight: 300;
   text-transform: uppercase;
 }
