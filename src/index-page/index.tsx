@@ -28,12 +28,21 @@ import styles from "./style.module.css";
 const COMMIT_MS = 90;
 /** Slideshow pace while a row is playing. */
 const PLAY_MS = 1500;
+/** How the bar follows a scrub: a short glide instead of a snap from cell to cell. */
+const GLIDE = "350ms cubic-bezier(0.22, 1, 0.36, 1)";
+/** Crossfade layers kept at once; only the oldest (already fading out) get cut. */
+const MAX_LAYERS = 4;
+/** The crossfade's length in `style.module.css`, plus slack: an outgoing layer is gone by then. */
+const FADE_CLEANUP_MS = 900;
+
+/** Where the bar ends, in cells (image i's centre is i + 0.5), and how it gets there. */
+type Bar = { pos: number; transition: string };
 
 export function IndexPage() {
   const projects = PROJECTS;
   const [hovered, setHovered] = React.useState<string | null>(null);
-  /** Where the playhead sits — moves the instant you cross a cell. */
-  const [head, setHead] = React.useState(0);
+  /** Where the bar and playhead are heading, and how. */
+  const [bar, setBar] = React.useState<Bar>({ pos: 0.5, transition: "none" });
   /** Which image the preview is showing — follows the head after COMMIT_MS. */
   const [shown, setShown] = React.useState(0);
   const [playing, setPlaying] = React.useState(false);
@@ -55,6 +64,8 @@ export function IndexPage() {
     if (playRef.current !== null) window.clearInterval(playRef.current);
     playRef.current = null;
     setPlaying(false);
+    // A playing bar is mid-glide towards the next image; settle it back onto the one showing.
+    setBar({ pos: headRef.current + 0.5, transition: GLIDE });
   };
   React.useEffect(
     () => () => {
@@ -83,7 +94,7 @@ export function IndexPage() {
     stop();
     headRef.current = 0;
     setHovered(project.id);
-    setHead(0);
+    setBar({ pos: 0.5, transition: "none" });
     setShown(0);
     warm(project);
   };
@@ -97,7 +108,7 @@ export function IndexPage() {
     const i = Math.min(n - 1, Math.max(0, Math.floor(((e.clientX - r.left) / r.width) * n)));
     if (i === headRef.current) return;
     headRef.current = i;
-    setHead(i);
+    setBar({ pos: i + 0.5, transition: GLIDE });
     clearCommit();
     commitRef.current = window.setTimeout(() => setShown(i), COMMIT_MS);
   };
@@ -113,12 +124,29 @@ export function IndexPage() {
     setShown(headRef.current);
     setPlaying(true);
     const n = project.images.length;
-    playRef.current = window.setInterval(() => {
+    // While playing, the bar travels at constant speed: through each image's
+    // stay it glides from that image's centre to the next one's, arriving just
+    // as the next image comes up — a timeline, not a row of steps.
+    const glideFrom = (i: number) => setBar({ pos: Math.min(i + 1.5, n), transition: `${PLAY_MS}ms linear` });
+    glideFrom(headRef.current);
+    const id = window.setInterval(() => {
       const next = (headRef.current + 1) % n;
       headRef.current = next;
-      setHead(next);
       setShown(next);
+      if (next !== 0) {
+        glideFrom(next);
+        return;
+      }
+      // Looping round: jump back to the start rather than glide backwards across
+      // the row, then carry on once that jump has painted.
+      setBar({ pos: 0.5, transition: "none" });
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          if (playRef.current === id) glideFrom(0);
+        }),
+      );
     }, PLAY_MS);
+    playRef.current = id;
   };
 
   const leave = () => {
@@ -155,7 +183,7 @@ export function IndexPage() {
               >
                 <span className={styles.title}>{project.title}</span>
                 <span className={styles.year}>{project.year}</span>
-                {hovered === project.id && <Playhead project={project} head={head} playing={playing} />}
+                {hovered === project.id && <Playhead count={project.images.length} bar={bar} playing={playing} />}
               </button>
             </li>
           ))}
@@ -163,25 +191,72 @@ export function IndexPage() {
       </div>
 
       <div className={styles.preview} aria-hidden="true">
-        {/* Keyed by project, not by url: scrubbing swaps the src in place so the
-            fade plays once on arrival instead of re-firing on every cell. */}
-        {src && <img key={hovered} src={`/${src}`} alt="" className={styles.previewImg} decoding="async" />}
+        <Crossfade src={src} />
       </div>
     </main>
   );
 }
 
 /**
- * The row as a progress bar: a grey fill from the left edge to the centre of
- * the current image's cell, and the playhead sitting on the row's line at that
- * point — a triangle while playing, a square while stopped.
+ * The row as a progress bar: a grey fill from the left edge to the bar's
+ * position, and the playhead sitting on the row's line at that point — a
+ * triangle while playing, a square while stopped.
  */
-function Playhead({ project, head, playing }: { project: ProjectEntry; head: number; playing: boolean }) {
-  const at = `${((head + 0.5) / project.images.length) * 100}%`;
+function Playhead({ count, bar, playing }: { count: number; bar: Bar; playing: boolean }) {
+  const at = `${(bar.pos / count) * 100}%`;
+  const via = (property: string) => (bar.transition === "none" ? "none" : `${property} ${bar.transition}`);
   return (
     <>
-      <span className={styles.progress} style={{ width: at }} aria-hidden="true" />
-      <span className={`${styles.playhead} ${playing ? styles.play : styles.stop}`} style={{ left: at }} aria-hidden="true" />
+      <span className={styles.progress} style={{ width: at, transition: via("width") }} aria-hidden="true" />
+      <span
+        className={`${styles.playhead} ${playing ? styles.play : styles.stop}`}
+        style={{ left: at, transition: via("left") }}
+        aria-hidden="true"
+      />
     </>
   );
+}
+
+/**
+ * Image changes crossfade, after Estudio Além (estudioalem.com), whose loop is
+ * Swiper's `fade` effect: every image stacked in one place, the incoming one
+ * fading in on top on an ease-out while the outgoing stays put beneath, so it
+ * never dips to white. Our images differ in shape, so the outgoing one can't
+ * just stay put — its edges would stick out, then vanish at once. Instead it
+ * fades out on an ease-in while the incoming fades in on an ease-out: where
+ * they overlap the picture stays covered, and the old edges melt away.
+ */
+function Crossfade({ src }: { src: string | null }) {
+  const [layers, setLayers] = React.useState<{ id: number; src: string; leaving: boolean }[]>([]);
+  const nextId = React.useRef(0);
+
+  React.useEffect(() => {
+    setLayers((prev) => {
+      const top = prev.at(-1);
+      if (top && !top.leaving && top.src === src) return prev;
+      const outgoing = prev.map((layer) => (layer.leaving ? layer : { ...layer, leaving: true }));
+      if (!src) return outgoing;
+      nextId.current += 1;
+      return [...outgoing, { id: nextId.current, src, leaving: false }].slice(-MAX_LAYERS);
+    });
+    // transitionend doesn't fire for a layer that was still invisible when it
+    // started leaving (nothing to fade), so sweep anything left fading out.
+    const sweep = window.setTimeout(() => setLayers((prev) => prev.filter((layer) => !layer.leaving)), FADE_CLEANUP_MS);
+    return () => window.clearTimeout(sweep);
+  }, [src]);
+
+  return layers.map((layer) => (
+    <img
+      key={layer.id}
+      src={`/${layer.src}`}
+      alt=""
+      decoding="async"
+      className={`${styles.previewImg} ${layer.leaving ? styles.previewLeaving : ""}`}
+      onTransitionEnd={(e) => {
+        if (layer.leaving && e.propertyName === "opacity") {
+          setLayers((prev) => prev.filter((l) => l.id !== layer.id));
+        }
+      }}
+    />
+  ));
 }

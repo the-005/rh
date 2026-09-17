@@ -92,6 +92,8 @@
    The hovered row is a progress bar. Both parts are absolutely positioned in
    the row's padding box — from just under the line above to just over the line
    below — so the grid never sees them. */
+/* Width and position are driven inline, transitions included: a short glide
+   while scrubbing, a constant-speed run while playing. */
 .progress {
   position: absolute;
   top: 0;
@@ -99,7 +101,6 @@
   left: 0;
   background: rgba(17, 17, 17, 0.07);
   pointer-events: none;
-  transition: width 0.08s cubic-bezier(0.42, 0, 0.58, 1);
 }
 
 /* Sits on the line under the row, centred on the end of the bar. */
@@ -108,7 +109,6 @@
   bottom: 0;
   transform: translateX(-50%);
   pointer-events: none;
-  transition: left 0.08s cubic-bezier(0.42, 0, 0.58, 1);
 }
 
 .stop {
@@ -147,35 +147,41 @@
 }
 
 /* Fixed and centred on the screen, so it holds its place while the list scrolls
-   under it. Layered between the rows: above every row but the one you're on. */
+   under it. Layered between the rows: above every row but the one you're on.
+   A one-cell grid, so the crossfade's layers stack centred on each other. */
 .preview {
   position: fixed;
   inset: 0;
   z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
   pointer-events: none;
 }
 
 /* 66% of the window's height, like the project page's enlarged image; its width
-   follows its own aspect, capped so a wide one still fits between the margins. */
+   follows its own aspect, capped so a wide one still fits between the margins.
+   Incoming layers fade in on an ease-out (from @starting-style). */
 .previewImg {
+  grid-area: 1 / 1;
   height: 66vh;
   width: auto;
   max-width: calc(100vw - 2 * var(--page-padding, 1.5rem));
   object-fit: contain;
   display: block;
-  animation: previewIn 0.3s ease both;
+  opacity: 1;
+  transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-@keyframes previewIn {
-  from {
+@starting-style {
+  .previewImg {
     opacity: 0;
   }
-  to {
-    opacity: 1;
-  }
+}
+
+/* Outgoing layers fade out on an ease-in, so they hold while the new one arrives. */
+.previewLeaving {
+  opacity: 0;
+  transition: opacity 0.7s cubic-bezier(0.64, 0, 0.78, 0);
 }
 
 /* No hover to speak of — the list takes the full width and the preview goes. */
