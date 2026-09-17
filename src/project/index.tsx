@@ -34,18 +34,25 @@ const SETTLE_MS = 600;
 const SHIFT_MS = 600;
 const EXIT_FADE_MS = 350;
 /**
- * Wheel and trackpad browse like the arrow keys: down / right is next. One
- * gesture moves one image — a step needs WHEEL_STEP px of travel one way, then
- * the wheel locks so a trackpad's glide (or a wheel spun in one go) can't run
- * through the album. The lock lifts after WHEEL_QUIET_MS of silence, or as soon
- * as a new swipe starts inside the glide: a glide only ever slows down and never
- * turns round, so the wheel speeding back up (by WHEEL_RESWIPE_PX and double
- * its slowest) or reversing is fingers back on the trackpad. A step that
- * arrives mid-move is queued, not dropped.
+ * Wheel and trackpad browse like the arrow keys: down / right is next. One swipe
+ * is one image, never more — a step needs WHEEL_STEP px of travel one way, then
+ * the wheel locks for the rest of that swipe, trackpad glide included. Only a
+ * second swipe unlocks it, and one made while the image is still moving queues
+ * the next image.
+ *
+ * A second swipe is told apart from the glide conservatively. Nothing counts for
+ * WHEEL_REFRACTORY_MS after the step (an uneven finger stroke lives there).
+ * After that, speed is measured per frame, so events the browser merged while
+ * the page was busy don't read as a speed-up, and averaged over the last three
+ * events. The lock only lifts if that average climbs to WHEEL_RESWIPE_RATIO×
+ * its slowest since, and WHEEL_RESWIPE_PX faster — a glide only slows —, or if
+ * the direction reverses, or after WHEEL_QUIET_MS of silence.
  */
 const WHEEL_STEP = 40;
 const WHEEL_QUIET_MS = 180;
-const WHEEL_RESWIPE_PX = 6;
+const WHEEL_REFRACTORY_MS = 200;
+const WHEEL_RESWIPE_RATIO = 2.5;
+const WHEEL_RESWIPE_PX = 10;
 /** Beat between the arrival settling and the first image scaling up. */
 const FUSE_PAUSE_MS = 260;
 
@@ -325,12 +332,12 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     accum: 0,
     locked: false,
     queued: 0 as -1 | 0 | 1,
-    // The gesture that set the lock: its direction, its fastest delta, and —
-    // once it has started to slow — its slowest since.
+    // The swipe that set the lock: its direction, when it stepped, and its
+    // slowest averaged speed since the refractory window closed.
     dir: 0,
-    peak: 0,
-    trough: 0,
-    decaying: false,
+    lockedAt: 0,
+    slowest: Number.POSITIVE_INFINITY,
+    recent: [] as number[],
   });
 
   const advance = (to: number) => {
@@ -446,21 +453,20 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       const raw = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
       const px = e.deltaMode === 1 ? raw * 16 : e.deltaMode === 2 ? raw * window.innerHeight : raw;
       const speed = Math.abs(px);
-      const quiet = e.timeStamp - w.last > WHEEL_QUIET_MS;
+      const gap = e.timeStamp - w.last;
+      const quiet = gap > WHEEL_QUIET_MS;
       w.last = e.timeStamp;
+      // Pixels per frame: a merged event covers several frames' worth of travel.
+      const perFrame = (speed * 16) / Math.min(Math.max(gap, 16), 100);
+      w.recent = [...w.recent.slice(-2), perFrame];
+      const avg = w.recent.reduce((a, b) => a + b, 0) / w.recent.length;
 
       let fresh = quiet;
-      if (w.locked && !fresh && speed > 0) {
-        if (Math.sign(px) !== w.dir) fresh = true;
-        else if (!w.decaying) {
-          w.peak = Math.max(w.peak, speed);
-          if (speed < w.peak * 0.6) {
-            w.decaying = true;
-            w.trough = speed;
-          }
-        } else {
-          w.trough = Math.min(w.trough, speed);
-          fresh = speed >= w.trough * 2 && speed >= w.trough + WHEEL_RESWIPE_PX;
+      if (w.locked && !fresh && speed > 0 && e.timeStamp - w.lockedAt > WHEEL_REFRACTORY_MS) {
+        if (Math.sign(px) !== w.dir && speed >= 4) fresh = true;
+        else {
+          w.slowest = Math.min(w.slowest, avg);
+          fresh = avg >= w.slowest * WHEEL_RESWIPE_RATIO && avg >= w.slowest + WHEEL_RESWIPE_PX;
         }
       }
       if (fresh) {
@@ -477,8 +483,8 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       w.accum = 0;
       w.locked = true;
       w.dir = dir;
-      w.peak = speed;
-      w.decaying = false;
+      w.lockedAt = e.timeStamp;
+      w.slowest = Number.POSITIVE_INFINITY;
       if (phase !== "hero") return;
       if (busy) w.queued = dir;
       else step(dir);
