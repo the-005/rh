@@ -22,11 +22,11 @@ const MIN = 50;
 const MAX = 150;
 // Tile width at 100%, in px.
 const BASE_TILE = 150;
-// Magnetic stops: a drag that passes within SNAP of one lands on it. On the
-// 160px track that is about 5px either side, so everything between the stops
-// stays easy to hit.
+// Stops: letting go within SNAP of one lands on it, so a drag can wander
+// anywhere and still settle on a round value. Everything further out stays
+// where it was released — raise SNAP to 12.5 and every release snaps.
 const STOPS = [50, 75, 100, 125, 150];
-const SNAP = 3;
+const SNAP = 6;
 
 function snap(value: number) {
   const nearest = STOPS.reduce((a, b) => (Math.abs(b - value) < Math.abs(a - value) ? b : a));
@@ -35,17 +35,17 @@ function snap(value: number) {
 
 export function ResearchPage() {
   const [scale, setScale] = React.useState(75);
-  // Only a drag snaps. Arrow keys move one at a time, and would be stuck on a
-  // stop forever if 101 snapped back to 100.
-  const draggingRef = React.useRef(false);
 
-  const startDrag = () => {
-    draggingRef.current = true;
-    const end = () => {
-      draggingRef.current = false;
+  // Snap on release, never mid-drag. Arrow keys don't go through here at all:
+  // they step one at a time and would be stuck on a stop if 101 snapped back.
+  const snapOnRelease = () => {
+    const release = () => {
+      window.removeEventListener("pointerup", release);
+      window.removeEventListener("pointercancel", release);
+      setScale((value) => snap(value));
     };
-    window.addEventListener("pointerup", end, { once: true });
-    window.addEventListener("pointercancel", end, { once: true });
+    window.addEventListener("pointerup", release);
+    window.addEventListener("pointercancel", release);
   };
 
   return (
@@ -61,13 +61,9 @@ export function ResearchPage() {
           value={scale}
           aria-label="Grid scale"
           aria-valuetext={`${scale}%`}
-          onPointerDown={startDrag}
-          onChange={(e) => {
-            const value = e.currentTarget.valueAsNumber;
-            setScale(draggingRef.current ? snap(value) : value);
-          }}
+          onPointerDown={snapOnRelease}
+          onChange={(e) => setScale(e.currentTarget.valueAsNumber)}
         />
-        <output className={styles.readout}>{scale}%</output>
       </div>
 
       <div className={styles.grid} style={{ "--tile": `${(BASE_TILE * scale) / 100}px` } as React.CSSProperties}>

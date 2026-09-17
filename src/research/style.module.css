@@ -29,10 +29,8 @@
   z-index: 1;
   display: flex;
   align-items: center;
-  gap: 1rem;
   height: 1.2em;
   font-size: 0.9rem;
-  letter-spacing: 0.06em;
 }
 
 .slider {
@@ -74,12 +72,6 @@
 .slider:focus-visible {
   outline: 1px solid #111111;
   outline-offset: 4px;
-}
-
-/* Fixed width and tabular figures, so the slider doesn't shuffle as 99 becomes 100. */
-.readout {
-  min-width: 4ch;
-  font-variant-numeric: tabular-nums;
 }
 
 /* Clears the frame's top row. auto-fill + minmax fits as many columns of at
