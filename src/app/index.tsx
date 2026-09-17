@@ -50,7 +50,7 @@ export function App() {
     <>
       <SplashVideo
         visible={!splashDismissed}
-        videoSrc="/PR-01_DE_58.mp4"
+        videoSrc="/splash.mp4"
         onDismiss={(frame, aspect) => {
           setSplashFrame(frame);
           setSplashAspect(aspect);

@@ -1,0 +1,14 @@
+# Staging on Netlify: every push to main rebuilds and redeploys the site.
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# A single-page app: /index, /research, /about and /project/:id all need index.html,
+# or a reload on them 404s. Real files (images, fonts, video) are served first.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

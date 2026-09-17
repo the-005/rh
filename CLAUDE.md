@@ -35,6 +35,12 @@ npm run research:images -- "<folder>"      # web copies of the Research images (
 
 Linting/formatting is **Biome** (not ESLint/Prettier). Config in `biome.jsonc`.
 
+## Hosting
+
+**Staging is on Netlify, deploying from GitHub**: every push to `main` rebuilds and redeploys, so the owner's friend can follow progress. `netlify.toml` holds the build (`npm run build` → `dist`, `NODE_VERSION` 22) and the single-page-app catch-all (`/*` → `/index.html`, status 200), without which a reload on `/index` or `/project/:id` 404s. **`vite.config.ts` must keep `base: "/"`**: the Codrops template shipped `"./"`, which makes built asset URLs relative, so a direct load of `/project/PR-02_HE` asked for `/project/assets/…js`, got index.html back, and rendered blank. The tab title is `rh wip` and the favicon a plain black square (`public/favicon.svg` + `favicon.png`).
+
+The splash plays `public/splash.mp4`: H.264 CRF 28, no audio, faststart, 9.4MB. It's visually matched against the owner's 30MB edit `public/PR-01_DE_58.mp4`, which stays **uncommitted** (the 448MB master is in the client folder). CRF 32 (3.7MB) smoothed away the faint point-cloud sparkle.
+
 ## Media
 
 The site has two sets of images. **Work** is what the canvas (gallery), the project pages and the index show; they share `src/work/manifest.json`. **Research** is the outlier: its own page and its own `src/research/manifest.json`. Say "Work" for the first set. "Project" means a single one.
