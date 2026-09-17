@@ -7,6 +7,7 @@ import {
   hideTransitionSource,
   holdTransition,
   releaseTransition,
+  swapTransitionSource,
 } from "./transition-origin";
 import styles from "./style.module.css";
 
@@ -28,11 +29,11 @@ const SAT_STAGGER_S = 0.07;
 const TURN_EASE = "cubic-bezier(0.42, 0, 0.58, 1)";
 const TURN_MS = 600;
 const ADV_MS = 500;
-const SETTLE_MS = 600;
-/** Exit beat 2: the settled row travels left to centre the image you came from,
- *  while the images it passes drop away one by one. */
-const SHIFT_MS = 600;
+/** Exit: the rest of the row drops and fades, one after another, finishing
+ *  inside the flight home however many images are on screen. */
 const EXIT_FADE_MS = 350;
+/** Longest the exit waits for the canvas plane to draw the closing image. */
+const SWAP_TIMEOUT_MS = 1200;
 /**
  * Wheel and trackpad browse like the arrow keys: down / right is next. One swipe
  * is one image, never more — a step needs WHEEL_STEP px of travel one way, then
@@ -58,12 +59,11 @@ const FUSE_PAUSE_MS = 260;
 
 /**
  * arrive — flat row, manifest rotated so the clicked image leads (part 1).
- * hero   — same order, one image at HERO_HEIGHT_FRAC, centred (part 2).
- * settle — same order, everything back to row height (exit beat 1).
- * centre — settled row slid left so the arrival image is centred (exit beat 2).
- * out    — same positions, supporting images dropping away (exit beat 3).
+ * hero    — one image at HERO_HEIGHT_FRAC, centred, the row looping (part 2).
+ * leaving — same layout; the image you're on shrinks home as a canvas plane
+ *           while the rest drop away.
  */
-type Phase = "arrive" | "hero" | "settle" | "centre" | "out";
+type Phase = "arrive" | "hero" | "leaving";
 
 export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }) {
   // Capture once on mount — clears the module-level store
@@ -117,13 +117,8 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   // slide in with the row when the first image scales up.
   const count = images.length;
   const mod = (k: number) => ((k % count) + count) % count;
-  // The copy of the image you arrived on nearest to where you are — the exit
-  // travels to it the short way round.
-  const nearestStart = heroPos - mod(heroPos);
-  const arrivalPos = mod(heroPos) <= count / 2 ? nearestStart : nearestStart + count;
-  const centred =
-    phase === "hero" || phase === "settle" ? heroPos : phase === "centre" || phase === "out" ? arrivalPos : null;
-  const scaleOf = (k: number) => (phase === "hero" && k === heroPos ? heroH / rowH : 1);
+  const centred = phase === "arrive" ? null : heroPos;
+  const scaleOf = (k: number) => (centred !== null && k === heroPos ? heroH / rowH : 1);
   const baseW = (k: number) => aspects[mod(k)] * rowH;
 
   // Render a screen and a quarter past each side of every position the row can
@@ -137,14 +132,13 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     }
     return k;
   };
-  const anchors = phase === "arrive" ? [0] : [heroPos, arrivalPos];
+  const anchors = [centred ?? 0];
   const kMin = Math.min(...anchors.map((a) => edge(a, -1)));
   const kMax = Math.max(...anchors.map((a) => edge(a, 1)));
   const positions = Array.from({ length: kMax - kMin + 1 }, (_, i) => kMin + i);
 
-  // Per-position x. Centre whichever image the moment is about — settling keeps
-  // the image you were looking at where it is, so it shrinks in place. Before
-  // the scale-up nothing is centred and position 0 sits on the margin.
+  // Per-position x. After the scale-up the image you're on is centred; before
+  // it nothing is, and position 0 sits on the margin.
   const anchorK = centred ?? 0;
   const xs = new Map<number, number>();
   xs.set(anchorK, centred === null ? MARGIN : viewport.w / 2 - (baseW(anchorK) * scaleOf(anchorK)) / 2);
@@ -369,59 +363,59 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     advance(heroPos + dir);
   };
 
+  // Warm the canvas-size copy of whichever image you're on, so if you close on
+  // it the plane has it straight away.
+  const currentCanvasUrl = images[mod(heroPos)]?.canvasUrl;
+  React.useEffect(() => {
+    if (currentCanvasUrl) new Image().src = `/${currentCanvasUrl}`;
+  }, [currentCanvasUrl]);
+
   /**
-   * Exit, in three beats. Settling to row height keeps the current image
-   * centred. The row then travels the short way round the loop to bring the
-   * image you arrived on to centre — a pure translation, nothing scaling — and
-   * only then does it
-   * fly to its own plane while the rest drop 32px away, the exact reverse of
-   * how they rose.
+   * Exit, from whichever image you're on. The plane you opened the project from
+   * takes that image: once it's drawing it, the plane re-pins over the enlarged
+   * image and flies home, shrinking to its canvas size while the camera centres
+   * it. Meanwhile the rest of the row drops and fades, furthest first, closing
+   * in on it. The canvas keeps the new image there.
    */
   const runExit = () => {
     if (busy) return;
+    const t = transitionRef.current;
+    const overlay = overlayRef.current;
+    const hero = overlay?.querySelector<HTMLImageElement>(`[data-pos="${heroPos}"]`);
+    const item = images[mod(heroPos)];
+    if (!t?.sourceKey || !hero || !overlay || !item) {
+      fadeClose();
+      return;
+    }
+    const sourceKey = t.sourceKey;
     setBusy(true);
-    setMotion({ ms: SETTLE_MS, ease: TURN_EASE });
-    setPhase("settle");
+    setPhase("leaving");
 
-    after(SETTLE_MS, () => {
-      setMotion({ ms: SHIFT_MS, ease: TURN_EASE });
-      setPhase("centre");
-
-      // The row travels as one object, but the images leave one at a time —
-      // furthest (of those on screen) from the departing image first, so by the
-      // time it flies most of what was beside it has gone. Mirrors the entry.
-      const overlay = overlayRef.current;
-      if (!overlay) return;
-      const imgs = Array.from(overlay.querySelectorAll<HTMLElement>(`.${styles.image}`));
-      const distance = (el: HTMLElement) => Math.abs(Number(el.dataset.pos) - arrivalPos);
-      const onScreen = imgs.filter((el) => {
-        const r = el.getBoundingClientRect();
-        return r.right > 0 && r.left < window.innerWidth;
-      });
-      const farthest = Math.max(0, ...onScreen.map(distance));
-      for (const el of imgs) {
-        if (Number(el.dataset.pos) === arrivalPos) continue;
-        const delay = (Math.max(0, farthest - distance(el)) * SAT_STAGGER_S).toFixed(2);
-        el.style.transition = `opacity ${EXIT_FADE_MS}ms ease ${delay}s, transform 0.5s ${TURN_EASE} ${delay}s`;
-        el.style.opacity = "0";
-        el.style.transform = `translateY(${RISE_PX}px)`;
-      }
+    const imgs = Array.from(overlay.querySelectorAll<HTMLElement>(`.${styles.image}`)).filter((el) => el !== hero);
+    const onScreen = imgs.filter((el) => {
+      const r = el.getBoundingClientRect();
+      return r.right > 0 && r.left < window.innerWidth;
     });
+    const ring = (el: HTMLElement) => Math.abs(Number(el.dataset.pos) - heroPos);
+    const rings = Math.max(1, ...onScreen.map(ring));
+    const stagger = Math.min(SAT_STAGGER_S, (FLIGHT_MS - EXIT_FADE_MS) / 1000 / rings);
+    for (const el of imgs) {
+      // Furthest first, so the row empties in toward the image going home.
+      const delay = onScreen.includes(el) ? ((rings - ring(el)) * stagger).toFixed(3) : "0";
+      el.style.transition = `opacity ${EXIT_FADE_MS}ms ease ${delay}s, transform 0.5s ${TURN_EASE} ${delay}s`;
+      el.style.opacity = "0";
+      el.style.transform = `translateY(${RISE_PX}px)`;
+    }
 
-    after(SETTLE_MS + SHIFT_MS, () => {
-      const t = transitionRef.current;
-      const overlay = overlayRef.current;
-      const hero = overlay?.querySelector<HTMLImageElement>(`[data-pos="${arrivalPos}"]`);
-      if (!t?.sourceKey || !hero || !overlay) {
-        fadeClose();
-        return;
-      }
+    let flown = false;
+    const flyHome = () => {
+      if (flown) return;
+      flown = true;
       const r = hero.getBoundingClientRect();
-      // Re-pin the plane to wherever the row has carried this image, then fly
-      // it home. Setting the tween before un-hiding means the plane never
-      // draws a frame at its old pin.
+      // Setting the tween before un-hiding means the plane never draws a frame
+      // at its old pin.
       beginHeroTween(
-        t.sourceKey,
+        sourceKey,
         { x: r.x, y: r.y, width: r.width, height: r.height },
         FLIGHT_MS,
         () => {
@@ -433,13 +427,16 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       hideTransitionSource(null);
       hero.style.opacity = "0";
       overlay.style.background = "transparent";
-      setMotion({ ms: FLIGHT_MS, ease: TURN_EASE });
-      setPhase("out");
       // If the plane never reports arrival, leave anyway.
       after(FLIGHT_MS + 400, () => {
         releaseTransition();
         onClose();
       });
+    };
+    swapTransitionSource(sourceKey, item, flyHome);
+    // A texture that never arrives shouldn't strand the page.
+    after(SWAP_TIMEOUT_MS, () => {
+      if (!flown) fadeClose();
     });
   };
 
@@ -510,7 +507,12 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
 
   return (
     <div className={styles.overlay} ref={overlayRef}>
-      <button type="button" className={styles.close} onClick={runExit}>
+      <button
+        type="button"
+        className={styles.close}
+        onClick={runExit}
+        style={phase === "leaving" ? { opacity: 0, transition: "opacity 0.3s ease" } : undefined}
+      >
         ×
       </button>
 
@@ -537,7 +539,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
                 marginTop: -rowH / 2,
                 transform: `translate(${xs.get(k) ?? 0}px, 0) scale(${scaleOf(k)})`,
                 transition: motion.ms ? `transform ${motion.ms}ms ${motion.ease}` : "none",
-                zIndex: phase === "hero" && k === heroPos ? 2 : 1,
+                zIndex: centred !== null && k === heroPos ? 2 : 1,
               }}
             >
               <img

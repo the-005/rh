@@ -5,12 +5,14 @@ import * as THREE from "three";
 import {
   getCameraGoal,
   getHeroTween,
+  getMediaOverride,
   isCanvasFrozen,
   setCameraGoal,
   isDimmedPlane,
   isPlaneHidden,
   isTransitionActive,
   stageTransitionSource,
+  takeSwapWaiter,
 } from "~/src/project/transition-origin";
 import { useIsTouchDevice } from "~/src/use-is-touch-device";
 import { clamp, lerp } from "~/src/utils";
@@ -167,12 +169,18 @@ function MediaPlane({
     ready: false,
     absoluteZOffset: initialAbsoluteZ,
     lastCycle: initialCycle,
+    /** The media item whose texture has finished loading. */
+    readyFor: null as MediaItem | null,
     cycleX: initPos.x,
     cycleY: initPos.y,
   });
 
   const [cycleIndex, setCycleIndex] = React.useState(initialCycle);
-  const media = mediaPool[((mediaIndex + cycleIndex) % mediaPool.length + mediaPool.length) % mediaPool.length];
+  // A project closed on a different image than it opened on leaves that image
+  // on this plane until the plane's next depth cycle.
+  const [override, setOverride] = React.useState(() => getMediaOverride(regKey, initialCycle));
+  const media =
+    override ?? mediaPool[((mediaIndex + cycleIndex) % mediaPool.length + mediaPool.length) % mediaPool.length];
 
   const [texture, setTexture] = React.useState<THREE.Texture | null>(null);
   const [isReady, setIsReady] = React.useState(false);
@@ -190,7 +198,14 @@ function MediaPlane({
     const mesh = meshRef.current;
     const state = localState.current;
 
+    const wanted = getMediaOverride(regKey, state.lastCycle);
+    if (wanted !== override) setOverride(wanted);
     if (!material || !mesh) return;
+    // Tell a waiting project page the swap is on screen: this plane's texture is
+    // the override's, loaded and bound.
+    if (wanted && media === wanted && state.readyFor === wanted && texture && material.map === texture) {
+      takeSwapWaiter(regKey, wanted)?.();
+    }
 
     // Hero flight: this plane was clicked and the project page asked it to fly
     // to its measured DOM slot. The plane itself carries the whole transition —
@@ -230,9 +245,12 @@ function MediaPlane({
         run = heroRunRef.current = {
           start: now,
           mode: heroTw.mode,
-          // Keep the aspect from the inbound run: on the way out the mesh has
-          // already been rescaled, so reading it back would compound.
-          aspect: run?.aspect ?? (mesh.scale.y !== 0 ? mesh.scale.x / mesh.scale.y : 1),
+          // On the way out the image may not be the one that flew in, so take
+          // the aspect from the page's rect. On the way in, from the mesh.
+          aspect:
+            heroTw.mode === "out" && r.height > 0
+              ? r.width / r.height
+              : (run?.aspect ?? (mesh.scale.y !== 0 ? mesh.scale.x / mesh.scale.y : 1)),
           from: heroTw.mode === "out" ? slot : home,
           to: heroTw.mode === "out" ? home : slot,
         };
@@ -386,6 +404,7 @@ function MediaPlane({
 
     const tex = getTexture(media, () => {
       state.ready = true;
+      state.readyFor = media;
       setIsReady(true);
     });
     setTexture(tex);

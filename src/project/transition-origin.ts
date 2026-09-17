@@ -1,3 +1,5 @@
+import type { MediaItem } from "~/src/infinite-canvas/types";
+
 export interface TransitionRect {
   x: number;
   y: number;
@@ -44,6 +46,40 @@ let hiddenKey: string | null = null;
  *  input, dims non-hero planes, and tints the scene background. */
 let active = false;
 let cameraGoal: CameraGoal | null = null;
+
+/**
+ * A project closes on whatever image you were looking at, and the plane you
+ * opened it from takes that image home. The override is keyed by plane and
+ * pinned to the depth cycle it was first read in (the plane fills that in), so
+ * once the plane cycles on, its own pool takes over again.
+ */
+const mediaOverrides = new Map<string, { item: MediaItem; cycle: number | null }>();
+let swapWaiter: { key: string; item: MediaItem; onReady: () => void } | null = null;
+
+/** Put `item` on plane `key`; `onReady` fires once the plane is drawing it. */
+export function swapTransitionSource(key: string, item: MediaItem, onReady: () => void): void {
+  mediaOverrides.set(key, { item, cycle: null });
+  swapWaiter = { key, item, onReady };
+}
+
+export function getMediaOverride(key: string, cycle: number): MediaItem | null {
+  const o = mediaOverrides.get(key);
+  if (!o) return null;
+  if (o.cycle === null) o.cycle = cycle;
+  if (o.cycle !== cycle) {
+    mediaOverrides.delete(key);
+    return null;
+  }
+  return o.item;
+}
+
+/** The plane calls this once it is drawing `item`; returns the waiter to fire, once. */
+export function takeSwapWaiter(key: string, item: MediaItem): (() => void) | null {
+  if (!swapWaiter || swapWaiter.key !== key || swapWaiter.item !== item) return null;
+  const { onReady } = swapWaiter;
+  swapWaiter = null;
+  return onReady;
+}
 
 /** Called by the clicked MediaPlane, synchronously before onMediaClick fires. */
 export function stageTransitionSource(key: string): void {
@@ -133,5 +169,6 @@ export function releaseTransition(): void {
   heroTween = null;
   hiddenKey = null;
   cameraGoal = null;
+  swapWaiter = null;
   active = false;
 }
