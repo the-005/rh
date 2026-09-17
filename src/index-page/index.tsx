@@ -74,10 +74,8 @@ export function IndexPage({ onOpenProject }: { onOpenProject: (id: string, start
 
   const scrub = (e: React.MouseEvent<HTMLButtonElement>, project: ProjectEntry) => {
     const n = project.images.length;
-    // Measured live rather than cached on enter: the row itself slides
-    // `translateX(0.5rem)` on hover, and the track rides along with it, so a
-    // rect captured before the slide would be off by that much for the whole
-    // sweep. Reading it per move keeps the mapping true to where the row is.
+    // Measured live rather than cached on enter, so the mapping stays true if
+    // the list scrolls or the window resizes mid-sweep.
     const r = e.currentTarget.getBoundingClientRect();
     const i = Math.min(n - 1, Math.max(0, Math.floor(((e.clientX - r.left) / r.width) * n)));
     if (i === headRef.current) return;
@@ -100,15 +98,9 @@ export function IndexPage({ onOpenProject }: { onOpenProject: (id: string, start
   return (
     <main className={styles.page}>
       <div className={styles.inner}>
-        <div className={styles.head}>
-          <span>#</span>
-          <span>Title</span>
-          <span className={styles.year}>Year</span>
-        </div>
-
         {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: clearing hover state on leave */}
         <ul className={styles.list} onMouseLeave={leave}>
-          {projects.map((project, i) => (
+          {projects.map((project) => (
             <li key={project.id}>
               <button
                 type="button"
@@ -124,7 +116,6 @@ export function IndexPage({ onOpenProject }: { onOpenProject: (id: string, start
                   enter(project);
                 }}
               >
-                <span className={styles.num}>{String(i + 1).padStart(2, "0")}</span>
                 <span className={styles.title}>{project.title}</span>
                 <span className={styles.year}>{project.year}</span>
                 {hovered === project.id && <Track project={project} head={head} />}

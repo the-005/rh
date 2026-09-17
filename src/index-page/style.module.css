@@ -19,31 +19,20 @@
   }
 }
 
-/* Clears the frame's top row, which sits above this at z-index 1000. */
+/* Clears the frame's top row, which sits above this at z-index 1000. The list
+   runs the full width; the preview floats over it, centred. No z-index here:
+   the rows and the preview must share the page's stacking context to layer. */
 .inner {
   padding: 5rem var(--page-padding, 1.5rem) 6rem;
-  /* The list keeps to the left half; the preview lives in the right. */
-  width: 52%;
-  min-width: 24rem;
 }
 
-/* One grid shared by the header and every row, so the columns line up without
-   either knowing about the other. */
-.head,
 .row {
   display: grid;
-  grid-template-columns: 3.5rem 1fr 5rem;
+  grid-template-columns: 1fr auto;
   align-items: baseline;
   gap: 1.5rem;
   width: 100%;
   text-align: left;
-}
-
-.head {
-  padding: 0 0 0.75rem;
-  border-bottom: 1px solid #111111;
-  font-size: 0.875rem;
-  color: #999999;
 }
 
 .list {
@@ -67,9 +56,9 @@
   font-size: 1.4rem;
   color: inherit;
   cursor: pointer;
-  transition:
-    color 0.2s ease,
-    transform 0.25s cubic-bezier(0.42, 0, 0.58, 1);
+  /* Below the preview by default… */
+  z-index: 0;
+  transition: color 0.2s ease;
 }
 
 /* Hovering the list dims everything but the row under the cursor, so the eye
@@ -78,10 +67,12 @@
   color: #bbbbbb;
 }
 
+/* …but the row you're on sits above it, so its title, year and track read over
+   the image while every other row stays underneath. */
 .list .row:hover,
 .list .row:focus-visible {
   color: #111111;
-  transform: translateX(0.5rem);
+  z-index: 2;
   outline: none;
 }
 
@@ -89,8 +80,7 @@
    Each row is a timeline. The rule under a row is its track: ticks divide it
    into one cell per image, the marker snaps to the cell under the cursor, the
    counter reads it back. All of it is absolutely positioned inside the row, so
-   the list's grid never sees it — and because it is a child of the row, it
-   rides the hover slide instead of fighting it. */
+   the list's grid never sees it, and it layers with the row above the preview. */
 .track {
   position: absolute;
   left: 0;
@@ -144,11 +134,6 @@
   transition: left 0.08s cubic-bezier(0.42, 0, 0.58, 1);
 }
 
-.num {
-  font-size: 0.875rem;
-  color: #999999;
-}
-
 .title {
   min-width: 0;
 }
@@ -164,38 +149,31 @@
     padding-top: 6.5rem;
   }
 
-  .head,
   .row {
-    grid-template-columns: 2.5rem 1fr 4rem;
     gap: 1rem;
-  }
-
-  .row {
     font-size: 1.15rem;
   }
 }
 
-/* Fixed, so it holds its place while the list scrolls under it. Right-anchored
-   and vertically centred: the image grows leftward at its own aspect, so a
-   portrait and a landscape cover both sit correctly with no box around them. */
+/* Fixed and centred on the screen, so it holds its place while the list scrolls
+   under it. Layered between the rows: above every row but the one you're on. */
 .preview {
   position: fixed;
-  top: 50%;
-  right: var(--page-padding, 1.5rem);
-  transform: translateY(-50%);
-  width: 34vw;
-  height: 62vh;
+  inset: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   pointer-events: none;
 }
 
+/* 66% of the window's height, like the project page's enlarged image; its width
+   follows its own aspect, capped so a wide one still fits between the margins. */
 .previewImg {
-  max-width: 100%;
-  max-height: 100%;
+  height: 66vh;
   width: auto;
-  height: auto;
+  max-width: calc(100vw - 2 * var(--page-padding, 1.5rem));
+  object-fit: contain;
   display: block;
   animation: previewIn 0.3s ease both;
 }
@@ -211,11 +189,6 @@
 
 /* No hover to speak of — the list takes the full width and the preview goes. */
 @media (hover: none), screen and (max-width: 53em) {
-  .inner {
-    width: auto;
-    min-width: 0;
-  }
-
   .preview {
     display: none;
   }
