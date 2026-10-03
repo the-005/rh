@@ -23,10 +23,9 @@ Repository: `https://github.com/the-005/rh`
 The owner tracks the work on a Notion board: the **Projects** database on the `rh` page (`collection://3dca5953-9846-8098-b2dc-000b94ef2427`), reached through the Notion MCP server. Keep it current as part of the git workflow:
 
 - **Starting work on a ticket:** set it to **In progress**. It stays there until the owner has looked at it. There is deliberately no review status.
-- **A commit lands work for a ticket:** add a checked item under its **Action items**: what changed, a date mention, and the commit link (`https://github.com/the-005/rh/commit/<hash>`).
-- **A new request, or a loose end we leave open:** a new **Backlog** ticket from the database's template. Titles are short and lowercase, like the rest of the board. Set Page and Scale; leave Priority to the owner.
+- **Every pushed commit goes in its ticket's record.** A ticket page is three sections: **About project** (what it is), **Action items** (open to-dos only), then **Changes**, the record of every revision. Add each commit at the **top** of Changes, newest first, as a bullet: the short hash linked to `https://github.com/the-005/rh/commit/<hash>` in code style, then a short, clear line on what changed. No dates. Insert by replacing the `### Changes` heading with itself plus the new bullet. The record exists because changes get revised and reversed often; log reversals too, and don't edit or delete old entries.
+- **A new request, or a loose end we leave open:** a new **Backlog** ticket from the database's template (it has the three sections). Titles are short and lowercase, like the rest of the board. Set Page and Scale; leave Priority to the owner.
 - **Never set Done.** The owner does, or says to.
-- Ticket pages have embedded blocks the API can't read, so edit with targeted replacements, never a full-page rewrite.
 
 ## Commands
 
