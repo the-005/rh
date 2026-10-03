@@ -51,7 +51,7 @@
    #eee reads as #111, #444 as #bbb, #666 as #999. */
 .list {
   /* The active row's line and playhead: light, so they never shout. */
-  --active-opacity: 0.6;
+  --active-opacity: 0.3;
 }
 
 .row {
