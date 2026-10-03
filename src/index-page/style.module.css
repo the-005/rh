@@ -19,11 +19,18 @@
   }
 }
 
-/* Clears the frame's top row, which sits above this at z-index 1000. The list
-   runs the full width; the preview floats over it, centred. No z-index here:
-   the rows and the preview must share the page's stacking context to layer. */
+/* The list sits in the middle of the window, as long as it fits. When it
+   doesn't, the box grows past the window instead (min-height, not height), so
+   there's no room left to centre in: it starts below the frame's top row and
+   the page scrolls, while the preview stays fixed in the middle. Equal padding
+   top and bottom keeps the centre the window's. No z-index here: the rows and
+   the preview must share the page's stacking context to layer. */
 .inner {
-  padding: 5rem var(--page-padding, 1.5rem) 6rem;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 5rem var(--page-padding, 1.5rem);
 }
 
 .row {

@@ -19,6 +19,10 @@ import styles from "./style.module.css";
  *
  * Going idle fades the other rows back to leave the picture clear, after Julia
  * Plaza (juliaplaza.com).
+ *
+ * Until a row is first touched, the preview shows one image picked at random,
+ * so the page doesn't open empty. A stand-in until the gallery-to-index
+ * transition exists.
  */
 
 /**
@@ -58,6 +62,11 @@ export function IndexPage() {
   const [shown, setShown] = React.useState(0);
   const [playing, setPlaying] = React.useState(false);
   const idle = useIdle(IDLE_MS);
+  /** Shown until a row is first touched, then never again this visit. */
+  const [opening, setOpening] = React.useState<string | null>(() => {
+    const all = projects.flatMap((project) => project.images);
+    return all[Math.floor(Math.random() * all.length)] ?? null;
+  });
 
   // The active row and head are mirrored in refs because two mousemoves can
   // land inside one render, and the slideshow's timer runs outside React: both
@@ -72,6 +81,8 @@ export function IndexPage() {
   const cursorRef = React.useRef<Cursor | null>(null);
   /** Where the cursor was when the slideshow started, to tell a twitch from a move. */
   const originRef = React.useRef<{ x: number; y: number } | null>(null);
+  /** The row buttons, so a slideshow can bring the row it moves on to into view. */
+  const rowsRef = React.useRef<(HTMLButtonElement | null)[]>([]);
 
   const clearCommit = () => {
     if (commitRef.current !== null) window.clearTimeout(commitRef.current);
@@ -112,6 +123,7 @@ export function IndexPage() {
     headRef.current = head;
     setActive(index);
     setShown(head);
+    setOpening(null);
     warm(projects[index]);
   };
 
@@ -188,6 +200,9 @@ export function IndexPage() {
     // The next row lights up on its first image. Its playhead starts there
     // rather than gliding in from the left, and sets off once that has painted.
     activate(index + 1, 0);
+    // In a list longer than the window, the next row may be below the fold.
+    // Scrolling doesn't stop the slideshow: the cursor hasn't moved on screen.
+    rowsRef.current[index + 1]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
     setSpot({ pos: 0.5, transition: "none" });
     const id = playRef.current;
     requestAnimationFrame(() =>
@@ -230,7 +245,7 @@ export function IndexPage() {
   const current = active === null ? null : projects[active];
   // Covers and their siblings are the same files the canvas already fetched as
   // textures, so the swap comes out of the browser cache rather than the network.
-  const src = current ? current.images[Math.min(shown, current.images.length - 1)] : null;
+  const src = current ? current.images[Math.min(shown, current.images.length - 1)] : opening;
 
   return (
     <main className={styles.page}>
@@ -241,6 +256,9 @@ export function IndexPage() {
           {projects.map((project, index) => (
             <li key={project.id}>
               <button
+                ref={(el) => {
+                  rowsRef.current[index] = el;
+                }}
                 type="button"
                 className={`${styles.row} ${active === index ? styles.active : ""}`}
                 aria-pressed={active === index && playing}
