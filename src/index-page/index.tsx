@@ -6,13 +6,13 @@ import styles from "./style.module.css";
  * The index: the same projects the gallery holds, read as a list instead of a
  * space. One full-width row per project, title and year, on white. The active
  * row shows its images centred on screen, above every other row but under that
- * row itself: its name, year, playhead and lines.
+ * row itself: its name, year, playhead and line.
  *
  * Each row is also a player. Cursor x across the row maps to an image, so
  * sweeping left to right reads the whole album, and a square playhead on the
  * row's line follows the cursor exactly. A click plays a slideshow from the
- * image under the cursor: the square turns into a triangle leading a grey bar
- * across the row, and at the end of a project it carries on into the next one
+ * image under the cursor: the square turns into a triangle running across the
+ * row, and at the end of a project it carries on into the next one
  * down the list, for as long as the hand stays still. Moving the mouse (past a
  * twitch), clicking again, or the last project ending hands back to the cursor:
  * the row under it, at its position. The index doesn't open projects.
@@ -34,7 +34,7 @@ const COMMIT_MS = 90;
 const PLAY_MS = 3000;
 /** How far the pointer can drift during a slideshow before it counts as moving and takes over. */
 const TWITCH_PX = 10;
-/** How a keyboard-played bar settles when stopped, with no cursor to return to. */
+/** How a keyboard-played playhead settles when stopped, with no cursor to return to. */
 const GLIDE = "350ms cubic-bezier(0.22, 1, 0.36, 1)";
 /** Crossfade layers kept at once; only the oldest (already fading out) get cut. */
 const MAX_LAYERS = 4;
@@ -44,7 +44,7 @@ const FADE_CLEANUP_MS = 2300;
 const IDLE_MS = 4000;
 
 /** Where the playhead sits, in cells (image i's centre is i + 0.5), and how it gets there. */
-type Bar = { pos: number; transition: string };
+type Spot = { pos: number; transition: string };
 /** The cursor's last position, and the row it was over. */
 type Cursor = { index: number; el: HTMLElement; x: number; y: number };
 
@@ -52,8 +52,8 @@ export function IndexPage() {
   const projects = PROJECTS;
   /** The lit row: under the cursor, or the one a slideshow has carried on to. */
   const [active, setActive] = React.useState<number | null>(null);
-  /** Where the playhead and bar are heading, and how. */
-  const [bar, setBar] = React.useState<Bar>({ pos: 0.5, transition: "none" });
+  /** Where the playhead is heading, and how. */
+  const [spot, setSpot] = React.useState<Spot>({ pos: 0.5, transition: "none" });
   /** Which image the preview is showing — follows the head after COMMIT_MS. */
   const [shown, setShown] = React.useState(0);
   const [playing, setPlaying] = React.useState(false);
@@ -125,7 +125,7 @@ export function IndexPage() {
     const r = el.getBoundingClientRect();
     const f = Math.min(1, Math.max(0, (x - r.left) / r.width));
     const i = Math.min(n - 1, Math.floor(f * n));
-    setBar({ pos: f * n, transition: "none" });
+    setSpot({ pos: f * n, transition: "none" });
     if (index !== activeRef.current) {
       activate(index, i);
       return;
@@ -144,7 +144,7 @@ export function IndexPage() {
       return;
     }
     // Played from the keyboard: no cursor, so settle onto the image showing.
-    setBar({ pos: headRef.current + 0.5, transition: GLIDE });
+    setSpot({ pos: headRef.current + 0.5, transition: GLIDE });
   };
 
   const onPointer = (e: React.MouseEvent<HTMLButtonElement>, index: number) => {
@@ -161,13 +161,13 @@ export function IndexPage() {
   };
 
   /**
-   * While playing, the bar travels at constant speed: through each image's stay
-   * it glides from that image's centre to the next one's, arriving just as the
-   * next image comes up — a timeline, not a row of steps.
+   * While playing, the playhead travels at constant speed: through each image's
+   * stay it glides from that image's centre to the next one's, arriving just as
+   * the next image comes up — a timeline, not a row of steps.
    */
   const glideFrom = (i: number) => {
     const n = projects[activeRef.current ?? 0].images.length;
-    setBar({ pos: Math.min(i + 1.5, n), transition: `${PLAY_MS}ms linear` });
+    setSpot({ pos: Math.min(i + 1.5, n), transition: `${PLAY_MS}ms linear` });
   };
 
   /** One beat of the slideshow: the next image, the next project down the list, or the end. */
@@ -185,10 +185,10 @@ export function IndexPage() {
       handBack();
       return;
     }
-    // The next row lights up on its first image. Its bar starts there rather
-    // than gliding in from the left, and sets off once that has painted.
+    // The next row lights up on its first image. Its playhead starts there
+    // rather than gliding in from the left, and sets off once that has painted.
     activate(index + 1, 0);
-    setBar({ pos: 0.5, transition: "none" });
+    setSpot({ pos: 0.5, transition: "none" });
     const id = playRef.current;
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
@@ -254,12 +254,12 @@ export function IndexPage() {
                   if (!e.currentTarget.matches(":focus-visible") || activeRef.current === index) return;
                   stopPlaying();
                   activate(index, 0);
-                  setBar({ pos: 0.5, transition: "none" });
+                  setSpot({ pos: 0.5, transition: "none" });
                 }}
               >
                 <span className={styles.title}>{project.title}</span>
                 <span className={styles.year}>{project.year}</span>
-                {active === index && <Playhead count={project.images.length} bar={bar} playing={playing} />}
+                {active === index && <Playhead count={project.images.length} spot={spot} playing={playing} />}
               </button>
             </li>
           ))}
@@ -300,26 +300,19 @@ function useIdle(ms: number) {
 }
 
 /**
- * The row as a player: the playhead on the row's line, a square at the cursor
- * while stopped and a triangle while playing, and while playing a grey bar from
- * the left edge to it.
+ * The playhead on the row's line: a square at the cursor while stopped, a
+ * triangle running across the row while playing.
  */
-function Playhead({ count, bar, playing }: { count: number; bar: Bar; playing: boolean }) {
-  const at = `${(bar.pos / count) * 100}%`;
-  const via = (property: string) => (bar.transition === "none" ? "none" : `${property} ${bar.transition}`);
+function Playhead({ count, spot, playing }: { count: number; spot: Spot; playing: boolean }) {
   return (
-    <>
-      <span
-        className={`${styles.progress} ${playing ? styles.progressPlaying : ""}`}
-        style={{ width: at, transition: via("width") }}
-        aria-hidden="true"
-      />
-      <span
-        className={`${styles.playhead} ${playing ? styles.play : styles.stop}`}
-        style={{ left: at, transition: via("left") }}
-        aria-hidden="true"
-      />
-    </>
+    <span
+      className={`${styles.playhead} ${playing ? styles.play : styles.stop}`}
+      style={{
+        left: `${(spot.pos / count) * 100}%`,
+        transition: spot.transition === "none" ? "none" : `left ${spot.transition}`,
+      }}
+      aria-hidden="true"
+    />
   );
 }
 
