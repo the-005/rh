@@ -15,6 +15,9 @@ import styles from "./style.module.css";
  * Clicking the row plays the album as a slideshow from there (looping) or stops
  * it. While it plays the cursor doesn't scrub, so the slideshow isn't knocked
  * about by a twitch of the hand. The index doesn't open projects.
+ *
+ * Rows are frosted glass, and going idle on one fades the rest back to leave
+ * the picture clear, both after Julia Plaza (juliaplaza.com).
  */
 
 /**
@@ -34,6 +37,8 @@ const GLIDE = "350ms cubic-bezier(0.22, 1, 0.36, 1)";
 const MAX_LAYERS = 4;
 /** The longest fade-out in `style.module.css`, plus slack: an outgoing layer is gone by then. */
 const FADE_CLEANUP_MS = 2300;
+/** How long with no pointer, wheel or key before the other rows fade back (Julia Plaza's 4s). */
+const IDLE_MS = 4000;
 
 /** Where the bar ends, in cells (image i's centre is i + 0.5), and how it gets there. */
 type Bar = { pos: number; transition: string };
@@ -46,6 +51,7 @@ export function IndexPage() {
   /** Which image the preview is showing — follows the head after COMMIT_MS. */
   const [shown, setShown] = React.useState(0);
   const [playing, setPlaying] = React.useState(false);
+  const idle = useIdle(IDLE_MS);
 
   // The head is mirrored in a ref because two mousemoves can land inside one
   // render, and the second must compare against the first, not the stale prop.
@@ -164,7 +170,8 @@ export function IndexPage() {
     <main className={styles.page}>
       <div className={styles.inner}>
         {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: clearing hover state on leave */}
-        <ul className={styles.list} onMouseLeave={leave}>
+        {/* Idle only counts while on a row: with none, there's no picture to clear. */}
+        <ul className={`${styles.list} ${idle && hovered ? styles.idle : ""}`} onMouseLeave={leave}>
           {projects.map((project) => (
             <li key={project.id}>
               <button
@@ -195,6 +202,32 @@ export function IndexPage() {
       </div>
     </main>
   );
+}
+
+/**
+ * True once there has been no pointer movement, click, wheel or key for `ms`;
+ * false again on the next one. Each event restarts the countdown, so a still
+ * hand reads as idle even mid-slideshow.
+ */
+function useIdle(ms: number) {
+  const [idle, setIdle] = React.useState(false);
+  React.useEffect(() => {
+    const listening = new AbortController();
+    let timer = window.setTimeout(() => setIdle(true), ms);
+    const wake = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setIdle(true), ms);
+      setIdle(false);
+    };
+    for (const type of ["pointermove", "pointerdown", "wheel", "keydown"]) {
+      window.addEventListener(type, wake, { passive: true, signal: listening.signal });
+    }
+    return () => {
+      listening.abort();
+      window.clearTimeout(timer);
+    };
+  }, [ms]);
+  return idle;
 }
 
 /**
