@@ -6,6 +6,20 @@
 [build.environment]
   NODE_VERSION = "22"
 
+# /index first, and forced: Netlify otherwise reads /index as the address of
+# index.html and 301s it home to / before the catch-all below gets a say.
+[[redirects]]
+  from = "/index"
+  to = "/index.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/index/"
+  to = "/index.html"
+  status = 200
+  force = true
+
 # A single-page app: /index, /research, /about and /project/:id all need index.html,
 # or a reload on them 404s. Real files (images, fonts, video) are served first.
 [[redirects]]
