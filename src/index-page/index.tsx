@@ -1,5 +1,5 @@
 import * as React from "react";
-import { PROJECTS, type ProjectEntry } from "~/src/projects";
+import { ASPECTS, PROJECTS, type ProjectEntry } from "~/src/projects";
 import styles from "./style.module.css";
 
 /**
@@ -42,6 +42,8 @@ const TWITCH_PX = 10;
 const GLIDE = "350ms cubic-bezier(0.22, 1, 0.36, 1)";
 /** Crossfade layers kept at once; only the oldest (already fading out) get cut. */
 const MAX_LAYERS = 4;
+/** The scrub dissolve in `style.module.css`: how fast a stopped slideshow's fades are cut short. */
+const SCRUB_FADE_MS = 250;
 /** The longest fade-out in `style.module.css`, plus slack: an outgoing layer is gone by then. */
 const FADE_CLEANUP_MS = 2300;
 /** How long with no pointer, wheel or key before the other rows fade back (Julia Plaza's 4s). */
@@ -153,6 +155,9 @@ export function IndexPage() {
     stopPlaying();
     if (cursorRef.current) {
       follow(cursorRef.current);
+      // Straight to the image under the cursor: the dwell is for sweeps, not a stop.
+      clearCommit();
+      setShown(headRef.current);
       return;
     }
     // Played from the keyboard: no cursor, so settle onto the image showing.
@@ -285,7 +290,7 @@ export function IndexPage() {
       </div>
 
       <div className={`${styles.preview} ${playing ? styles.previewPlaying : ""}`} aria-hidden="true">
-        <Crossfade src={src} />
+        <Crossfade src={src} playing={playing} />
       </div>
     </main>
   );
@@ -342,9 +347,10 @@ function Playhead({ count, spot, playing }: { count: number; spot: Spot; playing
  * and preferred this to the lift towards white it caused. While scrubbing it's a
  * quick dissolve that keeps up with the cursor.
  */
-function Crossfade({ src }: { src: string | null }) {
+function Crossfade({ src, playing }: { src: string | null; playing: boolean }) {
   const [layers, setLayers] = React.useState<{ id: number; src: string; leaving: boolean }[]>([]);
   const nextId = React.useRef(0);
+  const elsRef = React.useRef(new Map<number, HTMLImageElement>());
 
   React.useEffect(() => {
     setLayers((prev) => {
@@ -361,13 +367,41 @@ function Crossfade({ src }: { src: string | null }) {
     return () => window.clearTimeout(sweep);
   }, [src]);
 
+  // A slideshow fades its outgoing images over 2s. Stopped mid-fade, they would
+  // linger for up to two seconds under the image the cursor brings back,
+  // flashing an in-between image through and around it. So once playing stops,
+  // any outgoing fade with longer than the scrub's to run is cut short: from
+  // wherever it is to nothing in SCRUB_FADE_MS, falling fast.
+  React.useEffect(() => {
+    if (playing) return;
+    for (const layer of layers) {
+      const el = elsRef.current.get(layer.id);
+      if (!layer.leaving || !el) continue;
+      for (const fade of el.getAnimations()) {
+        if (!(fade instanceof CSSTransition)) continue;
+        const end = Number(fade.effect?.getComputedTiming().endTime ?? 0);
+        const left = (end - Number(fade.currentTime ?? 0)) / fade.playbackRate;
+        if (left <= SCRUB_FADE_MS) continue;
+        const from = getComputedStyle(el).opacity;
+        fade.cancel();
+        el.animate([{ opacity: from }, { opacity: 0 }], { duration: SCRUB_FADE_MS, easing: "ease-out" }).onfinish = () =>
+          setLayers((prev) => prev.filter((l) => l.id !== layer.id));
+      }
+    }
+  }, [playing, layers]);
+
   return layers.map((layer) => (
     <img
       key={layer.id}
+      ref={(el) => {
+        if (el) elsRef.current.set(layer.id, el);
+        else elsRef.current.delete(layer.id);
+      }}
       src={`/${layer.src}`}
       alt=""
       decoding="async"
       className={`${styles.previewImg} ${layer.leaving ? styles.previewLeaving : ""}`}
+      style={{ "--r": ASPECTS.get(layer.src) ?? 0.8 } as React.CSSProperties}
       onTransitionEnd={(e) => {
         if (layer.leaving && e.propertyName === "opacity") {
           setLayers((prev) => prev.filter((l) => l.id !== layer.id));

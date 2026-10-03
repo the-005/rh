@@ -48,3 +48,6 @@ export const PROJECTS: ProjectEntry[] = (() => {
     images: items.map((item) => item.url),
   }));
 })();
+
+/** Width ÷ height of every Work image, by url, for anything sized by its shape. */
+export const ASPECTS: ReadonlyMap<string, number> = new Map(ALL_MEDIA.map((item) => [item.url, item.width / item.height]));

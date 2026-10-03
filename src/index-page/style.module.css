@@ -1,3 +1,18 @@
+/* Dials: the values most likely to be tuned, together (each has a row in the
+   Notion tuning table). */
+.page {
+  /* The active row's line and playhead: light, so they never shout. */
+  --active-opacity: 0.3;
+  /* Preview size by shape, r being width ÷ height:
+       height = anchor × (r ÷ 0.8)^−k
+     4:5 photos (most of ours) sit at the anchor. k = 0 makes every shape the
+     same height, 0.5 gives every shape the same area, 1 the same width. */
+  --size-anchor: 66vh;
+  --size-k: 0.5;
+  /* Never taller than this, and never wider than the page's margins allow. */
+  --size-max: 80vh;
+}
+
 .page {
   position: fixed;
   inset: 0;
@@ -56,11 +71,6 @@
    dark over a bright one. Over white, difference renders a colour as its
    inverse, so the values here are the inverses of what the page shows at rest:
    #eee reads as #111, #444 as #bbb, #666 as #999. */
-.list {
-  /* The active row's line and playhead: light, so they never shout. */
-  --active-opacity: 0.3;
-}
-
 .row {
   appearance: none;
   position: relative;
@@ -173,13 +183,18 @@
   pointer-events: none;
 }
 
-/* 66% of the window's height, like the project page's enlarged image; its width
-   follows its own aspect, capped so a wide one still fits between the margins. */
+/* Sized by its shape, by the formula in the dials (--r, its width ÷ height, is
+   set on each image). It keeps its proportions under both caps: they shrink it
+   whole, never crop or letterbox it. */
 .previewImg {
   grid-area: 1 / 1;
-  height: 66vh;
+  height: min(
+    calc(var(--size-anchor) * pow(var(--r) / 0.8, calc(-1 * var(--size-k)))),
+    var(--size-max),
+    calc((100vw - 2 * var(--page-padding, 1.5rem)) / var(--r))
+  );
   width: auto;
-  max-width: calc(100vw - 2 * var(--page-padding, 1.5rem));
+  aspect-ratio: var(--r);
   object-fit: contain;
   display: block;
   opacity: 1;
