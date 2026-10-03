@@ -41,20 +41,25 @@
   padding: 0;
 }
 
-/* Square and flush: no gap between rows, 8px 12px inside, a line under each.
+/* Square and flush: no gap between rows, 8px 12px inside. No line at rest:
+   only the active row shows one, under it.
 
    Everything on a row is drawn light and blended by difference, so it inverts
    whatever is behind it: dark on the white page, light over a dark picture,
    dark over a bright one. Over white, difference renders a colour as its
    inverse, so the values here are the inverses of what the page shows at rest:
-   #eee reads as #111, #444 as #bbb, #666 as #999, #1b1b1b as #e4e4e4. Only the
-   active row is ever over a picture, so only its colours go strong. */
+   #eee reads as #111, #444 as #bbb, #666 as #999. */
+.list {
+  /* The active row's line and playhead: light, so they never shout. */
+  --active-opacity: 0.6;
+}
+
 .row {
   appearance: none;
   position: relative;
   background: none;
   border: none;
-  border-bottom: 1px solid #1b1b1b;
+  border-bottom: 1px solid transparent;
   padding: 8px 12px;
   font: inherit;
   font-size: 1.4rem;
@@ -71,13 +76,13 @@
 
 /* The active row is the one under the cursor or, once a slideshow has carried
    on down the list, the one playing. Everything else dims, so the eye has one
-   place to be. The active row's line goes strong so it shows over a picture. */
+   place to be. The active row's line fades in under it. */
 .list:has(.active) .row:not(.active) {
   color: #444444;
 }
 
 .list .active {
-  border-bottom-color: #eeeeee;
+  border-bottom-color: rgb(238 238 238 / var(--active-opacity));
 }
 
 .list .row:focus-visible {
@@ -117,7 +122,7 @@
 .stop {
   width: 8px;
   height: 8px;
-  background: #eeeeee;
+  background: rgb(238 238 238 / var(--active-opacity));
 }
 
 .play {
@@ -125,7 +130,7 @@
   height: 0;
   border-left: 5px solid transparent;
   border-right: 5px solid transparent;
-  border-bottom: 9px solid #eeeeee;
+  border-bottom: 9px solid rgb(238 238 238 / var(--active-opacity));
 }
 
 .title {
