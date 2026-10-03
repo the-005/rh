@@ -56,8 +56,7 @@
   font-size: 1.4rem;
   color: inherit;
   cursor: pointer;
-  /* No z-index, so the row isn't a stacking context: its name and year can rise
-     above the preview while its bar, playhead and lines stay under it. */
+  /* No z-index at rest: only the hovered row rises above the preview. */
   transition: color 0.2s ease;
 }
 
@@ -73,19 +72,27 @@
   outline: none;
 }
 
-/* Layering, top to bottom: the hovered row's name and year, the preview, then
-   everything else — other rows, and the hovered row's bar, playhead and lines. */
-.title,
-.year {
-  position: relative;
-  z-index: 0;
+/* Layering, top to bottom: the hovered row (name, year, bar, playhead and the
+   lines above and below it), the preview, then every other row. The row has no
+   background, so the picture shows through it. After the Makeup Archive
+   (archive.makeuparchive.org), whose hovered row lifts the same way. */
+.list .row:hover,
+.list .row:focus-visible {
+  z-index: 2;
 }
 
-.list .row:hover .title,
-.list .row:hover .year,
-.list .row:focus-visible .title,
-.list .row:focus-visible .year {
-  z-index: 2;
+/* The line under a row belongs to the next one, which stays under the preview,
+   so the hovered row draws it again on top. The last row has none. */
+.list li:not(:last-child) .row:hover::after,
+.list li:not(:last-child) .row:focus-visible::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: #e4e4e4;
+  pointer-events: none;
 }
 
 /* --- player ---------------------------------------------------------------

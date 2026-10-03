@@ -6,7 +6,7 @@ import styles from "./style.module.css";
  * The index: the same projects the gallery holds, read as a list instead of a
  * space. One full-width row per project, title and year, on white. Hovering a
  * row shows its images centred on screen, above every other row but under that
- * row's own name and year.
+ * row itself: its name, year, bar, playhead and lines.
  *
  * Each row is also a player. Cursor x across the row maps to an image, so
  * sweeping left to right reads the whole album. A grey bar fills the row from
