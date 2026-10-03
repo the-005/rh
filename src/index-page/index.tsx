@@ -4,34 +4,37 @@ import styles from "./style.module.css";
 
 /**
  * The index: the same projects the gallery holds, read as a list instead of a
- * space. One full-width row per project, title and year, on white. Hovering a
+ * space. One full-width row per project, title and year, on white. The active
  * row shows its images centred on screen, above every other row but under that
- * row itself: its name, year, bar, playhead and lines.
+ * row itself: its name, year, playhead and lines.
  *
  * Each row is also a player. Cursor x across the row maps to an image, so
- * sweeping left to right reads the whole album. A grey bar fills the row from
- * its left edge to the current image, ending at the centre of the playhead
- * sitting on the row's line: a square while stopped, a triangle while playing.
- * Clicking the row plays the album as a slideshow from there (looping) or stops
- * it. While it plays the cursor doesn't scrub, so the slideshow isn't knocked
- * about by a twitch of the hand. The index doesn't open projects.
+ * sweeping left to right reads the whole album, and a square playhead on the
+ * row's line follows the cursor exactly. A click plays a slideshow from the
+ * image under the cursor: the square turns into a triangle leading a grey bar
+ * across the row, and at the end of a project it carries on into the next one
+ * down the list, for as long as the hand stays still. Moving the mouse (past a
+ * twitch), clicking again, or the last project ending hands back to the cursor:
+ * the row under it, at its position. The index doesn't open projects.
  *
- * Rows are frosted glass, and going idle on one fades the rest back to leave
- * the picture clear, both after Julia Plaza (juliaplaza.com).
+ * Going idle fades the other rows back to leave the picture clear, after Julia
+ * Plaza (juliaplaza.com).
  */
 
 /**
- * The head moves with the cursor; the picture waits this long before following.
- * At ten images across ~700px a fast sweep crosses a cell every ~30ms, which
- * strobes the whole album instead of showing you any of it. Ninety milliseconds
- * sits under the threshold where a deliberate placement feels delayed, so it
- * costs nothing when you stop and buys everything when you don't. This is the
- * number to turn if the scrub feels wrong.
+ * The playhead moves with the cursor; the picture waits this long before
+ * following. At ten images across ~700px a fast sweep crosses a cell every
+ * ~30ms, which strobes the whole album instead of showing you any of it. Ninety
+ * milliseconds sits under the threshold where a deliberate placement feels
+ * delayed, so it costs nothing when you stop and buys everything when you
+ * don't. This is the number to turn if the scrub feels wrong.
  */
 const COMMIT_MS = 90;
 /** Slideshow pace while a row is playing (the owner found 1.5s too fast). */
 const PLAY_MS = 3000;
-/** How the bar follows a scrub: a short glide instead of a snap from cell to cell. */
+/** How far the pointer can drift during a slideshow before it counts as moving and takes over. */
+const TWITCH_PX = 10;
+/** How a keyboard-played bar settles when stopped, with no cursor to return to. */
 const GLIDE = "350ms cubic-bezier(0.22, 1, 0.36, 1)";
 /** Crossfade layers kept at once; only the oldest (already fading out) get cut. */
 const MAX_LAYERS = 4;
@@ -40,45 +43,52 @@ const FADE_CLEANUP_MS = 2300;
 /** How long with no pointer, wheel or key before the other rows fade back (Julia Plaza's 4s). */
 const IDLE_MS = 4000;
 
-/** Where the bar ends, in cells (image i's centre is i + 0.5), and how it gets there. */
+/** Where the playhead sits, in cells (image i's centre is i + 0.5), and how it gets there. */
 type Bar = { pos: number; transition: string };
+/** The cursor's last position, and the row it was over. */
+type Cursor = { index: number; el: HTMLElement; x: number; y: number };
 
 export function IndexPage() {
   const projects = PROJECTS;
-  const [hovered, setHovered] = React.useState<string | null>(null);
-  /** Where the bar and playhead are heading, and how. */
+  /** The lit row: under the cursor, or the one a slideshow has carried on to. */
+  const [active, setActive] = React.useState<number | null>(null);
+  /** Where the playhead and bar are heading, and how. */
   const [bar, setBar] = React.useState<Bar>({ pos: 0.5, transition: "none" });
   /** Which image the preview is showing — follows the head after COMMIT_MS. */
   const [shown, setShown] = React.useState(0);
   const [playing, setPlaying] = React.useState(false);
   const idle = useIdle(IDLE_MS);
 
-  // The head is mirrored in a ref because two mousemoves can land inside one
-  // render, and the second must compare against the first, not the stale prop.
-  // It is also where playback starts: clicking mid-commit plays from the image
-  // under the playhead, not the last one committed.
+  // The active row and head are mirrored in refs because two mousemoves can
+  // land inside one render, and the slideshow's timer runs outside React: both
+  // must read the latest, not a stale render's. The head is also where playback
+  // starts, so a click mid-commit plays the image under the cursor.
+  const activeRef = React.useRef<number | null>(null);
   const headRef = React.useRef(0);
   const commitRef = React.useRef<number | null>(null);
   const playRef = React.useRef<number | null>(null);
   const warmedRef = React.useRef<Set<string>>(new Set());
+  /** What a slideshow hands back to when it stops. */
+  const cursorRef = React.useRef<Cursor | null>(null);
+  /** Where the cursor was when the slideshow started, to tell a twitch from a move. */
+  const originRef = React.useRef<{ x: number; y: number } | null>(null);
 
   const clearCommit = () => {
     if (commitRef.current !== null) window.clearTimeout(commitRef.current);
     commitRef.current = null;
   };
-  const stop = () => {
+  const stopPlaying = () => {
     if (playRef.current !== null) window.clearInterval(playRef.current);
     playRef.current = null;
+    originRef.current = null;
     setPlaying(false);
-    // A playing bar is mid-glide towards the next image; settle it back onto the one showing.
-    setBar({ pos: headRef.current + 0.5, transition: GLIDE });
   };
   React.useEffect(
     () => () => {
       clearCommit();
       if (playRef.current !== null) window.clearInterval(playRef.current);
     },
-    [],
+    []
   );
 
   /**
@@ -95,102 +105,161 @@ export function IndexPage() {
     }
   };
 
-  const enter = (project: ProjectEntry) => {
+  /** Light a row, showing image `head` straight away. */
+  const activate = (index: number, head: number) => {
     clearCommit();
-    stop();
-    headRef.current = 0;
-    setHovered(project.id);
-    setBar({ pos: 0.5, transition: "none" });
-    setShown(0);
-    warm(project);
+    activeRef.current = index;
+    headRef.current = head;
+    setActive(index);
+    setShown(head);
+    warm(projects[index]);
   };
 
-  const scrub = (e: React.MouseEvent<HTMLButtonElement>, project: ProjectEntry) => {
-    if (playRef.current !== null) return;
-    const n = project.images.length;
-    // Measured live rather than cached on enter, so the mapping stays true if
-    // the list scrolls or the window resizes mid-sweep.
-    const r = e.currentTarget.getBoundingClientRect();
-    const i = Math.min(n - 1, Math.max(0, Math.floor(((e.clientX - r.left) / r.width) * n)));
+  /**
+   * Point the index at the cursor: the playhead sits exactly under it, and the
+   * picture follows the cell it's in after COMMIT_MS. Measured live rather than
+   * cached, so the mapping stays true if the list scrolls or the window resizes.
+   */
+  const follow = ({ index, el, x }: Cursor) => {
+    const n = projects[index].images.length;
+    const r = el.getBoundingClientRect();
+    const f = Math.min(1, Math.max(0, (x - r.left) / r.width));
+    const i = Math.min(n - 1, Math.floor(f * n));
+    setBar({ pos: f * n, transition: "none" });
+    if (index !== activeRef.current) {
+      activate(index, i);
+      return;
+    }
     if (i === headRef.current) return;
     headRef.current = i;
-    setBar({ pos: i + 0.5, transition: GLIDE });
     clearCommit();
     commitRef.current = window.setTimeout(() => setShown(i), COMMIT_MS);
   };
 
-  /** Play from the current image, or stop where it is. */
-  const toggle = (project: ProjectEntry) => {
-    if (hovered !== project.id) enter(project);
-    if (playRef.current !== null) {
-      stop();
+  /** Stop the slideshow and give the index back to the cursor, wherever it is now. */
+  const handBack = () => {
+    stopPlaying();
+    if (cursorRef.current) {
+      follow(cursorRef.current);
       return;
+    }
+    // Played from the keyboard: no cursor, so settle onto the image showing.
+    setBar({ pos: headRef.current + 0.5, transition: GLIDE });
+  };
+
+  const onPointer = (e: React.MouseEvent<HTMLButtonElement>, index: number) => {
+    const cursor = { index, el: e.currentTarget, x: e.clientX, y: e.clientY };
+    cursorRef.current = cursor;
+    if (playRef.current === null) {
+      follow(cursor);
+      return;
+    }
+    // A still hand keeps the slideshow going; a moving one takes over.
+    const origin = originRef.current;
+    if (origin && Math.hypot(cursor.x - origin.x, cursor.y - origin.y) <= TWITCH_PX) return;
+    handBack();
+  };
+
+  /**
+   * While playing, the bar travels at constant speed: through each image's stay
+   * it glides from that image's centre to the next one's, arriving just as the
+   * next image comes up — a timeline, not a row of steps.
+   */
+  const glideFrom = (i: number) => {
+    const n = projects[activeRef.current ?? 0].images.length;
+    setBar({ pos: Math.min(i + 1.5, n), transition: `${PLAY_MS}ms linear` });
+  };
+
+  /** One beat of the slideshow: the next image, the next project down the list, or the end. */
+  const advance = () => {
+    const index = activeRef.current;
+    if (index === null) return;
+    const next = headRef.current + 1;
+    if (next < projects[index].images.length) {
+      headRef.current = next;
+      setShown(next);
+      glideFrom(next);
+      return;
+    }
+    if (index + 1 >= projects.length) {
+      handBack();
+      return;
+    }
+    // The next row lights up on its first image. Its bar starts there rather
+    // than gliding in from the left, and sets off once that has painted.
+    activate(index + 1, 0);
+    setBar({ pos: 0.5, transition: "none" });
+    const id = playRef.current;
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        if (playRef.current === id) glideFrom(0);
+      })
+    );
+  };
+
+  /** Play from the image under the cursor, or, while playing, hand back. */
+  const onClick = (e: React.MouseEvent<HTMLButtonElement>, index: number) => {
+    if (playRef.current !== null) {
+      handBack();
+      return;
+    }
+    // detail is 0 for a click from the keyboard, which has no cursor to measure.
+    const origin = e.detail > 0 ? { x: e.clientX, y: e.clientY } : null;
+    if (origin) {
+      cursorRef.current = { index, el: e.currentTarget, ...origin };
+      follow(cursorRef.current);
+    } else if (activeRef.current !== index) {
+      activate(index, 0);
     }
     clearCommit();
     setShown(headRef.current);
     setPlaying(true);
-    const n = project.images.length;
-    // While playing, the bar travels at constant speed: through each image's
-    // stay it glides from that image's centre to the next one's, arriving just
-    // as the next image comes up — a timeline, not a row of steps.
-    const glideFrom = (i: number) => setBar({ pos: Math.min(i + 1.5, n), transition: `${PLAY_MS}ms linear` });
+    originRef.current = origin;
     glideFrom(headRef.current);
-    const id = window.setInterval(() => {
-      const next = (headRef.current + 1) % n;
-      headRef.current = next;
-      setShown(next);
-      if (next !== 0) {
-        glideFrom(next);
-        return;
-      }
-      // Looping round: jump back to the start rather than glide backwards across
-      // the row, then carry on once that jump has painted.
-      setBar({ pos: 0.5, transition: "none" });
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => {
-          if (playRef.current === id) glideFrom(0);
-        }),
-      );
-    }, PLAY_MS);
-    playRef.current = id;
+    playRef.current = window.setInterval(advance, PLAY_MS);
   };
 
   const leave = () => {
     clearCommit();
-    stop();
-    setHovered(null);
+    stopPlaying();
+    cursorRef.current = null;
+    activeRef.current = null;
+    setActive(null);
   };
 
-  const active = projects.find((p) => p.id === hovered);
+  const current = active === null ? null : projects[active];
   // Covers and their siblings are the same files the canvas already fetched as
   // textures, so the swap comes out of the browser cache rather than the network.
-  const src = active ? active.images[Math.min(shown, active.images.length - 1)] : null;
+  const src = current ? current.images[Math.min(shown, current.images.length - 1)] : null;
 
   return (
     <main className={styles.page}>
       <div className={styles.inner}>
         {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: clearing hover state on leave */}
-        {/* Idle only counts while on a row: with none, there's no picture to clear. */}
-        <ul className={`${styles.list} ${idle && hovered ? styles.idle : ""}`} onMouseLeave={leave}>
-          {projects.map((project) => (
+        {/* Idle only counts while a row is active: with none, there's no picture to clear. */}
+        <ul className={`${styles.list} ${idle && active !== null ? styles.idle : ""}`} onMouseLeave={leave}>
+          {projects.map((project, index) => (
             <li key={project.id}>
               <button
                 type="button"
-                className={styles.row}
-                aria-pressed={hovered === project.id && playing}
-                onClick={() => toggle(project)}
-                onMouseEnter={() => enter(project)}
-                onMouseMove={(e) => scrub(e, project)}
-                // Keyboard focus lands on the project, not a position in it —
+                className={`${styles.row} ${active === index ? styles.active : ""}`}
+                aria-pressed={active === index && playing}
+                onClick={(e) => onClick(e, index)}
+                onMouseEnter={(e) => onPointer(e, index)}
+                onMouseMove={(e) => onPointer(e, index)}
+                // Keyboard focus lands on the project, not a position in it:
                 // there is no cursor to read, so it starts at the first image.
-                onFocus={() => {
-                  if (hovered === project.id) return;
-                  enter(project);
+                // A click focuses the row too, and handles itself.
+                onFocus={(e) => {
+                  if (!e.currentTarget.matches(":focus-visible") || activeRef.current === index) return;
+                  stopPlaying();
+                  activate(index, 0);
+                  setBar({ pos: 0.5, transition: "none" });
                 }}
               >
                 <span className={styles.title}>{project.title}</span>
                 <span className={styles.year}>{project.year}</span>
-                {hovered === project.id && <Playhead count={project.images.length} bar={bar} playing={playing} />}
+                {active === index && <Playhead count={project.images.length} bar={bar} playing={playing} />}
               </button>
             </li>
           ))}
@@ -231,16 +300,20 @@ function useIdle(ms: number) {
 }
 
 /**
- * The row as a progress bar: a grey fill from the left edge to the bar's
- * position, and the playhead sitting on the row's line at that point — a
- * triangle while playing, a square while stopped.
+ * The row as a player: the playhead on the row's line, a square at the cursor
+ * while stopped and a triangle while playing, and while playing a grey bar from
+ * the left edge to it.
  */
 function Playhead({ count, bar, playing }: { count: number; bar: Bar; playing: boolean }) {
   const at = `${(bar.pos / count) * 100}%`;
   const via = (property: string) => (bar.transition === "none" ? "none" : `${property} ${bar.transition}`);
   return (
     <>
-      <span className={styles.progress} style={{ width: at, transition: via("width") }} aria-hidden="true" />
+      <span
+        className={`${styles.progress} ${playing ? styles.progressPlaying : ""}`}
+        style={{ width: at, transition: via("width") }}
+        aria-hidden="true"
+      />
       <span
         className={`${styles.playhead} ${playing ? styles.play : styles.stop}`}
         style={{ left: at, transition: via("left") }}

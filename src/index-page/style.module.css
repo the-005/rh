@@ -45,13 +45,11 @@
   border-top: 1px solid #e4e4e4;
 }
 
-/* Frosted glass, after Julia Plaza (juliaplaza.com): a 20% grey tint over a
-   blur of whatever is behind. Square, and flush, with no gap between rows. */
+/* Square and flush: no gap between rows, 8px 12px inside. */
 .row {
   appearance: none;
   position: relative;
-  background: rgba(150, 150, 150, 0.2);
-  backdrop-filter: blur(20px);
+  background: none;
   border: none;
   border-top: 1px solid transparent;
   padding: 8px 12px;
@@ -59,48 +57,45 @@
   font-size: 1.4rem;
   color: inherit;
   cursor: pointer;
-  /* No z-index at rest: only the hovered row rises above the preview. The
+  /* No z-index at rest: only the active row rises above the preview. The
      opacity time is the wake from idle; the fade down is set under .idle. */
   transition:
     color 0.2s ease,
     opacity 300ms ease-in-out;
 }
 
-/* Idle (no pointer, wheel or key for IDLE_MS while on a row): every row but
-   that one fades back, as Julia Plaza's cards fade off its video. Slow down,
-   quick back: a transition takes its timing from the state it is heading to,
-   so this 600ms is the fade down and the row's own 300ms is the wake. */
-.idle .row:not(:hover):not(:focus-visible) {
+/* The active row is the one under the cursor or, once a slideshow has carried
+   on down the list, the one playing. Everything else dims, so the eye has one
+   place to be. */
+.list:has(.active) .row:not(.active) {
+  color: #bbbbbb;
+}
+
+.list .row:focus-visible {
+  outline: none;
+}
+
+/* Idle (no pointer, wheel or key for IDLE_MS while a row is active): every row
+   but that one fades back, as Julia Plaza's (juliaplaza.com) cards fade off its
+   video. Slow down, quick back: a transition takes its timing from the state it
+   is heading to, so this 600ms is the fade down and the row's own 300ms is the
+   wake. */
+.idle .row:not(.active) {
   opacity: 0.2;
   transition-duration: 0.2s, 600ms;
 }
 
-/* Hovering the list dims everything but the row under the cursor, so the eye
-   has one place to be. */
-.list:hover .row {
-  color: #bbbbbb;
-}
-
-.list .row:hover,
-.list .row:focus-visible {
-  color: #111111;
-  outline: none;
-}
-
-/* Layering, top to bottom: the hovered row (name, year, bar, playhead and the
-   lines above and below it), the preview, then every other row. The row's
-   background is the frosted tint, so the picture shows through it, blurred.
-   After the Makeup Archive (archive.makeuparchive.org), whose hovered row lifts
-   the same way. */
-.list .row:hover,
-.list .row:focus-visible {
+/* Layering, top to bottom: the active row (name, year, playhead, bar and the
+   lines above and below it), the preview, then every other row. The row has no
+   background, so the picture shows through it. After the Makeup Archive
+   (archive.makeuparchive.org), whose hovered row lifts the same way. */
+.list .active {
   z-index: 2;
 }
 
 /* The line under a row belongs to the next one, which stays under the preview,
-   so the hovered row draws it again on top. The last row has none. */
-.list li:not(:last-child) .row:hover::after,
-.list li:not(:last-child) .row:focus-visible::after {
+   so the active row draws it again on top. The last row has none. */
+.list li:not(:last-child) .active::after {
   content: "";
   position: absolute;
   left: 0;
@@ -112,11 +107,13 @@
 }
 
 /* --- player ---------------------------------------------------------------
-   The hovered row is a progress bar. Both parts are absolutely positioned in
-   the row's padding box — from just under the line above to just over the line
-   below — so the grid never sees them. */
-/* Width and position are driven inline, transitions included: a short glide
-   while scrubbing, a constant-speed run while playing. */
+   The active row is a player. Both parts are absolutely positioned in the
+   row's padding box, from just under the line above to just over the line
+   below, so the grid never sees them. Width and position are driven inline,
+   transitions included: none while the playhead follows the cursor, a
+   constant-speed run while playing. */
+/* The bar shows only while playing; hovering shows the playhead alone. It stays
+   mounted and tracking, so a slideshow's bar sets off from the cursor. */
 .progress {
   position: absolute;
   top: 0;
@@ -124,9 +121,15 @@
   left: 0;
   background: rgba(17, 17, 17, 0.07);
   pointer-events: none;
+  visibility: hidden;
 }
 
-/* Sits on the line under the row, centred on the end of the bar. */
+.progressPlaying {
+  visibility: visible;
+}
+
+/* Sits on the line under the row: centred on the cursor while stopped, on the
+   end of the bar while playing. */
 .playhead {
   position: absolute;
   bottom: 0;
