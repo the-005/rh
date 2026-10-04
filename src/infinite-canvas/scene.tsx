@@ -10,7 +10,7 @@ import {
   setCameraGoal,
   isDimmedPlane,
   isPlaneHidden,
-  isTransitionActive,
+  isCanvasDimmed,
   onCanvasPaused,
   setHeroScreenRect,
   stageTransitionSource,
@@ -591,7 +591,7 @@ function SplashPlane({
 
     // The splash frame dims with everything else during a project transition —
     // it isn't a MediaPlane, so it doesn't go through the dim system.
-    const target = isTransitionActive() ? 0 : depthFade * depthFade;
+    const target = isCanvasDimmed() ? 0 : depthFade * depthFade;
     state.opacity =
       target < INVIS_THRESHOLD && state.opacity < INVIS_THRESHOLD
         ? 0

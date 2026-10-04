@@ -45,6 +45,9 @@ let hiddenKey: string | null = null;
 /** True from click until the project page fully releases the canvas: freezes
  *  input, dims non-hero planes, and tints the scene background. */
 let active = false;
+/** On the way home, set once the rest of the canvas may fade back in, before
+ *  the plane lands (the page decides when). */
+let returning = false;
 let cameraGoal: CameraGoal | null = null;
 
 /**
@@ -101,6 +104,7 @@ export function setPendingTransition(rect: TransitionRect, startIndex: number): 
   pending = { rect, startIndex, sourceKey: staged };
   staged = null;
   active = true;
+  returning = false;
 }
 
 export function consumePendingTransition(): PendingTransition | null {
@@ -136,9 +140,21 @@ export function isPlaneHidden(key: string): boolean {
   return hiddenKey === key;
 }
 
-/** Every plane except the flying hero fades out while a transition is active. */
+/** Every plane except the flying hero fades out while a transition is active,
+ *  until the page lets the canvas come back on the way home. */
 export function isDimmedPlane(key: string): boolean {
-  return active && heroTween !== null && heroTween.key !== key;
+  return active && !returning && heroTween !== null && heroTween.key !== key;
+}
+
+/** The rest of the canvas fades back in now, while the plane is still flying
+ *  home; input stays frozen until it lands. */
+export function returnCanvas(): void {
+  returning = true;
+}
+
+/** Whether the canvas is dimmed for a transition (the splash frame follows this). */
+export function isCanvasDimmed(): boolean {
+  return active && !returning;
 }
 
 /** Nudge the canvas so the returning plane lands in the middle of the screen. */
@@ -151,10 +167,6 @@ export function getCameraGoal(): CameraGoal | null {
 }
 
 export function isCanvasFrozen(): boolean {
-  return active;
-}
-
-export function isTransitionActive(): boolean {
   return active;
 }
 
@@ -183,6 +195,7 @@ export function onCanvasPaused(listener: (paused: boolean) => void): () => void 
  *  and the intervening cleanup runs releaseTransition — this undoes that. */
 export function holdTransition(): void {
   active = true;
+  returning = false;
 }
 
 /** End the transition: un-hide, un-dim, un-freeze — the canvas comes back to life. */
@@ -195,5 +208,6 @@ export function releaseTransition(): void {
   swapWaiter = null;
   heroScreenRect = null;
   active = false;
+  returning = false;
   setCanvasPaused(false);
 }

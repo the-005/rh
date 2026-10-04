@@ -7,6 +7,7 @@ import {
   hideTransitionSource,
   holdTransition,
   releaseTransition,
+  returnCanvas,
   setCanvasPaused,
   swapTransitionSource,
 } from "./transition-origin";
@@ -42,6 +43,10 @@ const riseDelays = (m: number) => {
 const ZOOM_MS = 600;
 /** Longest the exit waits for the canvas plane to draw the closing image. */
 const SWAP_TIMEOUT_MS = 1200;
+/** How far into the flight home the rest of the canvas starts fading back in.
+ *  It used to wait for the landing, leaving the image alone on white for most
+ *  of the flight (it has shrunk by ~150ms). */
+const CANVAS_RETURN_MS = 300;
 /**
  * Scrolling is free and continuous. Wheel and trackpad (either axis), drags and
  * arrow keys move a target, and the strip eases toward it every frame: a mouse
@@ -631,6 +636,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       hideTransitionSource(null);
       hero.style.opacity = "0";
       overlay.style.background = "transparent";
+      after(CANVAS_RETURN_MS, returnCanvas);
       // If the plane never reports arrival, leave anyway.
       after(FLIGHT_MS + 400, () => {
         releaseTransition();
