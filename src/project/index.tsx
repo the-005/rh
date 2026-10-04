@@ -52,8 +52,12 @@ const KEY_STEP_FRAC = 0.5;
 /** Beat between the arrival settling and the zoom. */
 const FUSE_PAUSE_MS = 260;
 /** Images that get taller than this share of the strip during the zoom are
- *  decoded at full size before it (6–8 per project; the rest stay small). */
+ *  decoded before it (6–8 per project; the rest decode small, as shown). */
 const PREDECODE_ABOVE = 0.25;
+/** Longest side of the canvas copy of each image (`canvasUrl`, scripts/media.ts). */
+const CANVAS_COPY_PX = 1000;
+/** Full-size upgrades after the zoom run this many at a time, in strip order. */
+const UPGRADE_CONCURRENCY = 2;
 /** Longest the zoom waits for those decodes. */
 const DECODE_WAIT_MS = 1000;
 
@@ -114,6 +118,9 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   // The image you're on: it drives the counter and is the one that goes home.
   const [current, setCurrent] = React.useState(0);
   const [dragging, setDragging] = React.useState(false);
+  // Images that started as their canvas copy and have since been swapped for
+  // the full-size file.
+  const [upgraded, setUpgraded] = React.useState<ReadonlySet<number>>(() => new Set());
 
   const timersRef = React.useRef<number[]>([]);
   const after = (ms: number, fn: () => void) => {
@@ -166,13 +173,25 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
 
   // How tall each image gets on screen during the zoom, as a share of the
   // strip: full size if it ends on screen, otherwise its size as it leaves the
-  // window. Left to the zoom, the browser decodes the big ones mid-zoom, larger
-  // each time as they grow (33 decodes on PR-01), which on a first visit cost
-  // frames; a second visit was smooth because they were cached. So the ones
-  // that get big are decoded before the zoom instead.
-  const growsLarge = xs.map((x, k) => {
+  // window.
+  const peaks = xs.map((x, k) => {
     const e = x < viewport.w ? 1 : Math.min(1, (viewport.w - rowXs[k]) / (x - rowXs[k]));
-    return shrink + (1 - shrink) * e > PREDECODE_ABOVE;
+    return shrink + (1 - shrink) * e;
+  });
+  // Left to the zoom, the browser decodes the big ones mid-zoom, larger each
+  // time as they grow (33 decodes on PR-01), which on a first visit cost frames;
+  // a second visit was smooth because they were cached. So the ones that get
+  // big are decoded before the zoom instead.
+  const growsLarge = peaks.map((p) => p > PREDECODE_ABOVE);
+  // Only the images that get bigger in the zoom than their 1000px canvas copy
+  // can show sharply (on this screen, at this pixel density) start at full
+  // size: 2–4 per project. The rest start as the copy, often already cached
+  // from the canvas, and are upgraded after the zoom. Opening PR-01 went from
+  // about 31MB of downloads to about 5MB.
+  const dpr = window.devicePixelRatio || 1;
+  const startsFull = images.map((img, k) => {
+    const copyH = img.height * Math.min(1, CANVAS_COPY_PX / Math.max(img.width, img.height));
+    return peaks[k] * stripH * dpr > copyH;
   });
 
   // The image you clicked is 01, the strip's own order.
@@ -468,6 +487,29 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     }
   }, []);
 
+  // After the zoom, the images that started as their canvas copy are upgraded
+  // to full size in strip order, a couple at a time. Each is swapped in only
+  // once it's loaded and decoded, so it just turns sharper: same size, no flash.
+  React.useEffect(() => {
+    if (!settled) return;
+    let canceled = false;
+    const queue = images.map((_, k) => k).filter((k) => !startsFull[k]);
+    const work = async () => {
+      for (let k = queue.shift(); k !== undefined && !canceled; k = queue.shift()) {
+        const full = new Image();
+        full.src = `/${images[k].url}`;
+        await full.decode().catch(() => {});
+        if (canceled) return;
+        const done = k;
+        setUpgraded((prev) => new Set(prev).add(done));
+      }
+    };
+    for (let i = 0; i < UPGRADE_CONCURRENCY; i++) work();
+    return () => {
+      canceled = true;
+    };
+  }, [settled]);
+
   // Whatever the exit path, give the canvas back
   React.useEffect(() => releaseTransition, []);
 
@@ -688,7 +730,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
             <img
               ref={k === 0 ? heroImgRef : null}
               data-pos={k}
-              src={`/${img.url}`}
+              src={`/${startsFull[k] || upgraded.has(k) ? img.url : img.canvasUrl}`}
               alt=""
               draggable={false}
               decoding="async"
