@@ -28,7 +28,6 @@ const RISE_PX = 32;
 const SAT_STAGGER_S = 0.07;
 
 /** The zoom into the strip keeps the curve every row move has used. */
-const ZOOM_EASE = "cubic-bezier(0.42, 0, 0.58, 1)";
 const ZOOM_MS = 600;
 /** Exit: the images around the one going home fade as the strip shrinks,
  *  furthest first, finishing inside the flight however many are on screen. */
@@ -65,6 +64,25 @@ type Phase = "arrive" | "strip" | "leaving";
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
+/** CSS's cubic-bezier() as a function of progress, for motion run from script. */
+const cubicBezier = (x1: number, y1: number, x2: number, y2: number) => {
+  const at = (t: number, p1: number, p2: number) => ((1 - 3 * p2 + 3 * p1) * t * t + (3 * p2 - 6 * p1) * t + 3 * p1) * t;
+  const slope = (t: number, p1: number, p2: number) => 3 * (1 - 3 * p2 + 3 * p1) * t * t + 2 * (3 * p2 - 6 * p1) * t + 3 * p1;
+  return (x: number) => {
+    if (x <= 0) return 0;
+    if (x >= 1) return 1;
+    let t = x;
+    for (let i = 0; i < 8; i++) {
+      const d = at(t, x1, x2) - x;
+      if (Math.abs(d) < 1e-6) break;
+      t -= d / slope(t, x1, x2);
+    }
+    return at(t, y1, y2);
+  };
+};
+/** cubic-bezier(0.42, 0, 0.58, 1), the curve every row move has used. */
+const zoomEase = cubicBezier(0.42, 0, 0.58, 1);
+
 export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }) {
   // Capture once on mount — clears the module-level store
   const transitionRef = React.useRef(consumePendingTransition());
@@ -83,7 +101,8 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   }, []);
 
   const [phase, setPhase] = React.useState<Phase>("arrive");
-  // The zoom's transition is on only while it runs.
+  // True once the zoom has run. Until then the slots sit in the arrival row as
+  // far as React is concerned; the zoom moves them from script.
   const [settled, setSettled] = React.useState(false);
   // Nothing is clickable while a move runs — the canvas half of this already
   // lives in transition-origin; this is the DOM half.
@@ -262,11 +281,13 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
         closeBtn.style.opacity = "0";
       }
 
-      // Warm every row image's decoder now, so the bitmaps are ready on
-      // background threads long before anything needs to paint them —
-      // decode spikes during the flight read as stutter.
-      for (const el of overlay.querySelectorAll("img")) {
-        (el as HTMLImageElement).decode().catch(() => {});
+      // Warm the decoder for the images the zoom ends on, so their full-size
+      // bitmaps are ready on background threads well before they're needed.
+      // Only those: decoding every image at full size up front (about 1GB for
+      // PR-01's 53) crowded out the ones that matter; the rest decode small,
+      // as they're shown.
+      for (const el of overlay.querySelectorAll<HTMLImageElement>("img[data-pos]")) {
+        if (xs[Number(el.dataset.pos)] < viewport.w) el.decode().catch(() => {});
       }
 
       // Only after the hero has landed do the supporting images enter: each
@@ -380,13 +401,32 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       ? FLIGHT_MS + (images.length - 1) * SAT_STAGGER_S * 1000 + 700 + FUSE_PAUSE_MS
       : 500;
     let canceled = false;
+    // Run from script rather than as a CSS transition. A transition hands each
+    // image to the compositor as its own layer, drawn once and then resized
+    // every frame: PR-01's point-cloud images shimmered as that drawing was
+    // resized and jumped when it was redrawn at the end, and 53 full-size
+    // layers is more than the GPU keeps. Run from script, the strip is redrawn
+    // at its real size each frame, and the last frame is the resting one.
     const zoom = () => {
       if (canceled) return;
       setPhase("strip");
-      after(ZOOM_MS, () => {
-        setSettled(true);
-        setBusy(false);
-      });
+      const slots = Array.from(rowRef.current?.children ?? []) as HTMLElement[];
+      const t0 = performance.now();
+      const frame = (now: number) => {
+        if (canceled) return;
+        const p = Math.min(1, (now - t0) / ZOOM_MS);
+        const e = zoomEase(p);
+        const scale = shrink + (1 - shrink) * e;
+        slots.forEach((el, k) => {
+          el.style.transform = `translate(${rowXs[k] + (xs[k] - rowXs[k]) * e}px, 0) scale(${scale})`;
+        });
+        if (p < 1) rafRef.current = requestAnimationFrame(frame);
+        else {
+          setSettled(true);
+          setBusy(false);
+        }
+      };
+      rafRef.current = requestAnimationFrame(frame);
     };
     const timer = window.setTimeout(() => {
       // Like wakawaka.world, which waits on its hero images: hold the zoom until
@@ -618,8 +658,8 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
               width: widths[k],
               height: stripH,
               marginTop: -stripH / 2,
-              transform: inStrip ? `translate(${xs[k]}px, 0) scale(1)` : `translate(${rowXs[k]}px, 0) scale(${shrink})`,
-              transition: inStrip && !settled ? `transform ${ZOOM_MS}ms ${ZOOM_EASE}` : "none",
+              // The zoom runs from script and only hands back here once it's done.
+              transform: settled ? `translate(${xs[k]}px, 0) scale(1)` : `translate(${rowXs[k]}px, 0) scale(${shrink})`,
             }}
           >
             <img

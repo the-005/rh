@@ -78,10 +78,10 @@
 }
 
 /* Laid out at strip size, shrunk into the arrival row by transform, so the zoom
-   into the strip is one interpolation and never a relayout. No standing
-   will-change: a promoted layer keeps the scale it was first drawn at, and these
-   start as small as 1/53 of their size. The zoom's transition promotes them
-   while it runs, drawn at their final size. */
+   into the strip is one interpolation and never a relayout. No will-change: a
+   promoted layer is drawn once and then resized, which made PR-01's point-cloud
+   images shimmer, so the zoom runs from script and the strip is redrawn at its
+   real size each frame. */
 .slot {
   position: absolute;
   left: 0;
