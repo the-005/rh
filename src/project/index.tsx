@@ -51,7 +51,10 @@ const END_SLOP_PX = 1;
 const KEY_STEP_FRAC = 0.5;
 /** Beat between the arrival settling and the zoom. */
 const FUSE_PAUSE_MS = 260;
-/** Longest the zoom waits for the images it ends on to decode. */
+/** Images that get taller than this share of the strip during the zoom are
+ *  decoded at full size before it (6–8 per project; the rest stay small). */
+const PREDECODE_ABOVE = 0.25;
+/** Longest the zoom waits for those decodes. */
 const DECODE_WAIT_MS = 1000;
 
 /**
@@ -160,6 +163,17 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   const stripW = count ? xs[count - 1] + widths[count - 1] : 0;
   // The strip ends when its last image reaches the right edge.
   const maxScroll = inStrip ? Math.max(0, stripW - viewport.w) : 0;
+
+  // How tall each image gets on screen during the zoom, as a share of the
+  // strip: full size if it ends on screen, otherwise its size as it leaves the
+  // window. Left to the zoom, the browser decodes the big ones mid-zoom, larger
+  // each time as they grow (33 decodes on PR-01), which on a first visit cost
+  // frames; a second visit was smooth because they were cached. So the ones
+  // that get big are decoded before the zoom instead.
+  const growsLarge = xs.map((x, k) => {
+    const e = x < viewport.w ? 1 : Math.min(1, (viewport.w - rowXs[k]) / (x - rowXs[k]));
+    return shrink + (1 - shrink) * e > PREDECODE_ABOVE;
+  });
 
   // The image you clicked is 01, the strip's own order.
   const digits = Math.max(2, String(count).length);
@@ -280,15 +294,6 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       if (closeBtn) {
         closeBtn.style.transition = "none";
         closeBtn.style.opacity = "0";
-      }
-
-      // Warm the decoder for the images the zoom ends on, so their full-size
-      // bitmaps are ready on background threads well before they're needed.
-      // Only those: decoding every image at full size up front (about 1GB for
-      // PR-01's 53) crowded out the ones that matter; the rest decode small,
-      // as they're shown.
-      for (const el of overlay.querySelectorAll<HTMLImageElement>("img[data-pos]")) {
-        if (xs[Number(el.dataset.pos)] < viewport.w) el.decode().catch(() => {});
       }
 
       // Only after the hero has landed do the supporting images enter: each
@@ -437,13 +442,13 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     };
     const timer = window.setTimeout(() => {
       // Like wakawaka.world, which waits on its hero images: hold the zoom until
-      // the images it ends on are decoded, so none fills in while it runs. Never
-      // longer than DECODE_WAIT_MS.
-      const endOnScreen = Array.from(
-        overlayRef.current?.querySelectorAll<HTMLImageElement>("img[data-pos]") ?? [],
-      ).filter((el) => xs[Number(el.dataset.pos)] < viewport.w);
+      // the images that get big in it are decoded (started when the page
+      // opened, below). Never longer than DECODE_WAIT_MS.
+      const big = Array.from(overlayRef.current?.querySelectorAll<HTMLImageElement>("img[data-pos]") ?? []).filter(
+        (el) => growsLarge[Number(el.dataset.pos)],
+      );
       Promise.race([
-        Promise.all(endOnScreen.map((el) => el.decode().catch(() => {}))),
+        Promise.all(big.map((el) => el.decode().catch(() => {}))),
         new Promise((resolve) => setTimeout(resolve, DECODE_WAIT_MS)),
       ]).then(zoom);
     }, settleAt);
@@ -451,6 +456,16 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       canceled = true;
       clearTimeout(timer);
     };
+  }, []);
+
+  // Decode the images that get big in the zoom, at full size, as soon as the
+  // page opens: the arrival leaves seconds for it. Only those: decoding every
+  // image at full size up front (about 1GB for PR-01's 53) crowded out the ones
+  // that matter; the rest decode small, as they're shown.
+  React.useEffect(() => {
+    for (const el of overlayRef.current?.querySelectorAll<HTMLImageElement>("img[data-pos]") ?? []) {
+      if (growsLarge[Number(el.dataset.pos)]) el.decode().catch(() => {});
+    }
   }, []);
 
   // Whatever the exit path, give the canvas back
