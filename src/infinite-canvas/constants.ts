@@ -12,6 +12,8 @@ export const KEYBOARD_SPEED = 0.18;
 export const VELOCITY_LERP = 0.08;
 export const VELOCITY_DECAY = 0.96;
 export const INITIAL_CAMERA_Z = 50;
+/** How far the camera leans toward the cursor (mouse parallax), in world units at a screen edge. */
+export const PARALLAX_AMOUNT = 8;
 
 export type ChunkOffset = {
   dx: number;

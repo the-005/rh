@@ -26,6 +26,7 @@ import {
   INVIS_THRESHOLD,
   KEYBOARD_SPEED,
   MAX_VELOCITY,
+  PARALLAX_AMOUNT,
   RENDER_DISTANCE,
   VELOCITY_DECAY,
   VELOCITY_LERP,
@@ -902,6 +903,9 @@ function SceneController({ media, onMediaClick, debugElRef, tuningGenVersion, sh
     const now = performance.now();
     const frozen = isCanvasFrozen();
 
+    const zoomFactor = clamp(s.basePos.z / 50, 0.3, 2.0);
+    const driftAmount = PARALLAX_AMOUNT * zoomFactor;
+
     if (frozen) {
       // Kill all motion the moment a transition starts — the hero plane's
       // start rect must stay valid, and a static scene reads calmer under it.
@@ -922,11 +926,19 @@ function SceneController({ media, onMediaClick, debugElRef, tuningGenVersion, sh
         }
         const gp = Math.min(1, (now - goal.start) / goal.durationMs);
         const ge = gp === 1 ? 1 : 1 - 2 ** (-10 * gp);
-        s.basePos.x = lerp(goal.from.x, goal.x, ge);
-        s.basePos.y = lerp(goal.from.y, goal.y, ge);
-        // Unwind the parallax too, or the landing sits off-centre by its offset.
-        s.drift.x = lerp(goal.from.driftX, 0, ge);
-        s.drift.y = lerp(goal.from.driftY, 0, ge);
+        // Land already tilted: the parallax arrives at what the cursor asks for
+        // (on exit it's usually up on the ×, the biggest tilt there is), and the
+        // base makes up the difference so the camera still ends on the spot.
+        // Unwinding the tilt to land centred left it to catch up after the
+        // landing, sliding the gallery and the image off-centre.
+        const tiltX = isTouchDevice ? 0 : s.mouse.x * driftAmount;
+        const tiltY = isTouchDevice ? 0 : s.mouse.y * driftAmount;
+        const camX = lerp(goal.from.x + goal.from.driftX, goal.x, ge);
+        const camY = lerp(goal.from.y + goal.from.driftY, goal.y, ge);
+        s.drift.x = lerp(goal.from.driftX, tiltX, ge);
+        s.drift.y = lerp(goal.from.driftY, tiltY, ge);
+        s.basePos.x = camX - s.drift.x;
+        s.basePos.y = camY - s.drift.y;
       }
     } else {
       const { left, right, up, down } = getKeys();
@@ -941,8 +953,6 @@ function SceneController({ media, onMediaClick, debugElRef, tuningGenVersion, sh
     }
 
     const isZooming = Math.abs(s.velocity.z) > 0.05;
-    const zoomFactor = clamp(s.basePos.z / 50, 0.3, 2.0);
-    const driftAmount = 8.0 * zoomFactor;
     const driftLerp = isZooming ? 0.2 : 0.12;
 
     if (s.isDragging || frozen) {
