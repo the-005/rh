@@ -589,8 +589,9 @@ export function IndexPage() {
   return (
     <main ref={mainRef} className={styles.page}>
       <div ref={innerRef} className={styles.inner}>
-        {/* Idle only counts while a row is active: with none, there's no picture to clear. */}
-        <ul ref={listRef} className={`${styles.list} ${idle && active !== null ? styles.idle : ""}`}>
+        {/* Idle only counts while a row is active: with none, there's no picture to
+            clear. A slideshow playing counts at once, without the wait. */}
+        <ul ref={listRef} className={`${styles.list} ${(idle || playing) && active !== null ? styles.idle : ""}`}>
           {projects.map((project, index) => (
             <li key={`${project.id}-${index}`}>
               <button
