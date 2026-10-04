@@ -139,9 +139,6 @@ export function IndexPage() {
   const warmedRef = React.useRef<Set<string>>(new Set());
   /** Where the hand really is: the pointer's last position, from real movement only. */
   const handRef = React.useRef<{ x: number; y: number } | null>(null);
-  /** Real pointer moves so far, and how many a row event has already answered. */
-  const movesRef = React.useRef(0);
-  const answeredRef = React.useRef(0);
   /** Where the cursor was when the slideshow started, to tell a twitch from a move. */
   const originRef = React.useRef<{ x: number; y: number } | null>(null);
   /** The last click a row answered, so the window doesn't answer it again. */
@@ -444,24 +441,6 @@ export function IndexPage() {
   };
 
   /**
-   * Rows moving under a still hand fire mouse events too. A row event counts
-   * only if the hand has really moved since the last one that did.
-   */
-  const handMoved = () => {
-    if (answeredRef.current === movesRef.current) return false;
-    answeredRef.current = movesRef.current;
-    return true;
-  };
-
-  const onPointer = (e: React.MouseEvent) => {
-    // While playing, or stopped with the hand still, the window watch decides.
-    if (!handMoved() || playRef.current !== null || pausedRef.current) return;
-    const row = rowAt(e.clientX, e.clientY);
-    if (row) follow({ ...row, x: e.clientX });
-    else if (activeRef.current !== null) endHover();
-  };
-
-  /**
    * The row is the project's timeline, edge to edge: each image has its own
    * stretch of it, and while playing the playhead crosses image i's stretch at
    * constant speed during that image's stay, so it is always over the image
@@ -540,7 +519,6 @@ export function IndexPage() {
         const hand = handRef.current;
         if (hand && hand.x === move.clientX && hand.y === move.clientY) return;
         handRef.current = { x: move.clientX, y: move.clientY };
-        movesRef.current += 1;
         // Stopped where it was: a still hand can carry on with a click; a
         // moving one ends that, and hovering takes over.
         const paused = pausedRef.current;
@@ -555,8 +533,13 @@ export function IndexPage() {
           handBack();
           return;
         }
-        // Off the rows, or moved off them: nothing to point at.
-        if (activeRef.current !== null && !rowAt(move.clientX, move.clientY)) endHover();
+        // Hovering. Only real movement points at a row: rows moving under a
+        // still cursor (a raise, the reel, the list settling) fire mouse events
+        // too, which is why rows have no hover handlers of their own.
+        if (move.pointerType === "touch") return;
+        const row = rowAt(move.clientX, move.clientY);
+        if (row) follow({ ...row, x: move.clientX });
+        else if (activeRef.current !== null) endHover();
       },
       { passive: true, signal: listening.signal }
     );
@@ -566,7 +549,6 @@ export function IndexPage() {
     document.documentElement.addEventListener(
       "mouseleave",
       () => {
-        movesRef.current += 1;
         setPaused(null);
         if (playRef.current !== null) stopPlaying();
         if (activeRef.current !== null) endHover();
@@ -588,7 +570,6 @@ export function IndexPage() {
     const scrolled = () => {
       const hand = handRef.current;
       if (!hand) return;
-      movesRef.current += 1;
       setPaused(null);
       if (playRef.current !== null) {
         handBack();
@@ -658,8 +639,6 @@ export function IndexPage() {
                 // Quiet while playing, and while stopped where it is, until the hand moves.
                 data-quiet={active === index && (playing || stoppedHere) ? "" : undefined}
                 onClick={(e) => onClick(e, index)}
-                onMouseEnter={onPointer}
-                onMouseMove={onPointer}
                 // Keyboard focus lands on the project, not a position in it:
                 // there is no cursor to read, so it starts at the first image.
                 // A click focuses the row too, and handles itself.
