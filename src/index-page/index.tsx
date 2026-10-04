@@ -15,14 +15,15 @@ import styles from "./style.module.css";
  * row, and at the end of a project it carries on into the next one down the
  * list, for as long as the hand stays still. The index doesn't open projects.
  *
- * The gallery's split, carried over: the list sits at the bottom of the window,
- * and clicking a row raises it until that row's line is the centre line of the
+ * The gallery's split, carried over: the list opens centred in the window, and
+ * clicking a row moves it until that row's line is the centre line of the
  * window, where it stays. As a slideshow moves on, each next row rises onto the
  * line in turn. The list only ever moves while the hand is still, and the first
  * real movement stops the slideshow, so nothing moves under a moving cursor.
  * Clicking again (anywhere), or the last project ending, stops it exactly where
  * it is, and while the hand stays still another click carries on from there;
- * moving the mouse stops it and the row under the cursor takes over.
+ * moving the mouse, or scrolling, stops it and the row under the cursor takes
+ * over.
  *
  * Going idle fades the other rows back to leave the picture clear, after Julia
  * Plaza (juliaplaza.com).
@@ -137,6 +138,7 @@ export function IndexPage() {
    * `at` is where the hand was when it stopped (null if played by keyboard).
    */
   const pausedRef = React.useRef<{ at: { x: number; y: number } | null } | null>(null);
+  const mainRef = React.useRef<HTMLElement>(null);
   const listRef = React.useRef<HTMLUListElement>(null);
   /** The lift the list is settling to, where it stays once any slide is done. */
   const liftRef = React.useRef(0);
@@ -446,6 +448,25 @@ export function IndexPage() {
       },
       { signal: listening.signal }
     );
+    // Scrolling counts as moving: the rows move under the cursor, so it stops a
+    // slideshow, ends a stop's carry-on, and the row now under it takes over.
+    mainRef.current?.addEventListener(
+      "scroll",
+      () => {
+        const hand = handRef.current;
+        if (!hand) return;
+        movesRef.current += 1;
+        pausedRef.current = null;
+        if (playRef.current !== null) {
+          handBack();
+          return;
+        }
+        const row = rowAt(hand.x, hand.y);
+        if (row) follow({ ...row, x: hand.x });
+        else if (activeRef.current !== null) endHover();
+      },
+      { passive: true, signal: listening.signal }
+    );
     return () => listening.abort();
   }, []);
 
@@ -455,7 +476,7 @@ export function IndexPage() {
   const src = current ? current.images[Math.min(shown, current.images.length - 1)] : (ambient?.src ?? null);
 
   return (
-    <main className={styles.page}>
+    <main ref={mainRef} className={styles.page}>
       <div className={styles.inner}>
         {/* Idle only counts while a row is active: with none, there's no picture to clear. */}
         <ul

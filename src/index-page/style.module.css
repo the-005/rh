@@ -34,8 +34,8 @@
   }
 }
 
-/* The list sits at the bottom of the window while it fits. Clicking a row
-   raises it until that row's line is the centre line, and it stays there; a
+/* The list sits in the middle of the window while it fits. Clicking a row
+   moves it until that row's line is the centre line, and it stays there; a
    slideshow raises each next row onto the line in turn. That's the gallery's
    split, carried over. Past what fits, it starts under the frame's top row and
    the page scrolls (min-height lets the box grow). Rows run edge to edge, so
@@ -45,8 +45,8 @@
   min-height: 100%;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
-  padding: 5rem 0 var(--page-padding, 1.5rem);
+  justify-content: center;
+  padding: 5rem 0;
 }
 
 .row {
@@ -242,10 +242,9 @@
     display: none;
   }
 
-  /* No preview, so no split: the list sits in the middle while it fits, and
-     past that starts under the frame and scrolls (min-height lets it grow). */
+  /* No preview, so no split: the list just sits in the middle, clear of the
+     taller frame. */
   .inner {
-    justify-content: center;
     padding: 6.5rem 0 5rem;
   }
 
