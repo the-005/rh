@@ -20,9 +20,10 @@ import styles from "./style.module.css";
  * Going idle fades the other rows back to leave the picture clear, after Julia
  * Plaza (juliaplaza.com).
  *
- * Until a row is first touched, the preview shows one image picked at random,
- * so the page doesn't open empty. A stand-in until the gallery-to-index
- * transition exists.
+ * With no row active, the preview isn't left empty for long: one image picked
+ * at random shows when the page opens, and again AMBIENT_MS after the cursor
+ * leaves the list (blank until then), fading in slowly since nobody is driving.
+ * A stand-in until the gallery-to-index transition exists.
  */
 
 /**
@@ -48,6 +49,17 @@ const SCRUB_FADE_MS = 250;
 const FADE_CLEANUP_MS = 2300;
 /** How long with no pointer, wheel or key before the other rows fade back (Julia Plaza's 4s). */
 const IDLE_MS = 4000;
+/** After the cursor leaves the list, how long the preview stays blank before a random image. */
+const AMBIENT_MS = 4000;
+
+/** Every Work image, for the random picks. */
+const ALL_IMAGES = PROJECTS.flatMap((project) => project.images);
+
+/** Any Work image but `except`, so a new pick never repeats what was just on screen. */
+function randomImage(except: string | null) {
+  const pool = ALL_IMAGES.filter((url) => url !== except);
+  return pool[Math.floor(Math.random() * pool.length)] ?? null;
+}
 
 /** Where the playhead sits, in cells (image i's centre is i + 0.5), and how it gets there. */
 type Spot = { pos: number; transition: string };
@@ -64,11 +76,15 @@ export function IndexPage() {
   const [shown, setShown] = React.useState(0);
   const [playing, setPlaying] = React.useState(false);
   const idle = useIdle(IDLE_MS);
-  /** Shown until a row is first touched, then never again this visit. */
-  const [opening, setOpening] = React.useState<string | null>(() => {
-    const all = projects.flatMap((project) => project.images);
-    return all[Math.floor(Math.random() * all.length)] ?? null;
-  });
+  /**
+   * The image shown while no row is active: a random pick on arrival (at the
+   * usual quick dissolve), and another AMBIENT_MS after leaving the list (slow).
+   */
+  const [ambient, setAmbient] = React.useState<{ src: string | null; slow: boolean } | null>(() => ({
+    src: randomImage(null),
+    slow: false,
+  }));
+  const ambientRef = React.useRef<number | null>(null);
 
   // The active row and head are mirrored in refs because two mousemoves can
   // land inside one render, and the slideshow's timer runs outside React: both
@@ -90,6 +106,10 @@ export function IndexPage() {
     if (commitRef.current !== null) window.clearTimeout(commitRef.current);
     commitRef.current = null;
   };
+  const clearAmbient = () => {
+    if (ambientRef.current !== null) window.clearTimeout(ambientRef.current);
+    ambientRef.current = null;
+  };
   const stopPlaying = () => {
     if (playRef.current !== null) window.clearInterval(playRef.current);
     playRef.current = null;
@@ -99,6 +119,7 @@ export function IndexPage() {
   React.useEffect(
     () => () => {
       clearCommit();
+      clearAmbient();
       if (playRef.current !== null) window.clearInterval(playRef.current);
     },
     []
@@ -125,7 +146,8 @@ export function IndexPage() {
     headRef.current = head;
     setActive(index);
     setShown(head);
-    setOpening(null);
+    clearAmbient();
+    setAmbient(null);
     warm(projects[index]);
   };
 
@@ -240,17 +262,22 @@ export function IndexPage() {
   };
 
   const leave = () => {
+    const index = activeRef.current;
+    const last = index === null ? null : projects[index].images[headRef.current];
     clearCommit();
     stopPlaying();
     cursorRef.current = null;
     activeRef.current = null;
     setActive(null);
+    // Blank for a moment, then something to look at again.
+    clearAmbient();
+    ambientRef.current = window.setTimeout(() => setAmbient({ src: randomImage(last), slow: true }), AMBIENT_MS);
   };
 
   const current = active === null ? null : projects[active];
   // Covers and their siblings are the same files the canvas already fetched as
   // textures, so the swap comes out of the browser cache rather than the network.
-  const src = current ? current.images[Math.min(shown, current.images.length - 1)] : opening;
+  const src = current ? current.images[Math.min(shown, current.images.length - 1)] : (ambient?.src ?? null);
 
   return (
     <main className={styles.page}>
@@ -289,7 +316,10 @@ export function IndexPage() {
         </ul>
       </div>
 
-      <div className={`${styles.preview} ${playing ? styles.previewPlaying : ""}`} aria-hidden="true">
+      <div
+        className={`${styles.preview} ${playing ? styles.previewPlaying : ""} ${!current && ambient?.slow ? styles.previewAmbient : ""}`}
+        aria-hidden="true"
+      >
         <Crossfade src={src} playing={playing} />
       </div>
     </main>

@@ -2,7 +2,7 @@
    Notion tuning table). */
 .page {
   /* The active row's line and playhead: light, so they never shout. */
-  --active-opacity: 0.3;
+  --active-opacity: 0.2;
   /* Preview size by shape, r being width ÷ height:
        height = anchor × (r ÷ 0.8)^−k
      4:5 photos (most of ours) sit at the anchor. k = 0 makes every shape the
@@ -223,6 +223,12 @@
 
 .previewPlaying .previewLeaving {
   transition: opacity 2s cubic-bezier(0.55, 0, 1, 0.45);
+}
+
+/* A random image arriving after the cursor has left the list: nobody is
+   driving, so it comes up slowly, at the slideshow's pace. */
+.previewAmbient .previewImg {
+  transition: opacity 2s ease;
 }
 
 /* No hover to speak of — the list takes the full width and the preview goes. */
