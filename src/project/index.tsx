@@ -45,6 +45,8 @@ const SCROLL_EASE = 0.1; // share of the remaining distance covered per 60fps fr
 const FLING_MS = 250;
 /** A drag held still this long before letting go doesn't fling. */
 const FLING_STALE_MS = 80;
+/** Within this of either end, the strip counts as at that end. */
+const END_SLOP_PX = 1;
 /** Arrow keys move the strip by this share of the viewport width. */
 const KEY_STEP_FRAC = 0.5;
 /** Beat between the arrival settling and the zoom. */
@@ -151,9 +153,13 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   });
 
   /** The image taking up most of the screen; when two are about even, the one
-   *  over the centre. */
+   *  over the centre. At either end of the strip, its end image, whatever else
+   *  is showing: close before scrolling and you leave with the image you
+   *  clicked; scroll all the way and you leave with the last. */
   const imageAt = (pos: number) => {
     const L = layoutRef.current;
+    if (pos <= END_SLOP_PX) return 0;
+    if (L.maxScroll > 0 && pos >= L.maxScroll - END_SLOP_PX) return L.xs.length - 1;
     const centre = pos + L.vw / 2;
     let best = 0;
     let bestW = -1;
