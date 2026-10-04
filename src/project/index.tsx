@@ -4,7 +4,6 @@ import type { MediaItem } from "~/src/infinite-canvas/types";
 import {
   beginHeroTween,
   consumePendingTransition,
-  getHeroScreenRect,
   hideTransitionSource,
   holdTransition,
   releaseTransition,
@@ -26,13 +25,21 @@ const FLIGHT_MS = 1000;
 const ENTRY_EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
 /** Supporting images rise this far into their slots after the hero lands. */
 const RISE_PX = 32;
-const SAT_STAGGER_S = 0.07;
+const RISE_MS = 700;
+/** The rise is a wave, left to right: RISE_GAP_MS between images, squeezed
+ *  evenly into RISE_WAVE_MAX_MS when that would run longer (the owner's
+ *  "capped" pick in the Strip Flip bench). Only big projects change: PR-01's 52
+ *  would have taken 3.6s at the old 70ms and now take 1.5s. */
+const RISE_GAP_MS = 50;
+const RISE_WAVE_MAX_MS = 1500;
+/** When each of the m rising images starts, in ms after the plane lands. */
+const riseDelays = (m: number) => {
+  const gap = m > 1 && (m - 1) * RISE_GAP_MS > RISE_WAVE_MAX_MS ? RISE_WAVE_MAX_MS / (m - 1) : RISE_GAP_MS;
+  return Array.from({ length: m }, (_, j) => j * gap);
+};
 
 /** The zoom into the strip keeps the curve every row move has used. */
 const ZOOM_MS = 600;
-/** Exit: the images around the one going home fade as the strip shrinks,
- *  furthest first, finishing inside the flight however many are on screen. */
-const EXIT_FADE_MS = 350;
 /** Longest the exit waits for the canvas plane to draw the closing image. */
 const SWAP_TIMEOUT_MS = 1200;
 /**
@@ -316,11 +323,12 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       }
 
       // Only after the hero has landed do the supporting images enter: each
-      // rises from below into its slot, staggered left to right.
+      // rises from below into its slot, in a wave left to right.
+      const delays = riseDelays(satellites.length);
       const enterSatellites = () => {
         satellites.forEach((el, j) => {
-          const delay = (j * SAT_STAGGER_S).toFixed(2);
-          el.style.transition = `opacity 0.45s ease ${delay}s, transform 0.7s ${ENTRY_EASE} ${delay}s`;
+          const delay = `${Math.round(delays[j])}ms`;
+          el.style.transition = `opacity 0.45s ease ${delay}, transform ${RISE_MS}ms ${ENTRY_EASE} ${delay}`;
           el.style.opacity = "";
           el.style.transform = "";
         });
@@ -380,7 +388,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
           for (const el of satellites) el.style.transition = "";
           if (closeBtn) closeBtn.style.transition = "";
         },
-        FLIGHT_MS + 1000 * (satellites.length * SAT_STAGGER_S + 0.7) + 500,
+        FLIGHT_MS + (delays.at(-1) ?? 0) + RISE_MS + 500,
       );
 
       return () => {
@@ -429,7 +437,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   React.useEffect(() => {
     const flew = Boolean(transitionRef.current?.sourceKey);
     const settleAt = flew
-      ? FLIGHT_MS + (images.length - 1) * SAT_STAGGER_S * 1000 + 700 + FUSE_PAUSE_MS
+      ? FLIGHT_MS + (riseDelays(images.length - 1).at(-1) ?? 0) + RISE_MS + FUSE_PAUSE_MS
       : 500;
     let canceled = false;
     // Run from script rather than as a CSS transition. A transition hands each
@@ -535,8 +543,9 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   /**
    * Exit, from whichever image you're on. The plane you opened the project from
    * takes that image: once it's drawing it, the plane re-pins over the image and
-   * flies home, shrinking to its canvas size while the camera centres it. The
-   * strip shrinks with it as one piece while the rest fade, furthest first. The
+   * flies home, shrinking to its canvas size while the camera centres it. Only
+   * that image goes: the rest of the strip vanishes the moment you close (the
+   * owner's pick in the Strip Flip bench, over the strip shrinking with it). The
    * canvas keeps the new image there.
    */
   const runExit = () => {
@@ -556,46 +565,13 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     stopScroll();
     dragRef.current = null;
     setDragging(false);
-    const scroll = scrollRef.current.pos;
     setBusy(true);
     setPhase("leaving");
 
-    // Every other image keeps its place relative to the one going home, scaled
-    // by as much as the plane has shrunk, gaps included.
-    const slotOf = (el: HTMLElement) => el.parentElement as HTMLElement;
-    const neighbours = Array.from(overlay.querySelectorAll<HTMLElement>("img[data-pos]")).filter((el) => el !== hero);
-    const hug = () => {
-      const r = getHeroScreenRect();
-      if (r) {
-        const f = r.height / stripH;
-        const dy = r.y + r.height / 2 - viewport.h / 2;
-        for (const el of neighbours) {
-          const k = Number(el.dataset.pos);
-          // The row is still shifted by the scroll, so add it back.
-          const x = r.x + (xs[k] - xs[k0]) * f + scroll;
-          slotOf(el).style.transform = `translate(${x}px, ${dy}px) scale(${f})`;
-        }
-      }
-      rafRef.current = requestAnimationFrame(hug);
-    };
-    rafRef.current = requestAnimationFrame(hug);
-
-    // Images off screen go at once, or the shrinking strip would bring them in.
-    const onScreen = neighbours.filter((el) => {
-      const r = el.getBoundingClientRect();
-      return r.right > 0 && r.left < window.innerWidth;
-    });
-    const ring = (el: HTMLElement) => Math.abs(Number(el.dataset.pos) - k0);
-    const rings = Math.max(1, ...onScreen.map(ring));
-    const stagger = Math.min(SAT_STAGGER_S, (FLIGHT_MS - EXIT_FADE_MS) / 1000 / rings);
-    for (const el of neighbours) {
-      const shown = onScreen.includes(el);
-      // The hug moves these every frame from script; their own layers keep that
-      // from repainting the strip each time.
-      if (shown) slotOf(el).style.willChange = "transform";
-      // Furthest first, so the strip empties in toward the image going home.
-      const delay = shown ? ((rings - ring(el)) * stagger).toFixed(3) : "0";
-      el.style.transition = `opacity ${shown ? EXIT_FADE_MS : 0}ms ease ${delay}s`;
+    // The rest of the strip is gone at once.
+    for (const el of overlay.querySelectorAll<HTMLElement>("img[data-pos]")) {
+      if (el === hero) continue;
+      el.style.transition = "none";
       el.style.opacity = "0";
     }
 
