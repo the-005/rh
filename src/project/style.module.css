@@ -77,14 +77,16 @@
   will-change: transform;
 }
 
-/* Positioned by transform so the arrival row and the zoom into the strip are
-   one interpolation over the same fit-to-width row, never a relayout. */
+/* Laid out at strip size, shrunk into the arrival row by transform, so the zoom
+   into the strip is one interpolation and never a relayout. No standing
+   will-change: a promoted layer keeps the scale it was first drawn at, and these
+   start as small as 1/53 of their size. The zoom's transition promotes them
+   while it runs, drawn at their final size. */
 .slot {
   position: absolute;
   left: 0;
   top: 50%;
   transform-origin: 0 50%;
-  will-change: transform, opacity;
   /* Each image is masked to its own frame, so it rises into the row from its
      bottom edge instead of showing below it. */
   overflow: hidden;

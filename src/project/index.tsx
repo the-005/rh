@@ -51,6 +51,8 @@ const END_SLOP_PX = 1;
 const KEY_STEP_FRAC = 0.5;
 /** Beat between the arrival settling and the zoom. */
 const FUSE_PAUSE_MS = 260;
+/** Longest the zoom waits for the images it ends on to decode. */
+const DECODE_WAIT_MS = 1000;
 
 /**
  * arrive  — flat row, manifest rotated so the clicked image leads (part 1).
@@ -81,8 +83,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   }, []);
 
   const [phase, setPhase] = React.useState<Phase>("arrive");
-  // Once the zoom ends, images are laid out at strip size instead of scaled up
-  // from row size, so the browser draws them sharp.
+  // The zoom's transition is on only while it runs.
   const [settled, setSettled] = React.useState(false);
   // Nothing is clickable while a move runs — the canvas half of this already
   // lives in transition-origin; this is the DOM half.
@@ -118,22 +119,27 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   const rowH = Math.min(viewport.h * MAX_ROW_HEIGHT_FRAC, availW / Math.max(sumAspect, 0.0001));
   const stripH = viewport.h * STRIP_HEIGHT_FRAC;
 
-  // After arrival the row grows by one factor, but the gaps stay GAP: each image
-  // moves and scales on its own, which still reads as one zoom.
+  // The strip is laid out at its final size from the start, as on
+  // wakawaka.world's intro: at arrival each image is shrunk into the row by its
+  // own transform, and the zoom only takes that away. Nothing is blown up from a
+  // small layout (which the browser draws soft, then redraws as it grows, and
+  // re-lays out at the end, the flicker and snap the owner saw). The gaps stay
+  // GAP throughout, since each image moves and scales on its own.
   const inStrip = phase !== "arrive";
-  const zoom = inStrip ? stripH / rowH : 1;
-  const widths = aspects.map((a) => a * rowH * zoom);
+  const shrink = rowH / stripH;
+  const widths = aspects.map((a) => a * stripH);
+  // Each image's left edge along the strip (xs) and in the arrival row (rowXs).
   const xs: number[] = [];
-  for (let k = 0, x = inStrip ? 0 : MARGIN; k < count; k++) {
+  const rowXs: number[] = [];
+  for (let k = 0, x = 0, rx = MARGIN; k < count; k++) {
     xs.push(x);
+    rowXs.push(rx);
     x += widths[k] + GAP;
+    rx += aspects[k] * rowH + GAP;
   }
   const stripW = count ? xs[count - 1] + widths[count - 1] : 0;
   // The strip ends when its last image reaches the right edge.
   const maxScroll = inStrip ? Math.max(0, stripW - viewport.w) : 0;
-  // Laid out at row size and scaled while the zoom runs; at strip size after.
-  const boxH = inStrip && settled ? stripH : rowH;
-  const boxScale = inStrip && !settled ? zoom : 1;
 
   // The image you clicked is 01, the strip's own order.
   const digits = Math.max(2, String(count).length);
@@ -245,10 +251,11 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
         (el) => el !== hero,
       );
       const closeBtn = overlay.querySelector<HTMLElement>(`.${styles.close}`);
+      // The slots are shrunk into the row, so the rise is in their own units.
       for (const el of satellites) {
         el.style.transition = "none";
         el.style.opacity = "0";
-        el.style.transform = `translateY(${RISE_PX}px)`;
+        el.style.transform = `translateY(${RISE_PX / shrink}px)`;
       }
       if (closeBtn) {
         closeBtn.style.transition = "none";
@@ -372,14 +379,31 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     const settleAt = flew
       ? FLIGHT_MS + (images.length - 1) * SAT_STAGGER_S * 1000 + 700 + FUSE_PAUSE_MS
       : 500;
-    const timer = window.setTimeout(() => {
+    let canceled = false;
+    const zoom = () => {
+      if (canceled) return;
       setPhase("strip");
       after(ZOOM_MS, () => {
         setSettled(true);
         setBusy(false);
       });
+    };
+    const timer = window.setTimeout(() => {
+      // Like wakawaka.world, which waits on its hero images: hold the zoom until
+      // the images it ends on are decoded, so none fills in while it runs. Never
+      // longer than DECODE_WAIT_MS.
+      const endOnScreen = Array.from(
+        overlayRef.current?.querySelectorAll<HTMLImageElement>("img[data-pos]") ?? [],
+      ).filter((el) => xs[Number(el.dataset.pos)] < viewport.w);
+      Promise.race([
+        Promise.all(endOnScreen.map((el) => el.decode().catch(() => {}))),
+        new Promise((resolve) => setTimeout(resolve, DECODE_WAIT_MS)),
+      ]).then(zoom);
     }, settleAt);
-    return () => clearTimeout(timer);
+    return () => {
+      canceled = true;
+      clearTimeout(timer);
+    };
   }, []);
 
   // Whatever the exit path, give the canvas back
@@ -461,6 +485,9 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     const stagger = Math.min(SAT_STAGGER_S, (FLIGHT_MS - EXIT_FADE_MS) / 1000 / rings);
     for (const el of neighbours) {
       const shown = onScreen.includes(el);
+      // The hug moves these every frame from script; their own layers keep that
+      // from repainting the strip each time.
+      if (shown) slotOf(el).style.willChange = "transform";
       // Furthest first, so the strip empties in toward the image going home.
       const delay = shown ? ((rings - ring(el)) * stagger).toFixed(3) : "0";
       el.style.transition = `opacity ${shown ? EXIT_FADE_MS : 0}ms ease ${delay}s`;
@@ -588,10 +615,10 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
             key={img.url}
             className={styles.slot}
             style={{
-              width: aspects[k] * boxH,
-              height: boxH,
-              marginTop: -boxH / 2,
-              transform: `translate(${xs[k]}px, 0) scale(${boxScale})`,
+              width: widths[k],
+              height: stripH,
+              marginTop: -stripH / 2,
+              transform: inStrip ? `translate(${xs[k]}px, 0) scale(1)` : `translate(${rowXs[k]}px, 0) scale(${shrink})`,
               transition: inStrip && !settled ? `transform ${ZOOM_MS}ms ${ZOOM_EASE}` : "none",
             }}
           >
