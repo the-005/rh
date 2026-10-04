@@ -34,18 +34,13 @@
   }
 }
 
-/* The list sits in the middle of the window, as long as it fits. When it
-   doesn't, the box grows past the window instead (min-height, not height), so
-   there's no room left to centre in: it starts below the frame's top row and
-   the page scrolls, while the preview stays fixed in the middle. Equal padding
-   top and bottom keeps the centre the window's. No z-index here: the rows and
-   the preview must share the page's stacking context to layer. */
+/* The list hangs from the centre line: its first row starts just under the
+   middle of the window, and a played row rises onto the line. That's the
+   gallery's split, carried over. About 11 rows fit under the line at 900px
+   tall; past that the page scrolls. No z-index here: the rows and the preview
+   must share the page's stacking context to layer. */
 .inner {
-  min-height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: 5rem var(--page-padding, 1.5rem);
+  padding: 50vh var(--page-padding, 1.5rem) var(--page-padding, 1.5rem);
 }
 
 .row {
@@ -61,6 +56,14 @@
   list-style: none;
   margin: 0;
   padding: 0;
+  /* Raised (inline) until the played row's line is the centre line, and let
+     back down on stop, on the curve every row move on the site uses. Moved by
+     relative positioning, not a transform: a transform would give the list a
+     layer of its own, and the active row could no longer sit over the preview
+     or blend with it. */
+  position: relative;
+  top: 0;
+  transition: top 500ms cubic-bezier(0.42, 0, 0.58, 1);
 }
 
 /* Square and flush: no gap between rows, 8px 12px inside. No line at rest:
@@ -161,10 +164,6 @@
 }
 
 @media screen and (max-width: 53em) {
-  .inner {
-    padding-top: 6.5rem;
-  }
-
   .row {
     gap: 1rem;
     font-size: 1.15rem;
@@ -235,6 +234,16 @@
 @media (hover: none), screen and (max-width: 53em) {
   .preview {
     display: none;
+  }
+
+  /* No preview, so no split: the list sits in the middle while it fits, and
+     past that starts under the frame and scrolls (min-height lets it grow). */
+  .inner {
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 6.5rem var(--page-padding, 1.5rem) 5rem;
   }
 
   .playhead {
