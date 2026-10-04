@@ -158,6 +158,27 @@ export function isTransitionActive(): boolean {
   return active;
 }
 
+/**
+ * While the project page covers the canvas completely, the canvas stops
+ * rendering: its frame loop and texture uploads were most of the main thread's
+ * work during the zoom, and on a first visit they cost it frames. The page
+ * pauses it once the arrival's handoff is done and resumes it before anything
+ * that needs the canvas again (the exit's plane flight, any release).
+ */
+let canvasPaused = false;
+const pauseListeners = new Set<(paused: boolean) => void>();
+
+export function setCanvasPaused(paused: boolean): void {
+  if (canvasPaused === paused) return;
+  canvasPaused = paused;
+  for (const listener of pauseListeners) listener(paused);
+}
+
+export function onCanvasPaused(listener: (paused: boolean) => void): () => void {
+  pauseListeners.add(listener);
+  return () => pauseListeners.delete(listener);
+}
+
 /** Re-assert an in-flight transition on mount. StrictMode double-invokes effects,
  *  and the intervening cleanup runs releaseTransition — this undoes that. */
 export function holdTransition(): void {
@@ -174,4 +195,5 @@ export function releaseTransition(): void {
   swapWaiter = null;
   heroScreenRect = null;
   active = false;
+  setCanvasPaused(false);
 }

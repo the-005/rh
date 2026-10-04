@@ -11,6 +11,7 @@ import {
   isDimmedPlane,
   isPlaneHidden,
   isTransitionActive,
+  onCanvasPaused,
   setHeroScreenRect,
   stageTransitionSource,
   takeSwapWaiter,
@@ -1101,6 +1102,12 @@ export function InfiniteCanvasScene({
   // Stable reference — prevents R3F from resetting camera position on every parent re-render
   const cameraPos = React.useMemo<[number, number, number]>(() => [0, 0, INITIAL_CAMERA_Z], []);
 
+  // The frame loop stops while the project page covers the canvas. It has to go
+  // through the prop: R3F re-applies `frameloop` whenever the Canvas re-renders.
+  // The planes step per frame, not per second, so they pick up where they were.
+  const [paused, setPaused] = React.useState(false);
+  React.useEffect(() => onCanvasPaused(setPaused), []);
+
   if (!media.length) return null;
 
   return (
@@ -1109,6 +1116,7 @@ export function InfiniteCanvasScene({
         <Canvas
           camera={{ position: cameraPos, fov: cameraFov, near: cameraNear, far: cameraFar }}
           dpr={dpr}
+          frameloop={paused ? "never" : "always"}
           flat
           gl={{ antialias: false, powerPreference: "high-performance" }}
           className={styles.canvas}

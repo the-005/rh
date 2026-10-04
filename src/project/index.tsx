@@ -8,6 +8,7 @@ import {
   hideTransitionSource,
   holdTransition,
   releaseTransition,
+  setCanvasPaused,
   swapTransitionSource,
 } from "./transition-origin";
 import styles from "./style.module.css";
@@ -320,6 +321,8 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
               overlay.style.background = "";
               hero.style.transition = "";
               enterSatellites();
+              // The page covers the canvas from here until the exit.
+              setCanvasPaused(true);
             });
           });
         });
@@ -345,6 +348,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
         hideTransitionSource(sourceKey);
         overlay.style.background = "";
         enterSatellites();
+        setCanvasPaused(true);
       }, FLIGHT_MS + 800);
 
       const cleanup = setTimeout(
@@ -359,6 +363,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
         canceled = true;
         clearTimeout(failSafe);
         clearTimeout(cleanup);
+        setCanvasPaused(false);
         // Undo every inline style this run set, so a re-run starts clean
         overlay.style.background = "";
         hero.style.transition = "";
@@ -386,10 +391,12 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     const cleanup = setTimeout(() => {
       overlay.style.transition = "";
       overlay.style.opacity = "";
+      setCanvasPaused(true);
     }, 420);
     return () => {
       cancelAnimationFrame(raf);
       clearTimeout(cleanup);
+      setCanvasPaused(false);
     };
   }, []);
 
@@ -487,6 +494,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       return;
     }
     const sourceKey = t.sourceKey;
+    setCanvasPaused(false);
     // Stop the strip wherever it is.
     stopScroll();
     dragRef.current = null;
