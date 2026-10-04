@@ -79,6 +79,20 @@ function listedProjects(): ProjectEntry[] {
   return Array.from({ length: Math.min(rows, 500) }, (_, i) => PROJECTS[i % PROJECTS.length]);
 }
 
+/** The site's row-move curve, cubic-bezier(0.42, 0, 0.58, 1), for the list's moves, which run in script. */
+function rowMoveEase(t: number) {
+  const x = (u: number) => 3 * 0.42 * u * (1 - u) ** 2 + 3 * 0.58 * u ** 2 * (1 - u) + u ** 3;
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 24; i++) {
+    const mid = (lo + hi) / 2;
+    if (x(mid) < t) lo = mid;
+    else hi = mid;
+  }
+  const u = (lo + hi) / 2;
+  return 3 * u * u - 2 * u * u * u;
+}
+
 /** Every Work image, for the random picks. */
 const ALL_IMAGES = PROJECTS.flatMap((project) => project.images);
 
@@ -103,7 +117,6 @@ export function IndexPage() {
   const [shown, setShown] = React.useState(0);
   const [playing, setPlaying] = React.useState(false);
   /** How far the list is raised, so the played row's line is the centre line. */
-  const [lift, setLift] = React.useState({ px: 0, ms: LIFT_ROW_MS });
   const idle = useIdle(IDLE_MS);
   /**
    * The image shown while no row is active: a random pick on arrival (at the
@@ -140,8 +153,19 @@ export function IndexPage() {
   const pausedRef = React.useRef<{ at: { x: number; y: number } | null } | null>(null);
   const mainRef = React.useRef<HTMLElement>(null);
   const listRef = React.useRef<HTMLUListElement>(null);
-  /** The lift the list is settling to, where it stays once any slide is done. */
-  const liftRef = React.useRef(0);
+  /**
+   * Where the list is headed: `scroll`, the page's scroll position, and
+   * `shift`, how far the list is drawn below its place (never above). Raising
+   * a row onto the centre line is a scroll, so the page always knows where the
+   * rows are and every one can be scrolled back to. Only bringing a row down
+   * at the very top, where there's nothing to scroll, is a shift.
+   */
+  const aimRef = React.useRef({ scroll: 0, shift: 0 });
+  /** The shift as drawn right now, mid-move included. */
+  const shiftRef = React.useRef(0);
+  /** The scroll position the list's own move last set, to tell it from the user's. */
+  const ownScrollRef = React.useRef<number | null>(null);
+  const moveRef = React.useRef<number | null>(null);
   const rowsRef = React.useRef<(HTMLButtonElement | null)[]>([]);
 
   const clearCommit = () => {
@@ -162,6 +186,7 @@ export function IndexPage() {
     () => () => {
       clearCommit();
       clearAmbient();
+      if (moveRef.current !== null) cancelAnimationFrame(moveRef.current);
       if (playRef.current !== null) window.clearInterval(playRef.current);
     },
     []
@@ -215,10 +240,41 @@ export function IndexPage() {
     commitRef.current = window.setTimeout(() => setShown(i), COMMIT_MS);
   };
 
-  /** How far the list is raised right now, mid-slide included. */
-  const raisedBy = () => {
-    const list = listRef.current;
-    return list ? -Number.parseFloat(getComputedStyle(list).top) || 0 : 0;
+  /** How far a row on screen now will be from here once the list has arrived. */
+  const toAim = () => {
+    const scroll = mainRef.current?.scrollTop ?? 0;
+    return scroll - aimRef.current.scroll + (aimRef.current.shift - shiftRef.current);
+  };
+
+  const drawShift = (px: number) => {
+    shiftRef.current = px;
+    if (listRef.current) listRef.current.style.top = `${px}px`;
+  };
+
+  /** Stop the list where it is, mid-move or not. */
+  const holdList = () => {
+    if (moveRef.current !== null) cancelAnimationFrame(moveRef.current);
+    moveRef.current = null;
+    aimRef.current = { scroll: mainRef.current?.scrollTop ?? 0, shift: shiftRef.current };
+  };
+
+  /** Move the list to `aim` over `ms`, scroll and shift together, on the row-move curve. */
+  const moveList = (aim: { scroll: number; shift: number }, ms: number) => {
+    const main = mainRef.current;
+    if (!main) return;
+    if (moveRef.current !== null) cancelAnimationFrame(moveRef.current);
+    aimRef.current = aim;
+    const from = { scroll: main.scrollTop, shift: shiftRef.current };
+    const start = performance.now();
+    const step = (now: number) => {
+      const k = Math.min(1, (now - start) / ms);
+      const eased = rowMoveEase(k);
+      main.scrollTop = from.scroll + (aim.scroll - from.scroll) * eased;
+      ownScrollRef.current = main.scrollTop;
+      drawShift(from.shift + (aim.shift - from.shift) * eased);
+      moveRef.current = k < 1 ? requestAnimationFrame(step) : null;
+    };
+    moveRef.current = requestAnimationFrame(step);
   };
 
   /**
@@ -226,7 +282,7 @@ export function IndexPage() {
    * mid-slide gets the row it will be over, not one passing under it.
    */
   const rowAt = (x: number, y: number) => {
-    const shift = raisedBy() - liftRef.current;
+    const shift = toAim();
     for (const [index, el] of rowsRef.current.entries()) {
       if (!el) continue;
       const r = el.getBoundingClientRect();
@@ -235,14 +291,17 @@ export function IndexPage() {
     return null;
   };
 
-  /** Raise (or lower) the list until this row's line is the centre line of the window. */
+  /** Move the list until this row's line is the centre line of the window. */
   const centre = (el: HTMLElement | null | undefined) => {
-    if (!el || window.matchMedia(NO_SPLIT).matches) return;
-    const raised = raisedBy();
-    const px = el.getBoundingClientRect().bottom + raised - window.innerHeight / 2;
-    const rows = Math.abs(px - raised) / el.offsetHeight;
-    liftRef.current = px;
-    setLift({ px, ms: Math.min(LIFT_MAX_MS, LIFT_ROW_MS * Math.sqrt(Math.max(1, rows))) });
+    const main = mainRef.current;
+    if (!el || !main || window.matchMedia(NO_SPLIT).matches) return;
+    // How far below the centre line the row's line will be, once the list has arrived.
+    const by = el.getBoundingClientRect().bottom + toAim() - window.innerHeight / 2;
+    const raised = aimRef.current.scroll - aimRef.current.shift + by;
+    const max = main.scrollHeight - main.clientHeight;
+    const aim = raised >= 0 ? { scroll: Math.min(raised, max), shift: 0 } : { scroll: 0, shift: -raised };
+    const rows = Math.abs(by) / el.offsetHeight;
+    moveList(aim, Math.min(LIFT_MAX_MS, LIFT_ROW_MS * Math.sqrt(Math.max(1, rows))));
   };
 
   /** Where the playhead is drawn right now, mid-glide included, in cells. */
@@ -450,20 +509,43 @@ export function IndexPage() {
     );
     // Scrolling counts as moving: the rows move under the cursor, so it stops a
     // slideshow, ends a stop's carry-on, and the row now under it takes over.
+    const scrolled = () => {
+      const hand = handRef.current;
+      if (!hand) return;
+      movesRef.current += 1;
+      pausedRef.current = null;
+      if (playRef.current !== null) {
+        handBack();
+        return;
+      }
+      const row = rowAt(hand.x, hand.y);
+      if (row) follow({ ...row, x: hand.x });
+      else if (activeRef.current !== null) endHover();
+    };
     mainRef.current?.addEventListener(
       "scroll",
       () => {
-        const hand = handRef.current;
-        if (!hand) return;
-        movesRef.current += 1;
-        pausedRef.current = null;
-        if (playRef.current !== null) {
-          handBack();
-          return;
-        }
-        const row = rowAt(hand.x, hand.y);
-        if (row) follow({ ...row, x: hand.x });
-        else if (activeRef.current !== null) endHover();
+        // The list's own moves scroll the page too; only the user's count.
+        const main = mainRef.current;
+        if (main && ownScrollRef.current !== null && Math.abs(main.scrollTop - ownScrollRef.current) < 1) return;
+        ownScrollRef.current = null;
+        holdList();
+        scrolled();
+      },
+      { passive: true, signal: listening.signal }
+    );
+    // Scrolling up at the top, with a row brought down there: there's nothing
+    // left to scroll, so the list itself goes back up, towards its place.
+    mainRef.current?.addEventListener(
+      "wheel",
+      (wheel) => {
+        const main = mainRef.current;
+        const dy = wheel.deltaMode === 1 ? wheel.deltaY * 16 : wheel.deltaY;
+        if (!main || dy >= 0 || main.scrollTop > 0 || shiftRef.current <= 0) return;
+        holdList();
+        drawShift(Math.max(0, shiftRef.current + dy));
+        aimRef.current = { scroll: 0, shift: shiftRef.current };
+        scrolled();
       },
       { passive: true, signal: listening.signal }
     );
@@ -479,11 +561,7 @@ export function IndexPage() {
     <main ref={mainRef} className={styles.page}>
       <div className={styles.inner}>
         {/* Idle only counts while a row is active: with none, there's no picture to clear. */}
-        <ul
-          ref={listRef}
-          className={`${styles.list} ${idle && active !== null ? styles.idle : ""}`}
-          style={{ top: -lift.px, transitionDuration: `${lift.ms}ms` }}
-        >
+        <ul ref={listRef} className={`${styles.list} ${idle && active !== null ? styles.idle : ""}`}>
           {projects.map((project, index) => (
             <li key={`${project.id}-${index}`}>
               <button
