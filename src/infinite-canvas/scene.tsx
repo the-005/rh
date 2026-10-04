@@ -820,8 +820,11 @@ function SceneController({ media, onMediaClick, debugElRef, tuningGenVersion, sh
       setCursor("grab");
     };
 
-    const onMouseLeave = () => {
-      s.mouse = { x: 0, y: 0 };
+    const onMouseLeave = (e: MouseEvent) => {
+      // Only leaving the window re-centres the parallax. The project page
+      // opening under a still cursor also "leaves" the canvas; resetting then
+      // made a close land untilted and slide on the first move after it.
+      if (!e.relatedTarget) s.mouse = { x: 0, y: 0 };
       s.isDragging = false;
       setCursor("grab");
     };
