@@ -2,7 +2,7 @@
    Notion tuning table). */
 .page {
   /* The active row's line and playhead while hovering. */
-  --active-opacity: 0.6;
+  --active-opacity: 0.4;
   /* ...and while a slideshow plays, or is stopped where it is, until the hand
      moves: nearly gone, so the pictures have the screen. */
   --playing-opacity: 0.2;
