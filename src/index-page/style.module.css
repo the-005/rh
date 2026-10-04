@@ -23,6 +23,16 @@
   font-family: var(--font-sans);
   font-weight: 300;
   animation: fadeIn 0.35s ease both;
+  /* No scrollbar: the page still scrolls by wheel, trackpad and keys, but
+     nothing shows at the side, and where scrollbars take up space (Windows,
+     or macOS set to always show them) none appears and narrows the page the
+     moment a raised row grows room below. scrollbar-width for Firefox and
+     current Chrome; the ::-webkit- rule for Safari and older Chrome. */
+  scrollbar-width: none;
+}
+
+.page::-webkit-scrollbar {
+  display: none;
 }
 
 @keyframes fadeIn {
