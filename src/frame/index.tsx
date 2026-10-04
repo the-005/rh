@@ -37,9 +37,13 @@ export function Frame({
 
       {showNav && (
         <>
-          <nav className={styles.frame__centre} aria-label="Work">
-            {CENTRE.map(link)}
-          </nav>
+          {/* The toggle between the two views of the work lives on those views
+              only; Research and About don't carry it. */}
+          {CENTRE.includes(view) && (
+            <nav className={styles.frame__centre} aria-label="Work">
+              {CENTRE.map(link)}
+            </nav>
+          )}
           <nav className={styles.frame__view} aria-label="More">
             {SIDE.map(link)}
           </nav>
