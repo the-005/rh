@@ -2,17 +2,10 @@ import * as React from "react";
 import styles from "./style.module.css";
 
 // A visitor sees the intro once. Kept in localStorage — a cookie in effect, but
-// never sent to a server. Storage can be unavailable (private windows, blocked
-// site data); then the splash simply plays, as it would on a first visit.
+// never sent to a server. index.html reads it before anything paints. Storage
+// can be unavailable (private windows, blocked site data); then the splash
+// simply plays, as it would on a first visit.
 const SEEN_KEY = "rh:splash-seen";
-
-export function hasSeenSplash() {
-  try {
-    return localStorage.getItem(SEEN_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
 
 function markSplashSeen() {
   try {

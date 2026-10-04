@@ -14,7 +14,16 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
   <link rel="preload" href="/fonts/neue-haas-grotesk-text/regular.woff2" as="font" type="font/woff2" crossorigin>
   <script>
-    document.documentElement.className = 'js';
+    // Decided here, before anything paints: whether the intro splash plays
+    // (the gallery's own address, first visit only). Under it the ground is
+    // black, as its video opens on black; everywhere else it's white, like the
+    // canvas and every page, so nothing flashes black while the site loads.
+    // src/app reads the class; src/splash sets the key once the video plays.
+    var splash = location.pathname === '/';
+    try {
+      splash = splash && localStorage.getItem('rh:splash-seen') !== '1';
+    } catch (e) {}
+    document.documentElement.className = splash ? 'js splash' : 'js';
   </script>
 </head>
 

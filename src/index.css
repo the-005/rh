@@ -56,12 +56,19 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  --color-background: #000;
+  /* What shows before the canvas or a page has drawn: white, like both of them.
+     It was the template's black, which flashed on every load. */
+  --color-background: #fff;
   --color-text: #fff;
   --color-link: #fff;
   --color-link-hover: #fff;
   --page-padding: 1.5rem;
   --font-sans: "Neue Haas Grotesk Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+/* Under the intro splash (index.html sets the class), black: the video opens on black. */
+:root.splash {
+  --color-background: #000;
 }
 
 *,

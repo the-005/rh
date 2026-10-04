@@ -67,6 +67,9 @@ const CANVAS_COPY_PX = 1000;
 const UPGRADE_CONCURRENCY = 2;
 /** Longest the zoom waits for those decodes. */
 const DECODE_WAIT_MS = 1000;
+/** On a direct link the page stays blank until the row's images have loaded,
+ *  but no longer than this; any still missing appear as they arrive. */
+const ROW_LOAD_MAX_MS = 8000;
 
 /**
  * arrive  — flat row, manifest rotated so the clicked image leads (part 1).
@@ -101,6 +104,8 @@ const zoomEase = cubicBezier(0.42, 0, 0.58, 1);
 export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }) {
   // Capture once on mount — clears the module-level store
   const transitionRef = React.useRef(consumePendingTransition());
+  // Opened from the canvas, a plane flies in; opened by its link, nothing does.
+  const flew = Boolean(transitionRef.current?.sourceKey);
 
   // Rotate the project's images so the clicked one is always first (leftmost).
   // The strip keeps this order and doesn't loop.
@@ -128,6 +133,9 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   // Images that started as their canvas copy and have since been swapped for
   // the full-size file.
   const [upgraded, setUpgraded] = React.useState<ReadonlySet<number>>(() => new Set());
+  // The arrival is under way, which the zoom counts from: at once from the
+  // canvas, and on a direct link once the row's images have loaded.
+  const [arriving, setArriving] = React.useState(flew);
 
   const timersRef = React.useRef<number[]>([]);
   const after = (ms: number, fn: () => void) => {
@@ -297,6 +305,51 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
 
     if (!overlay) return;
 
+    const closeBtn = overlay.querySelector<HTMLElement>(`.${styles.close}`);
+    // Images that rise into the row wait below it, hidden, with the × hidden too.
+    // The slots are shrunk into the row, so the rise is in their own units.
+    const holdBelow = (els: HTMLElement[]) => {
+      for (const el of els) {
+        el.style.transition = "none";
+        el.style.opacity = "0";
+        el.style.transform = `translateY(${RISE_PX / shrink}px)`;
+      }
+      if (closeBtn) {
+        closeBtn.style.transition = "none";
+        closeBtn.style.opacity = "0";
+      }
+    };
+    // Each rises from below into its slot, in a wave left to right.
+    const riseIn = (els: HTMLElement[]) => {
+      const delays = riseDelays(els.length);
+      els.forEach((el, j) => {
+        const delay = `${Math.round(delays[j])}ms`;
+        el.style.transition = `opacity 0.45s ease ${delay}, transform ${RISE_MS}ms ${ENTRY_EASE} ${delay}`;
+        el.style.opacity = "";
+        el.style.transform = "";
+      });
+      if (closeBtn) {
+        closeBtn.style.transition = "opacity 0.4s ease 0.3s";
+        closeBtn.style.opacity = "";
+      }
+    };
+    const clearTransitions = (els: HTMLElement[]) => {
+      for (const el of els) el.style.transition = "";
+      if (closeBtn) closeBtn.style.transition = "";
+    };
+    // Undo every inline style a run set, so a re-run starts clean
+    const restore = (els: HTMLElement[]) => {
+      for (const el of els) {
+        el.style.transition = "";
+        el.style.opacity = "";
+        el.style.transform = "";
+      }
+      if (closeBtn) {
+        closeBtn.style.transition = "";
+        closeBtn.style.opacity = "";
+      }
+    };
+
     if (t?.sourceKey && hero) {
       const sourceKey = t.sourceKey;
       let canceled = false;
@@ -307,36 +360,11 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       overlay.style.background = "transparent";
       hero.style.opacity = "0";
 
+      // Only after the hero has landed do the supporting images rise in.
       const satellites = Array.from(overlay.querySelectorAll<HTMLElement>("img[data-pos]")).filter(
         (el) => el !== hero,
       );
-      const closeBtn = overlay.querySelector<HTMLElement>(`.${styles.close}`);
-      // The slots are shrunk into the row, so the rise is in their own units.
-      for (const el of satellites) {
-        el.style.transition = "none";
-        el.style.opacity = "0";
-        el.style.transform = `translateY(${RISE_PX / shrink}px)`;
-      }
-      if (closeBtn) {
-        closeBtn.style.transition = "none";
-        closeBtn.style.opacity = "0";
-      }
-
-      // Only after the hero has landed do the supporting images enter: each
-      // rises from below into its slot, in a wave left to right.
-      const delays = riseDelays(satellites.length);
-      const enterSatellites = () => {
-        satellites.forEach((el, j) => {
-          const delay = `${Math.round(delays[j])}ms`;
-          el.style.transition = `opacity 0.45s ease ${delay}, transform ${RISE_MS}ms ${ENTRY_EASE} ${delay}`;
-          el.style.opacity = "";
-          el.style.transform = "";
-        });
-        if (closeBtn) {
-          closeBtn.style.transition = "opacity 0.4s ease 0.3s";
-          closeBtn.style.opacity = "";
-        }
-      };
+      holdBelow(satellites);
 
       const reveal = () => {
         requestAnimationFrame(() => {
@@ -352,7 +380,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
               hideTransitionSource(sourceKey);
               overlay.style.background = "";
               hero.style.transition = "";
-              enterSatellites();
+              riseIn(satellites);
               // The page covers the canvas from here until the exit.
               setCanvasPaused(true);
             });
@@ -379,16 +407,13 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
         hero.style.opacity = "";
         hideTransitionSource(sourceKey);
         overlay.style.background = "";
-        enterSatellites();
+        riseIn(satellites);
         setCanvasPaused(true);
       }, FLIGHT_MS + 800);
 
       const cleanup = setTimeout(
-        () => {
-          for (const el of satellites) el.style.transition = "";
-          if (closeBtn) closeBtn.style.transition = "";
-        },
-        FLIGHT_MS + (delays.at(-1) ?? 0) + RISE_MS + 500,
+        () => clearTransitions(satellites),
+        FLIGHT_MS + (riseDelays(satellites.length).at(-1) ?? 0) + RISE_MS + 500,
       );
 
       return () => {
@@ -396,49 +421,60 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
         clearTimeout(failSafe);
         clearTimeout(cleanup);
         setCanvasPaused(false);
-        // Undo every inline style this run set, so a re-run starts clean
         overlay.style.background = "";
         hero.style.transition = "";
         hero.style.opacity = "";
-        for (const el of satellites) {
-          el.style.transition = "";
-          el.style.opacity = "";
-          el.style.transform = "";
-        }
-        if (closeBtn) {
-          closeBtn.style.transition = "";
-          closeBtn.style.opacity = "";
-        }
+        restore(satellites);
       };
     }
 
-    // Fallback: simple fade in when no transition data (e.g. direct URL load)
-    overlay.style.opacity = "0";
-    const raf = requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        overlay.style.transition = "opacity 0.3s";
-        overlay.style.opacity = "1";
-      });
+    // Direct link (nothing flies in): the page is white from its first frame
+    // and stays empty until every image in the row has loaded. Then the whole
+    // row rises in, the first image leading, and the zoom follows as usual.
+    // It used to fade in from transparent over the canvas, which showed black
+    // before the canvas had drawn.
+    const imgs = Array.from(overlay.querySelectorAll<HTMLImageElement>("img[data-pos]"));
+    let canceled = false;
+    let cleanup = 0;
+    holdBelow(imgs);
+    // The canvas never shows, so it doesn't run until the exit.
+    setCanvasPaused(true);
+    const loaded = (el: HTMLImageElement) =>
+      el.complete
+        ? Promise.resolve()
+        : new Promise<void>((resolve) => {
+            el.addEventListener("load", () => resolve(), { once: true });
+            el.addEventListener("error", () => resolve(), { once: true });
+          });
+    Promise.race([
+      Promise.all(imgs.map(loaded)),
+      new Promise((resolve) => setTimeout(resolve, ROW_LOAD_MAX_MS)),
+    ]).then(() => {
+      if (canceled) return;
+      riseIn(imgs);
+      setArriving(true);
+      cleanup = window.setTimeout(
+        () => clearTransitions(imgs),
+        (riseDelays(imgs.length).at(-1) ?? 0) + RISE_MS + 500,
+      );
     });
-    const cleanup = setTimeout(() => {
-      overlay.style.transition = "";
-      overlay.style.opacity = "";
-      setCanvasPaused(true);
-    }, 420);
     return () => {
-      cancelAnimationFrame(raf);
+      canceled = true;
       clearTimeout(cleanup);
       setCanvasPaused(false);
+      restore(imgs);
     };
   }, []);
 
   // Part 2, once the arrival has settled: the whole row zooms into the strip,
   // the image you clicked ending at the left edge.
   React.useEffect(() => {
-    const flew = Boolean(transitionRef.current?.sourceKey);
+    if (!arriving) return;
+    // From the canvas, counted from the click: the flight, then the others'
+    // wave. On a direct link, from when the row starts rising, all of it.
     const settleAt = flew
       ? FLIGHT_MS + (riseDelays(images.length - 1).at(-1) ?? 0) + RISE_MS + FUSE_PAUSE_MS
-      : 500;
+      : (riseDelays(images.length).at(-1) ?? 0) + RISE_MS + FUSE_PAUSE_MS;
     let canceled = false;
     // Run from script rather than as a CSS transition. A transition hands each
     // image to the compositor as its own layer, drawn once and then resized
@@ -483,7 +519,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       canceled = true;
       clearTimeout(timer);
     };
-  }, []);
+  }, [arriving]);
 
   // Decode the images that get big in the zoom, at full size, as soon as the
   // page opens: the arrival leaves seconds for it. Only those: decoding every

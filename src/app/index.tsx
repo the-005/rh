@@ -8,7 +8,7 @@ import type { MediaItem } from "~/src/infinite-canvas/types";
 import { ProjectPage } from "~/src/project";
 import { setPendingTransition } from "~/src/project/transition-origin";
 import { ResearchPage } from "~/src/research";
-import { hasSeenSplash, SplashVideo } from "~/src/splash";
+import { SplashVideo } from "~/src/splash";
 import allManifest from "~/src/work/manifest.json";
 
 const ALL_MEDIA = allManifest as MediaItem[];
@@ -17,7 +17,8 @@ const VIEW_PATHS: Record<View, string> = { gallery: "/", index: "/index", resear
 
 // The intro splash plays once: not on a deep link (e.g. /project/x, whose page
 // already covers the canvas), and not for a visitor who has seen it before.
-const SKIP_SPLASH = window.location.pathname !== "/" || hasSeenSplash();
+// index.html decides, before anything paints, so the page's ground can match.
+const SKIP_SPLASH = !document.documentElement.classList.contains("splash");
 
 export function App() {
   const [location, navigate] = useLocation();
