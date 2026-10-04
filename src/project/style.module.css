@@ -5,18 +5,28 @@
   z-index: 100;
   overflow: hidden;
   user-select: none;
-  /* One cursor for the whole page. The click zones only exist between moves, so
-     letting them own it made the cursor flick to an arrow on every animation. */
-  cursor: pointer;
+  /* The strip is dragged, so a grab hand throughout — one cursor for the whole
+     page, so it never flicks between moves. */
+  cursor: grab;
+  /* Drags and touch move the strip, never the page or the browser's history. */
+  touch-action: none;
 }
 
+.dragging {
+  cursor: grabbing;
+}
+
+/* The counter and × sit on the pictures once the strip fills the window, so
+   they blend like the frame: white made `difference`, dark on white, light on a
+   dark photo. */
 .close {
   position: absolute;
   top: 1.25rem;
   right: 1.5rem;
   background: none;
   border: none;
-  color: #111;
+  color: #ffffff;
+  mix-blend-mode: difference;
   font-size: 1.75rem;
   line-height: 1;
   cursor: pointer;
@@ -30,26 +40,8 @@
   opacity: 1;
 }
 
-/* Left half is previous, right half is next. The split sits on the viewport
-   centre, which is also the enlarged image's centre — so the image obeys the
-   same rule as the space around it, with no special case. */
-.zones {
-  position: absolute;
-  inset: 0;
-  z-index: 10;
-  display: flex;
-}
-
-.zone {
-  flex: 1;
-  background: transparent;
-  border: none;
-  padding: 0;
-  cursor: inherit;
-}
-
-/* Which image you're on, in the project's own order. Centred in the frame's top
-   row, level with the wordmark; shown once the loop is revealed. */
+/* Which image you're on, counted from the one you clicked. Centred in the
+   frame's top row, level with the wordmark; shown once the strip is up. */
 .counter {
   position: absolute;
   top: 1rem;
@@ -59,7 +51,8 @@
   font-family: var(--font-sans);
   font-size: 0.9rem;
   font-weight: 300;
-  color: #111111;
+  color: #ffffff;
+  mix-blend-mode: difference;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   pointer-events: none;
@@ -77,13 +70,15 @@
   }
 }
 
+/* Shifted sideways by the scroll, from script. */
 .row {
   position: absolute;
   inset: 0;
+  will-change: transform;
 }
 
-/* Positioned by transform so every state — the turn, the blow-up, an advance —
-   is one interpolation over the same fit-to-width row, never a relayout. */
+/* Positioned by transform so the arrival row and the zoom into the strip are
+   one interpolation over the same fit-to-width row, never a relayout. */
 .slot {
   position: absolute;
   left: 0;
@@ -91,7 +86,7 @@
   transform-origin: 0 50%;
   will-change: transform, opacity;
   /* Each image is masked to its own frame, so it rises into the row from its
-     bottom edge (and drops back behind it on exit) instead of showing below it. */
+     bottom edge instead of showing below it. */
   overflow: hidden;
 }
 

@@ -268,8 +268,8 @@ function MediaPlane({
       }
       const h = lerp(run.from.h, run.to.h, e);
       mesh.scale.set(h * run.aspect, h, 1);
-      // On the way home, publish where the plane is on screen so the page's row
-      // closes in around it instead of leaving the gap the enlarged image made.
+      // On the way home, publish where the plane is on screen so the page's
+      // strip can shrink with it as one piece.
       if (run.mode === "out" && group) {
         const cam = _state.camera as THREE.PerspectiveCamera;
         const { width: vw, height: vh } = _state.size;

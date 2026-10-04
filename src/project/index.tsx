@@ -18,61 +18,55 @@ const MARGIN = 32;
 const GAP = 4;
 /** Row height never exceeds this fraction of the viewport (small projects). */
 const MAX_ROW_HEIGHT_FRAC = 0.5;
-/** Part 3's enlarged image, as a fraction of viewport height. */
-const HERO_HEIGHT_FRAC = 0.66;
+/** After arrival the whole row scales up to this fraction of viewport height
+ *  and becomes a strip you scroll through. */
+const STRIP_HEIGHT_FRAC = 1;
 const FLIGHT_MS = 1000;
 const ENTRY_EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
 /** Supporting images rise this far into their slots after the hero lands. */
 const RISE_PX = 32;
 const SAT_STAGGER_S = 0.07;
 
-/** The turn and every part-3 advance share one curve — measured, not chosen. */
-const TURN_EASE = "cubic-bezier(0.42, 0, 0.58, 1)";
-const TURN_MS = 600;
-const ADV_MS = 500;
-/** Exit: the rest of the row drops and fades, one after another, finishing
- *  inside the flight home however many images are on screen. */
+/** The zoom into the strip keeps the curve every row move has used. */
+const ZOOM_EASE = "cubic-bezier(0.42, 0, 0.58, 1)";
+const ZOOM_MS = 600;
+/** Exit: the images around the one going home fade as the strip shrinks,
+ *  furthest first, finishing inside the flight however many are on screen. */
 const EXIT_FADE_MS = 350;
 /** Longest the exit waits for the canvas plane to draw the closing image. */
 const SWAP_TIMEOUT_MS = 1200;
 /**
- * Wheel and trackpad browse like the arrow keys: down / right is next. One swipe
- * is one image, never more — a step needs WHEEL_STEP px of travel one way, then
- * the wheel locks for the rest of that swipe, trackpad glide included. Only a
- * second swipe unlocks it, and one made while the image is still moving queues
- * the next image.
- *
- * A second swipe is told apart from the glide conservatively. Nothing counts for
- * WHEEL_REFRACTORY_MS after the step (an uneven finger stroke lives there).
- * After that, speed is measured per frame, so events the browser merged while
- * the page was busy don't read as a speed-up, and averaged over the last three
- * events. The lock only lifts if that average climbs to WHEEL_RESWIPE_RATIO×
- * its slowest since, and WHEEL_RESWIPE_PX faster — a glide only slows —, or if
- * the direction reverses, or after WHEEL_QUIET_MS of silence.
+ * Scrolling is free and continuous. Wheel and trackpad (either axis), drags and
+ * arrow keys move a target, and the strip eases toward it every frame: a mouse
+ * wheel's steps become a glide, a trackpad keeps its own momentum.
  */
-const WHEEL_STEP = 40;
-const WHEEL_QUIET_MS = 180;
-const WHEEL_REFRACTORY_MS = 200;
-const WHEEL_RESWIPE_RATIO = 2.5;
-const WHEEL_RESWIPE_PX = 10;
-/** Beat between the arrival settling and the first image scaling up. */
+const SCROLL_EASE = 0.1; // share of the remaining distance covered per 60fps frame
+/** A drag let go while moving carries on for about this long at that speed. */
+const FLING_MS = 250;
+/** A drag held still this long before letting go doesn't fling. */
+const FLING_STALE_MS = 80;
+/** Arrow keys move the strip by this share of the viewport width. */
+const KEY_STEP_FRAC = 0.5;
+/** Beat between the arrival settling and the zoom. */
 const FUSE_PAUSE_MS = 260;
 
 /**
- * arrive — flat row, manifest rotated so the clicked image leads (part 1).
- * hero    — one image at HERO_HEIGHT_FRAC, centred, the row looping (part 2).
- * leaving — same layout; the image you're on shrinks home as a canvas plane
- *           while the rest drop away.
+ * arrive  — flat row, manifest rotated so the clicked image leads (part 1).
+ * strip   — the whole row scaled up to STRIP_HEIGHT_FRAC, the clicked image at
+ *           the left edge, scrolled sideways (part 2).
+ * leaving — the image you're on flies home as a canvas plane, and the strip
+ *           shrinks with it.
  */
-type Phase = "arrive" | "hero" | "leaving";
+type Phase = "arrive" | "strip" | "leaving";
+
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }) {
   // Capture once on mount — clears the module-level store
   const transitionRef = React.useRef(consumePendingTransition());
 
   // Rotate the project's images so the clicked one is always first (leftmost).
-  // The row keeps this order throughout — no flip — so the clicked image is
-  // the one that scales up; after that the row is revealed to be endless.
+  // The strip keeps this order and doesn't loop.
   const filtered = ALL_MEDIA.filter((item) => item.project === id);
   const start = transitionRef.current?.startIndex ?? 0;
   const images = start > 0 ? [...filtered.slice(start), ...filtered.slice(0, start)] : filtered;
@@ -85,79 +79,141 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   }, []);
 
   const [phase, setPhase] = React.useState<Phase>("arrive");
-  // Virtual position of the enlarged image. Unbounded: the row loops.
-  const [heroPos, setHeroPos] = React.useState(0);
-  const [motion, setMotion] = React.useState({ ms: 0, ease: TURN_EASE });
+  // Once the zoom ends, images are laid out at strip size instead of scaled up
+  // from row size, so the browser draws them sharp.
+  const [settled, setSettled] = React.useState(false);
   // Nothing is clickable while a move runs — the canvas half of this already
   // lives in transition-origin; this is the DOM half.
   const [busy, setBusy] = React.useState(true);
+  // The image you're on: it drives the counter and is the one that goes home.
+  const [current, setCurrent] = React.useState(0);
+  const [dragging, setDragging] = React.useState(false);
 
   const timersRef = React.useRef<number[]>([]);
   const after = (ms: number, fn: () => void) => {
     timersRef.current.push(window.setTimeout(fn, ms));
   };
   const rafRef = React.useRef(0);
+  const scrollRef = React.useRef({ pos: 0, target: 0, raf: 0, last: 0 });
+  const dragRef = React.useRef<{ id: number; x: number; from: number; lastX: number; lastT: number; v: number } | null>(
+    null,
+  );
   React.useEffect(
     () => () => {
       for (const t of timersRef.current) clearTimeout(t);
       timersRef.current = [];
       cancelAnimationFrame(rafRef.current);
+      cancelAnimationFrame(scrollRef.current.raf);
     },
     [],
   );
 
   // One row, all images at equal height, scaled down until the row fits the screen
+  const count = images.length;
   const aspects = images.map((img) => img.width / img.height);
   const sumAspect = aspects.reduce((sum, a) => sum + a, 0);
-  const availW = viewport.w - MARGIN * 2 - GAP * (images.length - 1);
+  const availW = viewport.w - MARGIN * 2 - GAP * (count - 1);
   const rowH = Math.min(viewport.h * MAX_ROW_HEIGHT_FRAC, availW / Math.max(sumAspect, 0.0001));
-  const heroH = viewport.h * HERO_HEIGHT_FRAC;
+  const stripH = viewport.h * STRIP_HEIGHT_FRAC;
 
-  // The row is endless: virtual position k shows images[mod(k)], so positions
-  // below 0 are the images before the one you clicked and positions past the
-  // end come round again. Arrival lays out 0..count-1 from the margin exactly as
-  // a finite row; the copies either side are already in place, only hidden, and
-  // slide in with the row when the first image scales up.
-  const count = images.length;
-  const mod = (k: number) => ((k % count) + count) % count;
-  const centred = phase === "arrive" ? null : heroPos;
-  const scaleOf = (k: number) => (centred !== null && k === heroPos ? heroH / rowH : 1);
-  const baseW = (k: number) => aspects[mod(k)] * rowH;
-
-  // Render a screen and a quarter past each side of every position the row can
-  // be anchored on, so images only ever enter or leave the DOM off-screen.
-  const reach = viewport.w * 1.25;
-  const edge = (from: number, dir: -1 | 1) => {
-    let k = from;
-    for (let covered = 0, n = 0; covered < reach && n < count * 8 + 16; n++) {
-      k += dir;
-      covered += baseW(k) + GAP;
-    }
-    return k;
-  };
-  const anchors = [centred ?? 0];
-  const kMin = Math.min(...anchors.map((a) => edge(a, -1)));
-  const kMax = Math.max(...anchors.map((a) => edge(a, 1)));
-  const positions = Array.from({ length: kMax - kMin + 1 }, (_, i) => kMin + i);
-
-  // Per-position x. After the scale-up the image you're on is centred; before
-  // it nothing is, and position 0 sits on the margin.
-  const anchorK = centred ?? 0;
-  const xs = new Map<number, number>();
-  xs.set(anchorK, centred === null ? MARGIN : viewport.w / 2 - (baseW(anchorK) * scaleOf(anchorK)) / 2);
-  for (let k = anchorK + 1; k <= kMax; k++) {
-    xs.set(k, (xs.get(k - 1) ?? 0) + baseW(k - 1) * scaleOf(k - 1) + GAP);
+  // After arrival the row grows by one factor, but the gaps stay GAP: each image
+  // moves and scales on its own, which still reads as one zoom.
+  const inStrip = phase !== "arrive";
+  const zoom = inStrip ? stripH / rowH : 1;
+  const widths = aspects.map((a) => a * rowH * zoom);
+  const xs: number[] = [];
+  for (let k = 0, x = inStrip ? 0 : MARGIN; k < count; k++) {
+    xs.push(x);
+    x += widths[k] + GAP;
   }
-  for (let k = anchorK - 1; k >= kMin; k--) {
-    xs.set(k, (xs.get(k + 1) ?? 0) - GAP - baseW(k) * scaleOf(k));
-  }
+  const stripW = count ? xs[count - 1] + widths[count - 1] : 0;
+  // The strip ends when its last image reaches the right edge.
+  const maxScroll = inStrip ? Math.max(0, stripW - viewport.w) : 0;
+  // Laid out at row size and scaled while the zoom runs; at strip size after.
+  const boxH = inStrip && settled ? stripH : rowH;
+  const boxScale = inStrip && !settled ? zoom : 1;
 
-  // The counter reads the project's own order, not the rotated one.
+  // The image you clicked is 01, the strip's own order.
   const digits = Math.max(2, String(count).length);
-  const counter = `${String(((start + mod(heroPos)) % count) + 1).padStart(digits, "0")} / ${String(count).padStart(digits, "0")}`;
+  const counter = `${String(current + 1).padStart(digits, "0")} / ${String(count).padStart(digits, "0")}`;
 
   const overlayRef = React.useRef<HTMLDivElement>(null);
   const heroImgRef = React.useRef<HTMLImageElement>(null);
+  const rowRef = React.useRef<HTMLDivElement>(null);
+
+  // ---- scrolling ------------------------------------------------------------
+
+  // The scroll loop runs outside React, so it reads the layout from here.
+  const layoutRef = React.useRef({ xs, widths, maxScroll, vw: viewport.w });
+  const currentRef = React.useRef(0);
+  React.useLayoutEffect(() => {
+    layoutRef.current = { xs, widths, maxScroll, vw: viewport.w };
+  });
+
+  /** The image taking up most of the screen; when two are about even, the one
+   *  over the centre. */
+  const imageAt = (pos: number) => {
+    const L = layoutRef.current;
+    const centre = pos + L.vw / 2;
+    let best = 0;
+    let bestW = -1;
+    for (let k = 0; k < L.xs.length; k++) {
+      const shown = Math.min(L.xs[k] + L.widths[k], pos + L.vw) - Math.max(L.xs[k], pos);
+      const overCentre = L.xs[k] <= centre && centre <= L.xs[k] + L.widths[k];
+      if (shown > bestW + 1 || (shown > bestW - 1 && overCentre)) {
+        best = k;
+        bestW = shown;
+      }
+    }
+    return best;
+  };
+
+  const applyScroll = (pos: number) => {
+    scrollRef.current.pos = pos;
+    if (rowRef.current) rowRef.current.style.transform = `translate3d(${-pos}px, 0, 0)`;
+    const k = imageAt(pos);
+    if (k !== currentRef.current) {
+      currentRef.current = k;
+      setCurrent(k);
+    }
+  };
+
+  const tick = (now: number) => {
+    const s = scrollRef.current;
+    const dt = s.last ? Math.min(now - s.last, 100) : 1000 / 60;
+    s.last = now;
+    const d = s.target - s.pos;
+    if (Math.abs(d) < 0.5) {
+      applyScroll(s.target);
+      s.raf = 0;
+      s.last = 0;
+      return;
+    }
+    applyScroll(s.pos + d * (1 - (1 - SCROLL_EASE) ** (dt / (1000 / 60))));
+    s.raf = requestAnimationFrame(tick);
+  };
+
+  const scrollTo = (target: number) => {
+    const s = scrollRef.current;
+    s.target = clamp(target, 0, layoutRef.current.maxScroll);
+    if (!s.raf) s.raf = requestAnimationFrame(tick);
+  };
+
+  const stopScroll = () => {
+    const s = scrollRef.current;
+    cancelAnimationFrame(s.raf);
+    s.raf = 0;
+    s.last = 0;
+    s.target = s.pos;
+  };
+
+  // A resize can shorten the strip; keep the scroll inside it.
+  React.useEffect(() => {
+    if (phase !== "strip") return;
+    const s = scrollRef.current;
+    s.target = Math.min(s.target, maxScroll);
+    applyScroll(Math.min(s.pos, maxScroll));
+  }, [maxScroll, phase]);
 
   // Entry: the WebGL plane itself flies to the hero slot (measured below) while
   // the other slots stagger-fade in. The DOM hero image is revealed only after
@@ -179,10 +235,9 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       overlay.style.background = "transparent";
       hero.style.opacity = "0";
 
-      // Only the arrival row enters; the copies either side stay hidden until the reveal.
-      const satellites = Array.from(
-        overlay.querySelectorAll<HTMLElement>("[data-arrival]"),
-      ).filter((el) => el !== hero);
+      const satellites = Array.from(overlay.querySelectorAll<HTMLElement>("img[data-pos]")).filter(
+        (el) => el !== hero,
+      );
       const closeBtn = overlay.querySelector<HTMLElement>(`.${styles.close}`);
       for (const el of satellites) {
         el.style.transition = "none";
@@ -304,18 +359,19 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     };
   }, []);
 
-  // Part 2, once the arrival has settled: the first image — the one you clicked —
-  // scales up to hero height and moves to centre, the row sliding along with it.
+  // Part 2, once the arrival has settled: the whole row zooms into the strip,
+  // the image you clicked ending at the left edge.
   React.useEffect(() => {
     const flew = Boolean(transitionRef.current?.sourceKey);
     const settleAt = flew
       ? FLIGHT_MS + (images.length - 1) * SAT_STAGGER_S * 1000 + 700 + FUSE_PAUSE_MS
       : 500;
     const timer = window.setTimeout(() => {
-      setMotion({ ms: TURN_MS, ease: TURN_EASE });
-      setHeroPos(0);
-      setPhase("hero");
-      after(TURN_MS, () => setBusy(false));
+      setPhase("strip");
+      after(ZOOM_MS, () => {
+        setSettled(true);
+        setBusy(false);
+      });
     }, settleAt);
     return () => clearTimeout(timer);
   }, []);
@@ -335,111 +391,74 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     }
   };
 
-  const wheelRef = React.useRef({
-    last: 0,
-    accum: 0,
-    locked: false,
-    queued: 0 as -1 | 0 | 1,
-    // The swipe that set the lock: its direction, when it stepped, and its
-    // slowest averaged speed since the refractory window closed.
-    dir: 0,
-    lockedAt: 0,
-    slowest: Number.POSITIVE_INFINITY,
-    recent: [] as number[],
-  });
-
-  const advance = (to: number) => {
-    setBusy(true);
-    setMotion({ ms: ADV_MS, ease: TURN_EASE });
-    setHeroPos(to);
-    after(ADV_MS, () => {
-      const queued = wheelRef.current.queued;
-      wheelRef.current.queued = 0;
-      if (queued) advance(to + queued);
-      else setBusy(false);
-    });
-  };
-
-  /** Left half is previous, right half is next. The row loops, so neither ends. */
-  const step = (dir: -1 | 1) => {
-    if (busy || phase !== "hero") return;
-    advance(heroPos + dir);
-  };
-
   // Warm the canvas-size copy of whichever image you're on, so if you close on
   // it the plane has it straight away.
-  const currentCanvasUrl = images[mod(heroPos)]?.canvasUrl;
+  const currentCanvasUrl = images[current]?.canvasUrl;
   React.useEffect(() => {
     if (currentCanvasUrl) new Image().src = `/${currentCanvasUrl}`;
   }, [currentCanvasUrl]);
 
   /**
    * Exit, from whichever image you're on. The plane you opened the project from
-   * takes that image: once it's drawing it, the plane re-pins over the enlarged
-   * image and flies home, shrinking to its canvas size while the camera centres
-   * it. Meanwhile the rest of the row drops and fades, furthest first, closing
-   * in on it. The canvas keeps the new image there.
+   * takes that image: once it's drawing it, the plane re-pins over the image and
+   * flies home, shrinking to its canvas size while the camera centres it. The
+   * strip shrinks with it as one piece while the rest fade, furthest first. The
+   * canvas keeps the new image there.
    */
   const runExit = () => {
     if (busy) return;
     const t = transitionRef.current;
     const overlay = overlayRef.current;
-    const hero = overlay?.querySelector<HTMLImageElement>(`[data-pos="${heroPos}"]`);
-    const item = images[mod(heroPos)];
+    const k0 = current;
+    const hero = overlay?.querySelector<HTMLImageElement>(`[data-pos="${k0}"]`);
+    const item = images[k0];
     if (!t?.sourceKey || !hero || !overlay || !item) {
       fadeClose();
       return;
     }
     const sourceKey = t.sourceKey;
+    // Stop the strip wherever it is.
+    stopScroll();
+    dragRef.current = null;
+    setDragging(false);
+    const scroll = scrollRef.current.pos;
     setBusy(true);
-    // The row is moved by hand from here on, frame by frame, so no CSS transition.
-    setMotion({ ms: 0, ease: TURN_EASE });
     setPhase("leaving");
 
-    // As the plane shrinks home, the rest of the row closes in to stay GAP from
-    // its edges (and level with its centre), instead of holding the places it
-    // had around the enlarged image.
+    // Every other image keeps its place relative to the one going home, scaled
+    // by as much as the plane has shrunk, gaps included.
     const slotOf = (el: HTMLElement) => el.parentElement as HTMLElement;
-    const after0 = new Map<number, number>();
-    const before0 = new Map<number, number>();
-    for (let k = heroPos + 1, acc = 0; k <= kMax; k++) {
-      after0.set(k, acc);
-      acc += baseW(k) + GAP;
-    }
-    for (let k = heroPos - 1, acc = 0; k >= kMin; k--) {
-      acc += baseW(k);
-      before0.set(k, acc);
-      acc += GAP;
-    }
     const neighbours = Array.from(overlay.querySelectorAll<HTMLElement>("img[data-pos]")).filter((el) => el !== hero);
     const hug = () => {
       const r = getHeroScreenRect();
       if (r) {
+        const f = r.height / stripH;
         const dy = r.y + r.height / 2 - viewport.h / 2;
         for (const el of neighbours) {
           const k = Number(el.dataset.pos);
-          const x = k > heroPos ? r.x + r.width + GAP + (after0.get(k) ?? 0) : r.x - GAP - (before0.get(k) ?? 0);
-          slotOf(el).style.transform = `translate(${x}px, ${dy}px)`;
+          // The row is still shifted by the scroll, so add it back.
+          const x = r.x + (xs[k] - xs[k0]) * f + scroll;
+          slotOf(el).style.transform = `translate(${x}px, ${dy}px) scale(${f})`;
         }
       }
       rafRef.current = requestAnimationFrame(hug);
     };
     rafRef.current = requestAnimationFrame(hug);
 
-    const imgs = Array.from(overlay.querySelectorAll<HTMLElement>(`.${styles.image}`)).filter((el) => el !== hero);
-    const onScreen = imgs.filter((el) => {
+    // Images off screen go at once, or the shrinking strip would bring them in.
+    const onScreen = neighbours.filter((el) => {
       const r = el.getBoundingClientRect();
       return r.right > 0 && r.left < window.innerWidth;
     });
-    const ring = (el: HTMLElement) => Math.abs(Number(el.dataset.pos) - heroPos);
+    const ring = (el: HTMLElement) => Math.abs(Number(el.dataset.pos) - k0);
     const rings = Math.max(1, ...onScreen.map(ring));
     const stagger = Math.min(SAT_STAGGER_S, (FLIGHT_MS - EXIT_FADE_MS) / 1000 / rings);
-    for (const el of imgs) {
-      // Furthest first, so the row empties in toward the image going home.
-      const delay = onScreen.includes(el) ? ((rings - ring(el)) * stagger).toFixed(3) : "0";
-      el.style.transition = `opacity ${EXIT_FADE_MS}ms ease ${delay}s, transform 0.5s ${TURN_EASE} ${delay}s`;
+    for (const el of neighbours) {
+      const shown = onScreen.includes(el);
+      // Furthest first, so the strip empties in toward the image going home.
+      const delay = shown ? ((rings - ring(el)) * stagger).toFixed(3) : "0";
+      el.style.transition = `opacity ${shown ? EXIT_FADE_MS : 0}ms ease ${delay}s`;
       el.style.opacity = "0";
-      el.style.transform = `translateY(${RISE_PX}px)`;
     }
 
     let flown = false;
@@ -478,10 +497,11 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // Escape is a bail-out, so it stays live even mid-move — the choreographed
-      // exit needs a settled row to work from, so interrupt with a plain fade.
+      // exit needs a settled strip to work from, so interrupt with a plain fade.
       if (e.key === "Escape") (busy ? fadeClose : runExit)();
-      if (e.key === "ArrowRight") step(1);
-      if (e.key === "ArrowLeft") step(-1);
+      if (phase !== "strip" || busy) return;
+      if (e.key === "ArrowRight") scrollTo(scrollRef.current.target + viewport.w * KEY_STEP_FRAC);
+      if (e.key === "ArrowLeft") scrollTo(scrollRef.current.target - viewport.w * KEY_STEP_FRAC);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -492,56 +512,59 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       // Nothing behind the page should scroll, and a sideways trackpad swipe
       // must not turn into the browser's back gesture.
       e.preventDefault();
-      const w = wheelRef.current;
+      if (phase !== "strip" || busy) return;
+      // Either axis moves the strip, so a mouse wheel works as well as a trackpad.
       const raw = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
-      const px = e.deltaMode === 1 ? raw * 16 : e.deltaMode === 2 ? raw * window.innerHeight : raw;
-      const speed = Math.abs(px);
-      const gap = e.timeStamp - w.last;
-      const quiet = gap > WHEEL_QUIET_MS;
-      w.last = e.timeStamp;
-      // Pixels per frame: a merged event covers several frames' worth of travel.
-      const perFrame = (speed * 16) / Math.min(Math.max(gap, 16), 100);
-      w.recent = [...w.recent.slice(-2), perFrame];
-      const avg = w.recent.reduce((a, b) => a + b, 0) / w.recent.length;
-
-      let fresh = quiet;
-      if (w.locked && !fresh && speed > 0 && e.timeStamp - w.lockedAt > WHEEL_REFRACTORY_MS) {
-        if (Math.sign(px) !== w.dir && speed >= 4) fresh = true;
-        else {
-          w.slowest = Math.min(w.slowest, avg);
-          fresh = avg >= w.slowest * WHEEL_RESWIPE_RATIO && avg >= w.slowest + WHEEL_RESWIPE_PX;
-        }
-      }
-      if (fresh) {
-        w.locked = false;
-        w.accum = 0;
-      }
-      if (w.locked) return;
-
-      if (Math.sign(px) !== Math.sign(w.accum)) w.accum = 0;
-      w.accum += px;
-      if (Math.abs(w.accum) < WHEEL_STEP) return;
-
-      const dir = w.accum > 0 ? 1 : -1;
-      w.accum = 0;
-      w.locked = true;
-      w.dir = dir;
-      w.lockedAt = e.timeStamp;
-      w.slowest = Number.POSITIVE_INFINITY;
-      if (phase !== "hero") return;
-      if (busy) w.queued = dir;
-      else step(dir);
+      const px = e.deltaMode === 1 ? raw * 16 : e.deltaMode === 2 ? raw * window.innerWidth : raw;
+      scrollTo(scrollRef.current.target + px);
     };
     window.addEventListener("wheel", onWheel, { passive: false });
     return () => window.removeEventListener("wheel", onWheel);
   });
 
+  // Click and drag (mouse, pen or finger): the strip follows the pointer, then
+  // carries on at the speed it was let go.
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (phase !== "strip" || busy || (e.pointerType === "mouse" && e.button !== 0)) return;
+    if ((e.target as HTMLElement).closest("button")) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    stopScroll();
+    const pos = scrollRef.current.pos;
+    dragRef.current = { id: e.pointerId, x: e.clientX, from: pos, lastX: e.clientX, lastT: e.timeStamp, v: 0 };
+    setDragging(true);
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    const d = dragRef.current;
+    if (!d || d.id !== e.pointerId) return;
+    const dt = Math.max(1, e.timeStamp - d.lastT);
+    d.v = 0.8 * ((d.lastX - e.clientX) / dt) + 0.2 * d.v;
+    d.lastX = e.clientX;
+    d.lastT = e.timeStamp;
+    const pos = clamp(d.from - (e.clientX - d.x), 0, layoutRef.current.maxScroll);
+    scrollRef.current.target = pos;
+    applyScroll(pos);
+  };
+  const onPointerUp = (e: React.PointerEvent) => {
+    const d = dragRef.current;
+    if (!d || d.id !== e.pointerId) return;
+    dragRef.current = null;
+    setDragging(false);
+    const v = e.timeStamp - d.lastT > FLING_STALE_MS ? 0 : d.v;
+    scrollTo(scrollRef.current.pos + v * FLING_MS);
+  };
+
   if (!images.length) return null;
 
-  const browsing = phase === "hero" && !busy;
-
   return (
-    <div className={styles.overlay} ref={overlayRef}>
+    <div
+      className={`${styles.overlay} ${dragging ? styles.dragging : ""}`}
+      ref={overlayRef}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+    >
       <button
         type="button"
         className={styles.close}
@@ -551,48 +574,32 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
         ×
       </button>
 
-      {browsing && (
-        <div className={styles.zones}>
-          <button type="button" className={styles.zone} aria-label="Previous image" onClick={() => step(-1)} />
-          <button type="button" className={styles.zone} aria-label="Next image" onClick={() => step(1)} />
-        </div>
-      )}
+      <div className={`${styles.counter} ${phase === "strip" ? styles.counterShown : ""}`}>{counter}</div>
 
-      <div className={`${styles.counter} ${phase === "hero" ? styles.counterShown : ""}`}>{counter}</div>
-
-      <div className={styles.row}>
-        {positions.map((k) => {
-          const img = images[mod(k)];
-          const inArrivalRow = k >= 0 && k < count;
-          return (
-            <div
-              key={k}
-              className={styles.slot}
-              style={{
-                width: baseW(k),
-                height: rowH,
-                marginTop: -rowH / 2,
-                transform: `translate(${xs.get(k) ?? 0}px, 0) scale(${scaleOf(k)})`,
-                transition: motion.ms ? `transform ${motion.ms}ms ${motion.ease}` : "none",
-                zIndex: centred !== null && k === heroPos ? 2 : 1,
-              }}
-            >
-              <img
-                ref={k === 0 ? heroImgRef : null}
-                data-pos={k}
-                data-arrival={inArrivalRow ? "" : undefined}
-                src={`/${img.url}`}
-                alt=""
-                draggable={false}
-                decoding="async"
-                className={styles.image}
-                // The copies are in place from the start, hidden, and appear the
-                // moment the row starts to move — so they slide in with it.
-                style={phase === "arrive" && !inArrivalRow ? { opacity: 0 } : undefined}
-              />
-            </div>
-          );
-        })}
+      <div className={styles.row} ref={rowRef}>
+        {images.map((img, k) => (
+          <div
+            key={img.url}
+            className={styles.slot}
+            style={{
+              width: aspects[k] * boxH,
+              height: boxH,
+              marginTop: -boxH / 2,
+              transform: `translate(${xs[k]}px, 0) scale(${boxScale})`,
+              transition: inStrip && !settled ? `transform ${ZOOM_MS}ms ${ZOOM_EASE}` : "none",
+            }}
+          >
+            <img
+              ref={k === 0 ? heroImgRef : null}
+              data-pos={k}
+              src={`/${img.url}`}
+              alt=""
+              draggable={false}
+              decoding="async"
+              className={styles.image}
+            />
+          </div>
+        ))}
       </div>
     </div>
   );
