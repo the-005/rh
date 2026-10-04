@@ -163,6 +163,14 @@ export function IndexPage() {
   const aimRef = React.useRef({ scroll: 0, shift: 0 });
   /** The shift as drawn right now, mid-move included. */
   const shiftRef = React.useRef(0);
+  /**
+   * Room below the list beyond the page's own end: only as much as a raised
+   * row needs to reach the centre line, and it melts away as the user scrolls
+   * back up. At rest there's none, so the page ends at the last row.
+   */
+  const roomRef = React.useRef(0);
+  const roomElRef = React.useRef<HTMLDivElement>(null);
+  const innerRef = React.useRef<HTMLDivElement>(null);
   /** The scroll position the list's own move last set, to tell it from the user's. */
   const ownScrollRef = React.useRef<number | null>(null);
   const moveRef = React.useRef<number | null>(null);
@@ -258,12 +266,28 @@ export function IndexPage() {
     aimRef.current = { scroll: mainRef.current?.scrollTop ?? 0, shift: shiftRef.current };
   };
 
+  /** The room below the list needed to scroll to `scroll`: none within the page's own end. */
+  const roomFor = (scroll: number) => {
+    const main = mainRef.current;
+    const inner = innerRef.current;
+    if (!main || !inner) return 0;
+    return Math.max(0, scroll - (inner.offsetHeight - main.clientHeight));
+  };
+
+  const setRoom = (px: number) => {
+    roomRef.current = px;
+    if (roomElRef.current) roomElRef.current.style.height = `${px}px`;
+  };
+
   /** Move the list to `aim` over `ms`, scroll and shift together, on the row-move curve. */
   const moveList = (aim: { scroll: number; shift: number }, ms: number) => {
     const main = mainRef.current;
     if (!main) return;
     if (moveRef.current !== null) cancelAnimationFrame(moveRef.current);
     aimRef.current = aim;
+    // Room for the whole way there (shrinking it mid-move would clip the scroll),
+    // trimmed to what the end needs once it's arrived.
+    setRoom(Math.max(roomRef.current, roomFor(aim.scroll)));
     const from = { scroll: main.scrollTop, shift: shiftRef.current };
     const start = performance.now();
     const step = (now: number) => {
@@ -273,6 +297,7 @@ export function IndexPage() {
       ownScrollRef.current = main.scrollTop;
       drawShift(from.shift + (aim.shift - from.shift) * eased);
       moveRef.current = k < 1 ? requestAnimationFrame(step) : null;
+      if (k === 1) setRoom(roomFor(aim.scroll));
     };
     moveRef.current = requestAnimationFrame(step);
   };
@@ -298,8 +323,9 @@ export function IndexPage() {
     // How far below the centre line the row's line will be, once the list has arrived.
     const by = el.getBoundingClientRect().bottom + toAim() - window.innerHeight / 2;
     const raised = aimRef.current.scroll - aimRef.current.shift + by;
-    const max = main.scrollHeight - main.clientHeight;
-    const aim = raised >= 0 ? { scroll: Math.min(raised, max), shift: 0 } : { scroll: 0, shift: -raised };
+    // Up is a scroll (growing room below if the page ends too soon); down past
+    // the top is a shift.
+    const aim = raised >= 0 ? { scroll: raised, shift: 0 } : { scroll: 0, shift: -raised };
     const rows = Math.abs(by) / el.offsetHeight;
     moveList(aim, Math.min(LIFT_MAX_MS, LIFT_ROW_MS * Math.sqrt(Math.max(1, rows))));
   };
@@ -530,6 +556,9 @@ export function IndexPage() {
         if (main && ownScrollRef.current !== null && Math.abs(main.scrollTop - ownScrollRef.current) < 1) return;
         ownScrollRef.current = null;
         holdList();
+        // Scrolling back up melts away room a raised row needed; never below
+        // what the current position needs, so nothing jumps.
+        if (main) setRoom(roomFor(main.scrollTop));
         scrolled();
       },
       { passive: true, signal: listening.signal }
@@ -559,7 +588,7 @@ export function IndexPage() {
 
   return (
     <main ref={mainRef} className={styles.page}>
-      <div className={styles.inner}>
+      <div ref={innerRef} className={styles.inner}>
         {/* Idle only counts while a row is active: with none, there's no picture to clear. */}
         <ul ref={listRef} className={`${styles.list} ${idle && active !== null ? styles.idle : ""}`}>
           {projects.map((project, index) => (
@@ -592,6 +621,8 @@ export function IndexPage() {
           ))}
         </ul>
       </div>
+
+      <div ref={roomElRef} className={styles.room} aria-hidden="true" />
 
       <div
         className={`${styles.preview} ${playing ? styles.previewPlaying : ""} ${!current && ambient?.slow ? styles.previewAmbient : ""}`}

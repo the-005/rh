@@ -71,16 +71,14 @@
   top: 0;
 }
 
-/* Room below the list, half a window, so even the last row can scroll up onto
-   the centre line. Out of the flow, so it doesn't move the centred list. */
-.list::after {
-  content: "";
-  position: absolute;
-  top: 100%;
-  left: 0;
-  width: 1px;
-  height: 50vh;
-  pointer-events: none;
+/* Room below the list, after it in the page (height set from script): only as
+   much as a raised row needs to reach the centre line, none at rest, so the
+   page ends at the last row, and it melts away as the user scrolls back up.
+   A block of its own after .inner, so it doesn't move the centred list, and in
+   the flow: as out-of-flow overflow, Chrome wouldn't scroll the page with the
+   wheel over it. */
+.room {
+  height: 0;
 }
 
 /* Square and flush: no gap between rows, 8px 12px inside the page margin.
@@ -257,10 +255,6 @@
      taller frame. */
   .inner {
     padding: 6.5rem 0 5rem;
-  }
-
-  .list::after {
-    display: none;
   }
 
   .playhead {
