@@ -34,13 +34,19 @@
   }
 }
 
-/* The list hangs from the centre line: its first row starts just under the
-   middle of the window, and a played row rises onto the line. That's the
-   gallery's split, carried over. About 11 rows fit under the line at 900px
-   tall; past that the page scrolls. No z-index here: the rows and the preview
-   must share the page's stacking context to layer. */
+/* The list sits at the bottom of the window while it fits. Clicking a row
+   raises it until that row's line is the centre line, and it stays there; a
+   slideshow raises each next row onto the line in turn. That's the gallery's
+   split, carried over. Past what fits, it starts under the frame's top row and
+   the page scrolls (min-height lets the box grow). Rows run edge to edge, so
+   their line does too: the page margin is in the rows' own padding. No z-index
+   here: the rows and the preview must share the page's stacking context. */
 .inner {
-  padding: 50vh var(--page-padding, 1.5rem) var(--page-padding, 1.5rem);
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 5rem 0 var(--page-padding, 1.5rem);
 }
 
 .row {
@@ -56,18 +62,18 @@
   list-style: none;
   margin: 0;
   padding: 0;
-  /* Raised (inline) until the played row's line is the centre line, and let
-     back down on stop, on the curve every row move on the site uses. Moved by
-     relative positioning, not a transform: a transform would give the list a
-     layer of its own, and the active row could no longer sit over the preview
-     or blend with it. */
+  /* Raised (inline) until the played row's line is the centre line, on the
+     curve every row move on the site uses, and left there. Moved by relative
+     positioning, not a transform: a transform would give the list a layer of
+     its own, and the active row could no longer sit over the preview or blend
+     with it. */
   position: relative;
   top: 0;
   transition: top 500ms cubic-bezier(0.42, 0, 0.58, 1);
 }
 
-/* Square and flush: no gap between rows, 8px 12px inside. No line at rest:
-   only the active row shows one, under it.
+/* Square and flush: no gap between rows, 8px 12px inside the page margin.
+   No line at rest: only the active row shows one, under it, edge to edge.
 
    Everything on a row is drawn light and blended by difference, so it inverts
    whatever is behind it: dark on the white page, light over a dark picture,
@@ -80,7 +86,7 @@
   background: none;
   border: none;
   border-bottom: 1px solid transparent;
-  padding: 8px 12px;
+  padding: 8px calc(var(--page-padding, 1.5rem) + 12px);
   font: inherit;
   font-size: 1.4rem;
   color: #eeeeee;
@@ -239,11 +245,8 @@
   /* No preview, so no split: the list sits in the middle while it fits, and
      past that starts under the frame and scrolls (min-height lets it grow). */
   .inner {
-    min-height: 100%;
-    display: flex;
-    flex-direction: column;
     justify-content: center;
-    padding: 6.5rem var(--page-padding, 1.5rem) 5rem;
+    padding: 6.5rem 0 5rem;
   }
 
   .playhead {
