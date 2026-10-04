@@ -50,7 +50,7 @@ export function ResearchPage() {
 
   return (
     <main className={styles.page}>
-      {/* Sits in the frame's top row, between the wordmark and the view nav. */}
+      {/* Centred, one line under the frame's Gallery and Index links. */}
       <div className={styles.scale}>
         <input
           type="range"

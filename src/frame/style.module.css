@@ -101,8 +101,8 @@
 }
 
 /* --- controls -------------------------------------------------------------
-   The frame's top row carries the wordmark at the left and the view nav at the
-   right. Both inherit the frame's difference blend, so they read white over the
+   The frame's top row carries the wordmark at the left, Gallery and Index in
+   the middle, and Research and About at the right. Both inherit the frame's difference blend, so they read white over the
    canvas and black over the index, about and project pages. */
 
 .frame__home,
@@ -127,6 +127,18 @@
 .frame__view {
   grid-column: 5;
   justify-self: end;
+}
+
+/* Gallery and Index, the two ways through the work, centred on the page, not
+   between the wordmark and the rest. Lined up with the row's top padding. */
+.frame__centre {
+  position: absolute;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 1rem;
+  pointer-events: auto;
 }
 
 .frame__btn {
@@ -155,5 +167,9 @@
   /* The desktop grid drops to four columns; the toggle still rides the 1fr. */
   .frame__view {
     grid-column: 4;
+  }
+
+  .frame__centre {
+    top: var(--page-padding, 1.5rem);
   }
 }

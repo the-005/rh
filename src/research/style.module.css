@@ -19,11 +19,11 @@
   }
 }
 
-/* Centred in the frame's top row, beside the view nav. The frame above is
-   pointer-events: none outside its own buttons, so the slider gets the drag. */
+/* Centred, one line under the frame's Gallery and Index links. The frame above
+   is pointer-events: none outside its own buttons, so the slider gets the drag. */
 .scale {
   position: fixed;
-  top: 1rem;
+  top: calc(1rem + 1.75rem);
   left: 50%;
   transform: translateX(-50%);
   z-index: 1;
@@ -107,8 +107,8 @@
 }
 
 @media screen and (min-width: 53em) {
-  /* The frame's desktop padding. */
+  /* The frame's desktop padding, plus the line the centred links take. */
   .scale {
-    top: var(--page-padding, 1.5rem);
+    top: calc(var(--page-padding, 1.5rem) + 1.75rem);
   }
 }
