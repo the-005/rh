@@ -179,6 +179,8 @@ export function IndexPage() {
   const innerRef = React.useRef<HTMLDivElement>(null);
   /** The scroll position the list's own move last set, to tell it from the user's. */
   const ownScrollRef = React.useRef<number | null>(null);
+  /** Where the user last left the page by scrolling it themselves, which a reset keeps. */
+  const userScrollRef = React.useRef(0);
   const moveRef = React.useRef<number | null>(null);
   const rowsRef = React.useRef<(HTMLButtonElement | null)[]>([]);
 
@@ -301,7 +303,7 @@ export function IndexPage() {
       const eased = rowMoveEase(k);
       main.scrollTop = from.scroll + (aim.scroll - from.scroll) * eased;
       ownScrollRef.current = main.scrollTop;
-      drawShift(from.shift + (aim.shift - from.shift) * eased);
+      drawShift(k < 1 ? from.shift + (aim.shift - from.shift) * eased : aim.shift);
       moveRef.current = k < 1 ? requestAnimationFrame(step) : null;
       if (k === 1) setRoom(roomFor(aim.scroll));
     };
@@ -313,6 +315,13 @@ export function IndexPage() {
    * mid-slide gets the row it will be over, not one passing under it.
    */
   const rowAt = (x: number, y: number) => {
+    // At rest, whatever is really under the cursor: a nav button over a row
+    // in a long list is the nav, not the row.
+    if (moveRef.current === null) {
+      const hit = document.elementFromPoint(x, y)?.closest("button");
+      const index = hit ? rowsRef.current.indexOf(hit as HTMLButtonElement) : -1;
+      return index >= 0 ? { index, el: rowsRef.current[index] as HTMLButtonElement } : null;
+    }
     const shift = toAim();
     for (const [index, el] of rowsRef.current.entries()) {
       if (!el) continue;
@@ -390,7 +399,29 @@ export function IndexPage() {
     activeRef.current = null;
     setActive(null);
     clearAmbient();
-    ambientRef.current = window.setTimeout(() => setAmbient({ src: randomImage(last), slow: true }), AMBIENT_MS);
+    ambientRef.current = window.setTimeout(() => {
+      setAmbient({ src: randomImage(last), slow: true });
+      settleList();
+    }, AMBIENT_MS);
+  };
+
+  /**
+   * After a while with no row under the cursor, the list goes back to where the
+   * user last left it themselves, undoing only what clicks and the reel moved:
+   * a short list is centred again, as on landing, and a long one keeps the
+   * user's own place. Any room below melts away with it.
+   */
+  const settleList = () => {
+    const main = mainRef.current;
+    const inner = innerRef.current;
+    if (!main || !inner) return;
+    const end = Math.max(0, inner.offsetHeight - main.clientHeight);
+    const aim = { scroll: Math.min(userScrollRef.current, end), shift: 0 };
+    const now = aimRef.current;
+    const by = Math.abs(now.scroll - now.shift - aim.scroll);
+    if (by < 1) return;
+    const rows = by / (rowsRef.current[0]?.offsetHeight || 1);
+    moveList(aim, Math.min(LIFT_MAX_MS, LIFT_ROW_MS * Math.sqrt(Math.max(1, rows))));
   };
 
   /** The hand moved: stop the slideshow, and the row under the cursor takes over. */
@@ -529,6 +560,19 @@ export function IndexPage() {
       },
       { passive: true, signal: listening.signal }
     );
+    // Leaving the window is leaving the list: it stops a slideshow, and the
+    // preview goes blank, then a random image and the list settles, as after
+    // any other leave.
+    document.documentElement.addEventListener(
+      "mouseleave",
+      () => {
+        movesRef.current += 1;
+        setPaused(null);
+        if (playRef.current !== null) stopPlaying();
+        if (activeRef.current !== null) endHover();
+      },
+      { signal: listening.signal }
+    );
     // A click anywhere stops it where it is, or carries on, even over no row.
     window.addEventListener(
       "click",
@@ -564,7 +608,10 @@ export function IndexPage() {
         holdList();
         // Scrolling back up melts away room a raised row needed; never below
         // what the current position needs, so nothing jumps.
-        if (main) setRoom(roomFor(main.scrollTop));
+        if (main) {
+          setRoom(roomFor(main.scrollTop));
+          userScrollRef.current = main.scrollTop;
+        }
         scrolled();
       },
       { passive: true, signal: listening.signal }
@@ -580,6 +627,7 @@ export function IndexPage() {
         holdList();
         drawShift(Math.max(0, shiftRef.current + dy));
         aimRef.current = { scroll: 0, shift: shiftRef.current };
+        userScrollRef.current = 0;
         scrolled();
       },
       { passive: true, signal: listening.signal }
