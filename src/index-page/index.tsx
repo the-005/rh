@@ -151,6 +151,12 @@ export function IndexPage() {
    * `at` is where the hand was when it stopped (null if played by keyboard).
    */
   const pausedRef = React.useRef<{ at: { x: number; y: number } | null } | null>(null);
+  /** Mirrors pausedRef for the styles: a stopped row stays as quiet as a playing one. */
+  const [stoppedHere, setStoppedHere] = React.useState(false);
+  const setPaused = (paused: { at: { x: number; y: number } | null } | null) => {
+    pausedRef.current = paused;
+    setStoppedHere(paused !== null);
+  };
   const mainRef = React.useRef<HTMLElement>(null);
   const listRef = React.useRef<HTMLUListElement>(null);
   /**
@@ -221,7 +227,7 @@ export function IndexPage() {
     headRef.current = head;
     setActive(index);
     setShown(head);
-    pausedRef.current = null;
+    setPaused(null);
     clearAmbient();
     setAmbient(null);
     warm(projects[index]);
@@ -347,7 +353,7 @@ export function IndexPage() {
     const pos = spotNow();
     stopPlaying();
     setSpot({ pos, transition: "none" });
-    pausedRef.current = { at: handRef.current };
+    setPaused({ at: handRef.current });
   };
 
   /**
@@ -369,7 +375,7 @@ export function IndexPage() {
 
   /** Carry on from exactly where it stopped, as if it never had. */
   const resume = () => {
-    pausedRef.current = null;
+    setPaused(null);
     if (activeRef.current === null) return;
     originRef.current = handRef.current;
     runFrom(spotNow());
@@ -380,7 +386,7 @@ export function IndexPage() {
     const index = activeRef.current;
     const last = index === null ? null : projects[index].images[headRef.current];
     clearCommit();
-    pausedRef.current = null;
+    setPaused(null);
     activeRef.current = null;
     setActive(null);
     clearAmbient();
@@ -509,7 +515,7 @@ export function IndexPage() {
         const paused = pausedRef.current;
         if (paused) {
           if (paused.at && Math.hypot(move.clientX - paused.at.x, move.clientY - paused.at.y) <= TWITCH_PX) return;
-          pausedRef.current = null;
+          setPaused(null);
         }
         if (playRef.current !== null) {
           // A still hand keeps it playing; a moving one takes over.
@@ -539,7 +545,7 @@ export function IndexPage() {
       const hand = handRef.current;
       if (!hand) return;
       movesRef.current += 1;
-      pausedRef.current = null;
+      setPaused(null);
       if (playRef.current !== null) {
         handBack();
         return;
@@ -601,6 +607,8 @@ export function IndexPage() {
                 type="button"
                 className={`${styles.row} ${active === index ? styles.active : ""}`}
                 aria-pressed={active === index && playing}
+                // Quiet while playing, and while stopped where it is, until the hand moves.
+                data-quiet={active === index && (playing || stoppedHere) ? "" : undefined}
                 onClick={(e) => onClick(e, index)}
                 onMouseEnter={onPointer}
                 onMouseMove={onPointer}

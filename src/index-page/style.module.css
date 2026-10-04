@@ -1,11 +1,11 @@
 /* Dials: the values most likely to be tuned, together (each has a row in the
    Notion tuning table). */
 .page {
-  /* The active row's line and playhead while hovering: light, so they never
-     shout. */
-  --active-opacity: 0.3;
-  /* ...and while a slideshow plays: almost gone, so the pictures have it. */
-  --playing-opacity: 0.05;
+  /* The active row's line and playhead while hovering. */
+  --active-opacity: 0.6;
+  /* ...and while a slideshow plays, or is stopped where it is, until the hand
+     moves: nearly gone, so the pictures have the screen. */
+  --playing-opacity: 0.1;
   /* Preview size by shape, r being width ÷ height:
        height = anchor × (r ÷ 0.8)^−k
      4:5 photos (most of ours) sit at the anchor. k = 0 makes every shape the
@@ -133,8 +133,12 @@
   border-bottom-color: rgb(238 238 238 / var(--active-opacity));
 }
 
-.list .active[aria-pressed="true"] {
+.list .active[data-quiet] {
   border-bottom-color: rgb(238 238 238 / var(--playing-opacity));
+}
+
+.active[data-quiet] .stop {
+  background: rgb(238 238 238 / var(--playing-opacity));
 }
 
 .list .row:focus-visible {
