@@ -20,8 +20,9 @@ import styles from "./style.module.css";
  * window, where it stays. As a slideshow moves on, each next row rises onto the
  * line in turn. The list only ever moves while the hand is still, and the first
  * real movement stops the slideshow, so nothing moves under a moving cursor.
- * Clicking again, or the last project ending, stops it where it is; moving the
- * mouse stops it and the row under the cursor takes over.
+ * Clicking again (anywhere), or the last project ending, stops it exactly where
+ * it is, and while the hand stays still another click carries on from there;
+ * moving the mouse stops it and the row under the cursor takes over.
  *
  * Going idle fades the other rows back to leave the picture clear, after Julia
  * Plaza (juliaplaza.com).
@@ -45,8 +46,14 @@ const COMMIT_MS = 90;
 const PLAY_MS = 3000;
 /** How far the pointer can drift during a slideshow before it counts as moving and takes over. */
 const TWITCH_PX = 10;
-/** How the playhead settles onto the image showing when a slideshow stops where it is. */
-const GLIDE = "350ms cubic-bezier(0.22, 1, 0.36, 1)";
+/**
+ * How long the list takes to bring a row onto the centre line: one row's move
+ * (a step of the reel) takes LIFT_ROW_MS, and farther moves take longer, by the
+ * square root of the distance, up to LIFT_MAX_MS. One fixed time made a ten-row
+ * move ten times faster than a one-row step.
+ */
+const LIFT_ROW_MS = 500;
+const LIFT_MAX_MS = 1500;
 /** Crossfade layers kept at once; only the oldest (already fading out) get cut. */
 const MAX_LAYERS = 4;
 /** The scrub dissolve in `style.module.css`: how fast a stopped slideshow's fades are cut short. */
@@ -61,6 +68,16 @@ const AMBIENT_MS = 4000;
 /** Where the preview is hidden, and with it the split: the list just sits centred. */
 const NO_SPLIT = "(hover: none), (max-width: 53em)";
 
+/**
+ * `?rows=40` repeats the projects to that many rows, to see how the index
+ * behaves once there are more projects than fit. A test aid; nothing links to it.
+ */
+function listedProjects(): ProjectEntry[] {
+  const rows = Number(new URLSearchParams(window.location.search).get("rows"));
+  if (!(rows > PROJECTS.length)) return PROJECTS;
+  return Array.from({ length: Math.min(rows, 500) }, (_, i) => PROJECTS[i % PROJECTS.length]);
+}
+
 /** Every Work image, for the random picks. */
 const ALL_IMAGES = PROJECTS.flatMap((project) => project.images);
 
@@ -70,13 +87,13 @@ function randomImage(except: string | null) {
   return pool[Math.floor(Math.random() * pool.length)] ?? null;
 }
 
-/** Where the playhead sits, in cells (image i's centre is i + 0.5), and how it gets there. */
+/** Where the playhead sits, in images (image i has the stretch from i to i + 1), and how it gets there. */
 type Spot = { pos: number; transition: string };
 /** A row, and the cursor's x across it. */
 type Cursor = { index: number; el: HTMLElement; x: number };
 
 export function IndexPage() {
-  const projects = PROJECTS;
+  const [projects] = React.useState(listedProjects);
   /** The lit row: under the cursor, or the one a slideshow has carried on to. */
   const [active, setActive] = React.useState<number | null>(null);
   /** Where the playhead is heading, and how. */
@@ -85,7 +102,7 @@ export function IndexPage() {
   const [shown, setShown] = React.useState(0);
   const [playing, setPlaying] = React.useState(false);
   /** How far the list is raised, so the played row's line is the centre line. */
-  const [lift, setLift] = React.useState(0);
+  const [lift, setLift] = React.useState({ px: 0, ms: LIFT_ROW_MS });
   const idle = useIdle(IDLE_MS);
   /**
    * The image shown while no row is active: a random pick on arrival (at the
@@ -113,8 +130,13 @@ export function IndexPage() {
   const answeredRef = React.useRef(0);
   /** Where the cursor was when the slideshow started, to tell a twitch from a move. */
   const originRef = React.useRef<{ x: number; y: number } | null>(null);
-  /** The click that started the slideshow, which mustn't also stop it. */
-  const startClickRef = React.useRef<Event | null>(null);
+  /** The last click a row answered, so the window doesn't answer it again. */
+  const answeredClickRef = React.useRef<Event | null>(null);
+  /**
+   * A slideshow stopped where it is: until the hand moves, a click carries on.
+   * `at` is where the hand was when it stopped (null if played by keyboard).
+   */
+  const pausedRef = React.useRef<{ at: { x: number; y: number } | null } | null>(null);
   const listRef = React.useRef<HTMLUListElement>(null);
   /** The lift the list is settling to, where it stays once any slide is done. */
   const liftRef = React.useRef(0);
@@ -164,6 +186,7 @@ export function IndexPage() {
     headRef.current = head;
     setActive(index);
     setShown(head);
+    pausedRef.current = null;
     clearAmbient();
     setAmbient(null);
     warm(projects[index]);
@@ -213,15 +236,56 @@ export function IndexPage() {
   /** Raise (or lower) the list until this row's line is the centre line of the window. */
   const centre = (el: HTMLElement | null | undefined) => {
     if (!el || window.matchMedia(NO_SPLIT).matches) return;
-    const lift = el.getBoundingClientRect().bottom + raisedBy() - window.innerHeight / 2;
-    liftRef.current = lift;
-    setLift(lift);
+    const raised = raisedBy();
+    const px = el.getBoundingClientRect().bottom + raised - window.innerHeight / 2;
+    const rows = Math.abs(px - raised) / el.offsetHeight;
+    liftRef.current = px;
+    setLift({ px, ms: Math.min(LIFT_MAX_MS, LIFT_ROW_MS * Math.sqrt(Math.max(1, rows))) });
   };
 
-  /** Stop where it is: the project and image stay, and the triangle settles back to a square. */
+  /** Where the playhead is drawn right now, mid-glide included, in cells. */
+  const spotNow = () => {
+    const index = activeRef.current;
+    const row = index === null ? null : rowsRef.current[index];
+    const mark = row?.querySelector<HTMLElement>(`.${styles.playhead}`);
+    if (index === null || !row || !mark) return headRef.current + 0.5;
+    return (Number.parseFloat(getComputedStyle(mark).left) / row.clientWidth) * projects[index].images.length;
+  };
+
+  /**
+   * Stop exactly where it is: the project and image stay, and the playhead
+   * freezes on the spot, a square now. Until the hand moves, a click carries on.
+   */
   const stopHere = () => {
+    const pos = spotNow();
     stopPlaying();
-    setSpot({ pos: headRef.current + 0.5, transition: GLIDE });
+    setSpot({ pos, transition: "none" });
+    pausedRef.current = { at: handRef.current };
+  };
+
+  /**
+   * Run the slideshow from `at`, a point in the current image's stretch of the
+   * row: the playhead carries on at the slideshow's speed (one image's stretch
+   * per PLAY_MS) to the end of that stretch, where the next image comes up, and
+   * then beats every PLAY_MS. Starting mid-image is starting mid-way through it.
+   */
+  const runFrom = (at: number) => {
+    const end = headRef.current + 1;
+    const left = Math.max(0, end - at) * PLAY_MS;
+    setPlaying(true);
+    setSpot({ pos: end, transition: `${left}ms linear` });
+    playRef.current = window.setTimeout(() => {
+      playRef.current = window.setInterval(advance, PLAY_MS);
+      advance();
+    }, left);
+  };
+
+  /** Carry on from exactly where it stopped, as if it never had. */
+  const resume = () => {
+    pausedRef.current = null;
+    if (activeRef.current === null) return;
+    originRef.current = handRef.current;
+    runFrom(spotNow());
   };
 
   /** No row under the cursor: blank for a moment, then something to look at again. */
@@ -229,6 +293,7 @@ export function IndexPage() {
     const index = activeRef.current;
     const last = index === null ? null : projects[index].images[headRef.current];
     clearCommit();
+    pausedRef.current = null;
     activeRef.current = null;
     setActive(null);
     clearAmbient();
@@ -265,21 +330,21 @@ export function IndexPage() {
   };
 
   const onPointer = (e: React.MouseEvent) => {
-    // While playing, the window watch decides (the cursor may be off the list).
-    if (!handMoved() || playRef.current !== null) return;
+    // While playing, or stopped with the hand still, the window watch decides.
+    if (!handMoved() || playRef.current !== null || pausedRef.current) return;
     const row = rowAt(e.clientX, e.clientY);
     if (row) follow({ ...row, x: e.clientX });
     else if (activeRef.current !== null) endHover();
   };
 
   /**
-   * While playing, the playhead travels at constant speed: through each image's
-   * stay it glides from that image's centre to the next one's, arriving just as
-   * the next image comes up — a timeline, not a row of steps.
+   * The row is the project's timeline, edge to edge: each image has its own
+   * stretch of it, and while playing the playhead crosses image i's stretch at
+   * constant speed during that image's stay, so it is always over the image
+   * showing (as the cursor is when hovering).
    */
-  const glideFrom = (i: number) => {
-    const n = projects[activeRef.current ?? 0].images.length;
-    setSpot({ pos: Math.min(i + 1.5, n), transition: `${PLAY_MS}ms linear` });
+  const glideThrough = (i: number) => {
+    setSpot({ pos: i + 1, transition: `${PLAY_MS}ms linear` });
   };
 
   /** One beat of the slideshow: the next image, the next project down the list, or the end. */
@@ -290,7 +355,7 @@ export function IndexPage() {
     if (next < projects[index].images.length) {
       headRef.current = next;
       setShown(next);
-      glideFrom(next);
+      glideThrough(next);
       return;
     }
     if (index + 1 >= projects.length) {
@@ -298,23 +363,28 @@ export function IndexPage() {
       return;
     }
     // The next row lights up on its first image and rises onto the centre line,
-    // replacing the last. Its playhead starts at that image rather than gliding
-    // in from the left, and sets off once that has painted.
+    // replacing the last. Its playhead starts at the left edge, the start of its
+    // timeline, and sets off once that has painted.
     activate(index + 1, 0);
     centre(rowsRef.current[index + 1]);
-    setSpot({ pos: 0.5, transition: "none" });
+    setSpot({ pos: 0, transition: "none" });
     const id = playRef.current;
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
-        if (playRef.current === id) glideFrom(0);
+        if (playRef.current === id) glideThrough(0);
       })
     );
   };
 
   /** Play from the image under the cursor, or, while playing, stop where it is. */
   const onClick = (e: React.MouseEvent<HTMLButtonElement>, index: number) => {
+    answeredClickRef.current = e.nativeEvent;
     if (playRef.current !== null) {
       stopHere();
+      return;
+    }
+    if (pausedRef.current) {
+      resume();
       return;
     }
     // detail is 0 for a click from the keyboard, which has no cursor to measure.
@@ -327,13 +397,13 @@ export function IndexPage() {
     }
     clearCommit();
     setShown(headRef.current);
-    setPlaying(true);
     originRef.current = origin;
-    glideFrom(headRef.current);
-    playRef.current = window.setInterval(advance, PLAY_MS);
+    // From the click's point on the timeline; from the image's start by keyboard.
+    const r = e.currentTarget.getBoundingClientRect();
+    const n = projects[index].images.length;
+    runFrom(origin ? Math.min(n, Math.max(0, ((origin.x - r.left) / r.width) * n)) : headRef.current);
     // The played row rises until its line is the centre line of the window.
     centre(e.currentTarget);
-    startClickRef.current = e.nativeEvent;
   };
 
   // The hand, watched at the window: the raised list can leave the cursor over
@@ -347,6 +417,13 @@ export function IndexPage() {
         if (hand && hand.x === move.clientX && hand.y === move.clientY) return;
         handRef.current = { x: move.clientX, y: move.clientY };
         movesRef.current += 1;
+        // Stopped where it was: a still hand can carry on with a click; a
+        // moving one ends that, and hovering takes over.
+        const paused = pausedRef.current;
+        if (paused) {
+          if (paused.at && Math.hypot(move.clientX - paused.at.x, move.clientY - paused.at.y) <= TWITCH_PX) return;
+          pausedRef.current = null;
+        }
         if (playRef.current !== null) {
           // A still hand keeps it playing; a moving one takes over.
           const start = originRef.current;
@@ -359,11 +436,13 @@ export function IndexPage() {
       },
       { passive: true, signal: listening.signal }
     );
-    // While playing, a click anywhere stops it where it is, even over no row.
+    // A click anywhere stops it where it is, or carries on, even over no row.
     window.addEventListener(
       "click",
       (click) => {
-        if (playRef.current !== null && click !== startClickRef.current) stopHere();
+        if (click === answeredClickRef.current) return;
+        if (playRef.current !== null) stopHere();
+        else if (pausedRef.current) resume();
       },
       { signal: listening.signal }
     );
@@ -379,9 +458,13 @@ export function IndexPage() {
     <main className={styles.page}>
       <div className={styles.inner}>
         {/* Idle only counts while a row is active: with none, there's no picture to clear. */}
-        <ul ref={listRef} className={`${styles.list} ${idle && active !== null ? styles.idle : ""}`} style={{ top: -lift }}>
+        <ul
+          ref={listRef}
+          className={`${styles.list} ${idle && active !== null ? styles.idle : ""}`}
+          style={{ top: -lift.px, transitionDuration: `${lift.ms}ms` }}
+        >
           {projects.map((project, index) => (
-            <li key={project.id}>
+            <li key={`${project.id}-${index}`}>
               <button
                 ref={(el) => {
                   rowsRef.current[index] = el;
@@ -399,7 +482,7 @@ export function IndexPage() {
                   if (!e.currentTarget.matches(":focus-visible") || activeRef.current === index) return;
                   stopPlaying();
                   activate(index, 0);
-                  setSpot({ pos: 0.5, transition: "none" });
+                  setSpot({ pos: 0, transition: "none" });
                 }}
               >
                 <span className={styles.title}>{project.title}</span>
