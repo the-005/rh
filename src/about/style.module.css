@@ -2,8 +2,9 @@
   position: fixed;
   inset: 0;
   z-index: 100;
-  background: #ffffff;
-  color: #111111;
+  /* White unless the settings panel sets a background (src/settings). */
+  background: var(--site-bg, #ffffff);
+  color: var(--site-text, #111111);
   overflow-y: auto;
   font-family: var(--font-sans);
   font-weight: 300;

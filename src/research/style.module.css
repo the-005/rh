@@ -2,8 +2,9 @@
   position: fixed;
   inset: 0;
   z-index: 100;
-  background: #ffffff;
-  color: #111111;
+  /* White unless the settings panel sets a background (src/settings). */
+  background: var(--site-bg, #ffffff);
+  color: var(--site-text, #111111);
   overflow-y: auto;
   font-family: var(--font-sans);
   font-weight: 300;
@@ -58,7 +59,7 @@
   height: 9px;
   margin-top: -4px;
   border-radius: 50%;
-  background: #111111;
+  background: var(--site-text, #111111);
 }
 
 .slider::-moz-range-thumb {
@@ -66,7 +67,7 @@
   height: 9px;
   border: none;
   border-radius: 50%;
-  background: #111111;
+  background: var(--site-text, #111111);
 }
 
 .slider:focus-visible {

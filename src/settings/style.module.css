@@ -1,0 +1,163 @@
+/* Its own dark card, apart from the site's colours and blend, so it reads the
+   same on any background it's trying out. Bottom left, above every page and
+   the frame. */
+.panel,
+.marker {
+  position: fixed;
+  left: var(--page-padding, 1.5rem);
+  bottom: var(--page-padding, 1.5rem);
+  z-index: 3000;
+  background: rgb(17 17 17 / 0.92);
+  color: #f2f2f2;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1.4;
+  cursor: auto;
+}
+
+.panel {
+  width: 340px;
+  padding: 12px 14px;
+}
+
+/* An edge, for when the background being tried is as dark as the card. */
+.panel,
+.marker {
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14);
+}
+
+/* With the panel hidden, only while something differs from the defaults. */
+.marker {
+  appearance: none;
+  border: none;
+  padding: 5px 9px;
+  cursor: pointer;
+}
+
+.marker::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: #f2f2f2;
+  vertical-align: 1px;
+}
+
+.head,
+.foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.foot {
+  margin-top: 12px;
+}
+
+.group {
+  margin: 14px 0 6px;
+  font: inherit;
+  color: #8c8c8c;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 11em 1fr 4.8em 3em;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+}
+
+.label {
+  min-width: 0;
+}
+
+.slider {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  accent-color: #f2f2f2;
+}
+
+.value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.swatch {
+  justify-self: end;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / 0.35);
+  background: none;
+  cursor: pointer;
+}
+
+.swatch::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.swatch::-webkit-color-swatch {
+  border: none;
+}
+
+.swatch::-moz-color-swatch {
+  border: none;
+}
+
+.hex {
+  width: 100%;
+  padding: 0 0 1px;
+  border: none;
+  border-bottom: 1px solid rgb(255 255 255 / 0.25);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: right;
+}
+
+.hex::placeholder {
+  color: #8c8c8c;
+}
+
+.hex:focus {
+  outline: none;
+  border-bottom-color: rgb(255 255 255 / 0.7);
+}
+
+.reset {
+  justify-self: end;
+}
+
+.note {
+  margin: 6px 0 0;
+  color: #8c8c8c;
+}
+
+.link {
+  appearance: none;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.link:disabled {
+  color: #5c5c5c;
+  cursor: default;
+  text-decoration: none;
+}
+
+/* Anything that differs from the site as built. Last, so it wins over the
+   fields' own colour. */
+.changed {
+  color: #ffd84d;
+}

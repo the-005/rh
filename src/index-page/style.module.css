@@ -20,8 +20,9 @@
   position: fixed;
   inset: 0;
   z-index: 100;
-  background: #ffffff;
-  color: #111111;
+  /* White unless the settings panel sets a background (src/settings). */
+  background: var(--site-bg, #ffffff);
+  color: var(--site-text, #111111);
   overflow-y: auto;
   font-family: var(--font-sans);
   font-weight: 300;
@@ -115,7 +116,9 @@
   padding: 8px calc(var(--page-padding, 1.5rem) + 12px);
   font: inherit;
   font-size: 1.4rem;
-  color: #eeeeee;
+  /* --ink: a text colour from the settings panel, as it must be drawn to read
+     right through the blend (src/settings). */
+  color: var(--ink, #eeeeee);
   mix-blend-mode: difference;
   cursor: pointer;
   /* No z-index at rest: only the active row rises above the preview. The
@@ -134,15 +137,15 @@
 }
 
 .list .active {
-  border-bottom-color: rgb(238 238 238 / var(--active-opacity));
+  border-bottom-color: color-mix(in srgb, var(--ink, #eeeeee) calc(var(--active-opacity) * 100%), transparent);
 }
 
 .list .active[data-quiet] {
-  border-bottom-color: rgb(238 238 238 / var(--playing-opacity));
+  border-bottom-color: color-mix(in srgb, var(--ink, #eeeeee) calc(var(--playing-opacity) * 100%), transparent);
 }
 
 .active[data-quiet] .stop {
-  background: rgb(238 238 238 / var(--playing-opacity));
+  background: color-mix(in srgb, var(--ink, #eeeeee) calc(var(--playing-opacity) * 100%), transparent);
 }
 
 .list .row:focus-visible {
@@ -182,7 +185,7 @@
 .stop {
   width: 8px;
   height: 8px;
-  background: rgb(238 238 238 / var(--active-opacity));
+  background: color-mix(in srgb, var(--ink, #eeeeee) calc(var(--active-opacity) * 100%), transparent);
 }
 
 .play {
@@ -190,7 +193,7 @@
   height: 0;
   border-left: 5px solid transparent;
   border-right: 5px solid transparent;
-  border-bottom: 9px solid rgb(238 238 238 / var(--playing-opacity));
+  border-bottom: 9px solid color-mix(in srgb, var(--ink, #eeeeee) calc(var(--playing-opacity) * 100%), transparent);
 }
 
 .title {

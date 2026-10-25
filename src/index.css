@@ -56,9 +56,10 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  /* What shows before the canvas or a page has drawn: white, like both of them.
-     It was the template's black, which flashed on every load. */
-  --color-background: #fff;
+  /* What shows before the canvas or a page has drawn: white, like both of them
+     (or the settings panel's background). It was the template's black, which
+     flashed on every load. */
+  --color-background: var(--site-bg, #fff);
   --color-text: #fff;
   --color-link: #fff;
   --color-link-hover: #fff;

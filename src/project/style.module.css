@@ -1,7 +1,8 @@
 .overlay {
   position: fixed;
   inset: 0;
-  background: #ffffff;
+  /* White unless the settings panel sets a background (src/settings). */
+  background: var(--site-bg, #ffffff);
   z-index: 100;
   overflow: hidden;
   user-select: none;
@@ -25,7 +26,7 @@
   right: 1.5rem;
   background: none;
   border: none;
-  color: #ffffff;
+  color: var(--ink, #ffffff);
   mix-blend-mode: difference;
   font-size: 1.75rem;
   line-height: 1;
@@ -51,7 +52,7 @@
   font-family: var(--font-sans);
   font-size: 0.9rem;
   font-weight: 300;
-  color: #ffffff;
+  color: var(--ink, #ffffff);
   mix-blend-mode: difference;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;

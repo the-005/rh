@@ -8,6 +8,7 @@ import type { MediaItem } from "~/src/infinite-canvas/types";
 import { ProjectPage } from "~/src/project";
 import { setPendingTransition } from "~/src/project/transition-origin";
 import { ResearchPage } from "~/src/research";
+import { SettingsPanel } from "~/src/settings";
 import { SplashVideo } from "~/src/splash";
 import allManifest from "~/src/work/manifest.json";
 
@@ -76,6 +77,7 @@ export function App() {
       {projectId && (
         <ProjectPage key={projectId} id={projectId} onClose={() => navigate("/")} />
       )}
+      <SettingsPanel />
     </>
   );
 }

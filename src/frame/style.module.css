@@ -14,7 +14,7 @@
     "back archive github ..."
     "tags tags tags tags"
     "sponsor sponsor sponsor sponsor";
-  color: #fff;
+  color: var(--ink, #fff);
   mix-blend-mode: difference;
   font-family: var(--font-sans);
   font-weight: 300;
@@ -23,7 +23,7 @@
 .frame a,
 .frame button {
   pointer-events: auto;
-  color: #fff;
+  color: var(--ink, #fff);
   mix-blend-mode: difference;
 }
 
@@ -33,7 +33,7 @@
   font-size: 1rem;
   font-weight: 400;
   margin: 0;
-  color: #fff;
+  color: var(--ink, #fff);
   mix-blend-mode: difference;
 }
 
@@ -63,7 +63,7 @@
 }
 
 .frame__tags a {
-  color: #fff;
+  color: var(--ink, #fff);
   mix-blend-mode: difference;
 }
 

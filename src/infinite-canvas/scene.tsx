@@ -16,6 +16,7 @@ import {
   stageTransitionSource,
   takeSwapWaiter,
 } from "~/src/project/transition-origin";
+import { backgroundOf, getSettings, subscribeSettings } from "~/src/settings/store";
 import { useIsTouchDevice } from "~/src/use-is-touch-device";
 import { clamp, lerp } from "~/src/utils";
 import {
@@ -1072,6 +1073,31 @@ function SceneController({ media, onMediaClick, debugElRef, tuningGenVersion, sh
   );
 }
 
+/**
+ * The scene's background and fog follow the background setting (`src/settings`),
+ * so planes still fade into the page. Set on the objects the props created,
+ * so nothing remounts, and only once a background is set: until then the
+ * props' white stands.
+ */
+function SceneColours() {
+  const scene = useThree((state) => state.scene);
+  const invalidate = useThree((state) => state.invalidate);
+  React.useEffect(() => {
+    const apply = () => {
+      const settings = getSettings();
+      if (!settings.background && !scene.userData.siteColoured) return;
+      scene.userData.siteColoured = true;
+      const bg = backgroundOf(settings);
+      if (scene.background instanceof THREE.Color) scene.background.set(bg);
+      scene.fog?.color.set(bg);
+      invalidate();
+    };
+    apply();
+    return subscribeSettings(apply);
+  }, [scene, invalidate]);
+  return null;
+}
+
 export function InfiniteCanvasScene({
   media,
   onMediaClick,
@@ -1136,6 +1162,7 @@ export function InfiniteCanvasScene({
         >
           <color attach="background" args={[backgroundColor]} />
           <fog attach="fog" args={[fogColor, fogNear, fogFar]} />
+          <SceneColours />
           <AdaptiveFov baseFov={cameraFov} />
           <SceneController media={media} onMediaClick={onMediaClick} debugElRef={showDebug ? debugElRef : undefined} tuningGenVersion={tuningGenVersion} showGuides={showGuides} splashSrc={splashSrc} splashAspect={splashAspect} onSplashReady={onSplashReady} onSplashGone={onSplashGone} />
           {showFps && <Stats className={styles.stats} />}

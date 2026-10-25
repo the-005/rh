@@ -12,6 +12,7 @@ import {
   swapTransitionSource,
 } from "./transition-origin";
 import styles from "./style.module.css";
+import { getSettings } from "~/src/settings/store";
 
 const ALL_MEDIA = allManifest as MediaItem[];
 
@@ -27,15 +28,12 @@ const ENTRY_EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
 /** Supporting images rise this far into their slots after the hero lands. */
 const RISE_PX = 32;
 const RISE_MS = 700;
-/** The rise is a wave, left to right: RISE_GAP_MS between images, squeezed
- *  evenly into RISE_WAVE_MAX_MS when that would run longer (the owner's
- *  "capped" pick in the Strip Flip bench). Only big projects change: PR-01's 52
- *  would have taken 3.6s at the old 70ms and now take 1.5s. */
-const RISE_GAP_MS = 50;
-const RISE_WAVE_MAX_MS = 1500;
-/** When each of the m rising images starts, in ms after the plane lands. */
+/** When each of the m rising images starts, in ms after the plane lands: the
+ *  wave's gap and cap (RISE_GAP_MS, RISE_WAVE_MAX_MS) live in `src/settings`,
+ *  where the settings panel can change them, and are read as each page opens. */
 const riseDelays = (m: number) => {
-  const gap = m > 1 && (m - 1) * RISE_GAP_MS > RISE_WAVE_MAX_MS ? RISE_WAVE_MAX_MS / (m - 1) : RISE_GAP_MS;
+  const { riseGapMs, riseWaveMaxMs } = getSettings();
+  const gap = m > 1 && (m - 1) * riseGapMs > riseWaveMaxMs ? riseWaveMaxMs / (m - 1) : riseGapMs;
   return Array.from({ length: m }, (_, j) => j * gap);
 };
 
