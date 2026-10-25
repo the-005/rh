@@ -62,12 +62,16 @@
   padding: 5rem 0;
 }
 
+/* One line per project, in columns that line up down the list: name, kind,
+   year or season, credits. At least 44px tall, the line centred in it. */
 .row {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 5fr 2fr 2fr 3fr;
   align-items: baseline;
+  align-content: center;
   gap: 1.5rem;
   width: 100%;
+  min-height: 44px;
   text-align: left;
 }
 
@@ -193,10 +197,107 @@
   min-width: 0;
 }
 
-.year {
-  text-align: right;
-  font-size: 0.875rem;
+/* Kind, year and credits: the name's size, in grey (#666 reads as #999), and
+   dimmed with the rest of their row when another row is active. A column too
+   narrow for its text ends it with an ellipsis rather than taking a second line. */
+.meta,
+.credits {
+  min-width: 0;
   color: #666666;
+  white-space: nowrap;
+}
+
+.list:has(.active) .row:not(.active) :is(.meta, .credits) {
+  color: inherit;
+}
+
+.meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- credits --------------------------------------------------------------
+   Closed: the names that fit, then a count of the rest, lighter (#444 reads
+   as #bbb). Open (the row playing): every name, one under another, the first
+   where the line was. The list hangs below the row over the rows under it,
+   which have faded back while it plays. */
+.credits {
+  position: relative;
+}
+
+.creditsLine {
+  display: flex;
+  min-width: 0;
+  transition: opacity 0.3s ease;
+}
+
+.creditsNames {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.creditsMore {
+  flex: none;
+  margin-left: 0.35em;
+  color: #444444;
+}
+
+/* Credits are the last column, so the list may run into the row's padding but
+   stops at the page's edge (past it, the page would scroll sideways); a name
+   too long for that wraps. */
+.creditsList {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  width: max-content;
+  max-width: calc(100% + var(--page-padding, 1.5rem) + 12px);
+  white-space: normal;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.3s ease,
+    visibility 0s 0.3s;
+}
+
+.credits[data-open] .creditsLine {
+  opacity: 0;
+}
+
+/* The list would land on the credits of the rows under it, so while one is
+   open the other rows' credits go. */
+.credits {
+  transition: opacity 0.3s ease;
+}
+
+.list:has([data-open]) .row:not(.active) .credits {
+  opacity: 0;
+}
+
+.credits[data-open] .creditsList {
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity 0.3s ease,
+    visibility 0s;
+}
+
+/* A hidden copy of each line the credits could show, to measure which fits.
+   No size and clipped, so it never widens the page. */
+.creditsMeasure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+}
+
+.creditsMeasure > .creditsLine {
+  width: max-content;
 }
 
 @media screen and (max-width: 53em) {

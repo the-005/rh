@@ -1,14 +1,20 @@
 import type { MediaItem } from "~/src/infinite-canvas/types";
 import allManifest from "~/src/work/manifest.json";
+import projectInfo from "./info.json";
 
 const ALL_MEDIA = allManifest as MediaItem[];
 
 export interface ProjectEntry {
   /** The client's folder name — the `project` field in the manifest and the /project/:id route. */
   id: string;
-  /** The folder name as-is: renaming the folder retitles the project. */
+  /** The project's name from `info.json`, or the folder name as-is until it has one. */
   title: string;
+  /** What kind of work it is ("Editorial"), or empty. */
+  kind: string;
+  /** A year or a season, as written in `info.json`; read from filenames, or "—", until then. */
   year: string;
+  /** Who worked on it, in order; empty until it has credits. */
+  credits: string[];
   /** How many images the project holds — handy for an index that wants a count. */
   count: number;
   /** First image in manifest order; the natural thumbnail if the index grows one. */
@@ -18,11 +24,27 @@ export interface ProjectEntry {
 }
 
 /**
- * The title is the client's folder name. The manifest carries no dates, so the
- * year is read from filenames when one holds it; real years go here, keyed by
- * folder name, and anything absent keeps the derived value.
+ * What each project says about itself, keyed by folder name: its name, kind,
+ * year or season, and credits (the format agreed on 26 Oct). One place for
+ * every page that shows them. A project missing here gets PLACEHOLDER in their
+ * place, so every row shows the full format until its real details arrive.
  */
-const YEARS: Record<string, string> = {};
+type ProjectInfo = { name?: string; kind?: string; year?: string; credits?: string[] };
+const INFO: Record<string, ProjectInfo> = projectInfo;
+
+/**
+ * Stand-ins for a project with no entry in `info.json` yet. The credits run
+ * from two to six names down the list, so some rows show all of theirs and
+ * some a "+N".
+ */
+function placeholder(order: number): Required<ProjectInfo> {
+  return {
+    name: "Project name",
+    kind: "Kind",
+    year: "Year",
+    credits: Array.from({ length: 2 + ((order * 3) % 5) }, () => "Name Surname"),
+  };
+}
 
 /** A four-digit year anywhere in the path, if the client's filenames carry one. */
 function yearFromUrl(url: string): string {
@@ -39,14 +61,19 @@ export const PROJECTS: ProjectEntry[] = (() => {
     else byId.set(item.project, [item]);
   }
 
-  return [...byId].map(([id, items]) => ({
-    id,
-    title: id,
-    year: YEARS[id] ?? yearFromUrl(items[0].url),
-    count: items.length,
-    cover: items[0].url,
-    images: items.map((item) => item.url),
-  }));
+  return [...byId].map(([id, items], order) => {
+    const info = INFO[id] ?? placeholder(order);
+    return {
+      id,
+      title: info.name ?? id,
+      kind: info.kind ?? "",
+      year: info.year ?? yearFromUrl(items[0].url),
+      credits: info.credits ?? [],
+      count: items.length,
+      cover: items[0].url,
+      images: items.map((item) => item.url),
+    };
+  });
 })();
 
 /** Width ÷ height of every Work image, by url, for anything sized by its shape. */

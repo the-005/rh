@@ -4,9 +4,11 @@ import styles from "./style.module.css";
 
 /**
  * The index: the same projects the gallery holds, read as a list instead of a
- * space. One full-width row per project, title and year, on white. The active
- * row shows its images centred on screen, above every other row but under that
- * row itself: its name, year, playhead and line.
+ * space. One full-width row per project, on white, on one line: name, kind, year
+ * or season, and credits, as many as fit with a count of the rest ("+1"), after
+ * Play Grounds (play-grounds.studio). Playing a row drops its credits down into
+ * a list of every name. The active row shows its images centred on screen, above
+ * every other row but under that row itself: its text, playhead and line.
  *
  * Each row is also a player. Cursor x across the row maps to an image, so
  * sweeping left to right reads the whole album, and a square playhead on the
@@ -650,7 +652,10 @@ export function IndexPage() {
                 }}
               >
                 <span className={styles.title}>{project.title}</span>
-                <span className={styles.year}>{project.year}</span>
+                <span className={styles.meta}>{project.kind}</span>
+                <span className={styles.meta}>{project.year}</span>
+                {/* Dropped down while the row plays, and while it's stopped where it is. */}
+                <Credits names={project.credits} open={active === index && (playing || stoppedHere)} />
                 {active === index && <Playhead count={project.images.length} spot={spot} playing={playing} />}
               </button>
             </li>
@@ -710,6 +715,76 @@ function Playhead({ count, spot, playing }: { count: number; spot: Spot; playing
       }}
       aria-hidden="true"
     />
+  );
+}
+
+/**
+ * A row's credits. Closed, on one line: as many names as fit the column, then a
+ * count of the rest ("+2"), and always the first name, cut short if it alone
+ * doesn't fit. Open, a list of every name, one under another, the first where
+ * the line was and the rest hanging below the row, over the rows under it.
+ *
+ * What fits is measured, not guessed: a hidden copy of each candidate line (the
+ * first name, the first two, ...) is laid out in the row's own type, and the
+ * longest that fits the column wins. Measured again when the column changes
+ * width and once the typeface has loaded.
+ */
+function Credits({ names, open }: { names: string[]; open: boolean }) {
+  const cellRef = React.useRef<HTMLSpanElement>(null);
+  const measureRef = React.useRef<HTMLSpanElement>(null);
+  const [fit, setFit] = React.useState(names.length);
+
+  React.useLayoutEffect(() => {
+    const cell = cellRef.current;
+    const measure = measureRef.current;
+    if (!cell || !measure) return;
+    const update = () => {
+      const room = cell.clientWidth;
+      const lines = [...measure.children].map((line) => line.getBoundingClientRect().width);
+      let k = lines.length;
+      while (k > 1 && lines[k - 1] > room) k -= 1;
+      setFit(k);
+    };
+    update();
+    const resized = new ResizeObserver(update);
+    resized.observe(cell);
+    let live = true;
+    document.fonts.ready.then(() => {
+      if (live) update();
+    });
+    return () => {
+      live = false;
+      resized.disconnect();
+    };
+  }, [names]);
+
+  if (names.length === 0) return <span />;
+  const line = (k: number) => (
+    <>
+      <span className={styles.creditsNames}>{names.slice(0, k).join(", ")}</span>
+      {k < names.length && <span className={styles.creditsMore}>+{names.length - k}</span>}
+    </>
+  );
+  return (
+    <span ref={cellRef} className={styles.credits} data-open={open ? "" : undefined}>
+      <span className={styles.creditsLine} aria-hidden={open}>
+        {line(fit)}
+      </span>
+      <span className={styles.creditsList} aria-hidden={!open}>
+        {names.map((name, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: names can repeat, and the list never reorders.
+          <span key={i}>{name}</span>
+        ))}
+      </span>
+      <span ref={measureRef} className={styles.creditsMeasure} aria-hidden="true">
+        {names.map((_, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: one line per count of names, in order.
+          <span key={i} className={styles.creditsLine}>
+            {line(i + 1)}
+          </span>
+        ))}
+      </span>
+    </span>
   );
 }
 
