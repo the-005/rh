@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ASPECTS, PROJECTS, type ProjectEntry } from "~/src/projects";
+import { ASPECTS, type Credit, PROJECTS, type ProjectEntry } from "~/src/projects";
 import styles from "./style.module.css";
 
 /**
@@ -704,7 +704,7 @@ export function IndexPage() {
                 <span className={styles.meta}>{project.kind}</span>
                 <span className={styles.meta}>{project.year}</span>
                 {/* Open while the row plays, and while it's stopped where it is. */}
-                <Credits names={project.credits} open={openRow === index} />
+                <Credits credits={project.credits} open={openRow === index} />
                 {active === index && <Playhead count={project.images.length} spot={spot} playing={playing} />}
               </button>
             </li>
@@ -770,17 +770,19 @@ function Playhead({ count, spot, playing }: { count: number; spot: Spot; playing
 /**
  * A row's credits. Closed, on one line: as many whole names as fit the column,
  * then a count of the rest ("+2"). A name is never cut short: when not even the
- * first fits, the line is just the count of them all ("+3"). Open, every name
- * in one run that wraps within the column, standing on the row: its last line
- * where the closed line was, the rest above it, over the rows above. A name
- * moves to the next line whole; only one longer than the column breaks.
+ * first fits, the line is just the count of them all ("+3"). Open, one credit a
+ * line, the role at the column's left and the name at its right, standing on
+ * the row: the last credit where the closed line was, the rest above it, over
+ * the rows above. After a credits block the owner shared (26 Oct), with the
+ * sides swapped.
  *
  * What fits is measured, not guessed: a hidden copy of each candidate line (the
  * count alone, the first name, the first two, ...) is laid out in the row's own
  * type, and the longest that fits the column wins. Measured again when the
  * column changes width and once the typeface has loaded.
  */
-function Credits({ names, open }: { names: string[]; open: boolean }) {
+function Credits({ credits, open }: { credits: Credit[]; open: boolean }) {
+  const names = credits.map((credit) => credit.name);
   const cellRef = React.useRef<HTMLSpanElement>(null);
   const measureRef = React.useRef<HTMLSpanElement>(null);
   const [fit, setFit] = React.useState(names.length);
@@ -823,11 +825,11 @@ function Credits({ names, open }: { names: string[]; open: boolean }) {
         {line(fit)}
       </span>
       <span className={styles.creditsList} aria-hidden={!open}>
-        {names.map((name, i) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: names can repeat, and the list never reorders.
+        {credits.map((credit, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: credits can repeat, and the list never reorders.
           <React.Fragment key={i}>
-            {i > 0 && " "}
-            <span className={styles.creditsName}>{i < names.length - 1 ? `${name},` : name}</span>
+            <span className={styles.creditRole}>{credit.role}</span>
+            <span className={styles.creditName}>{credit.name}</span>
           </React.Fragment>
         ))}
       </span>

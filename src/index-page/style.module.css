@@ -248,8 +248,8 @@
 /* --- credits --------------------------------------------------------------
    Closed: the whole names that fit, then a count of the rest, lighter (#444
    reads as #bbb), or the count alone if not even one fits. Open (the row
-   playing): every name, wrapped within the column and standing on the row,
-   over the rows above, which have faded back while it plays. */
+   playing): one credit a line, role and name, standing on the row, over the
+   rows above, which have faded back while it plays. */
 .credits {
   position: relative;
 }
@@ -275,16 +275,19 @@
   margin-left: 0.35em;
 }
 
-/* Every name in one run, wrapping within the column, right-aligned like the
-   line it opens from and anchored at the bottom, so it stands on the row (its
-   last line where the closed line was) and never crosses the row's line or the
-   page's edge. */
+/* One credit a line: the role at the column's left in the kind and year grey,
+   the name at its right in the project name's colour. Anchored at the bottom
+   of the column, so it stands on the row (the last credit where the closed
+   line was) and never crosses the row's line or the page's edge; a name too
+   long for its side wraps. */
 .creditsList {
   position: absolute;
   bottom: 0;
   right: 0;
   width: 100%;
-  text-align: right;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 1em;
   white-space: normal;
   opacity: 0;
   visibility: hidden;
@@ -293,14 +296,17 @@
     visibility 0s 0.3s;
 }
 
-.credits[data-open] .creditsLine {
-  opacity: 0;
+.creditRole {
+  text-align: left;
 }
 
-/* A name wraps as a whole; only one longer than the column breaks inside. */
-.creditsName {
-  display: inline-block;
-  max-width: 100%;
+.creditName {
+  text-align: right;
+  color: var(--ink, #eeeeee);
+}
+
+.credits[data-open] .creditsLine {
+  opacity: 0;
 }
 
 /* A row wraps its open credits: it grows upward by --grow (the extra lines),
