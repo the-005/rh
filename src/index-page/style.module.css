@@ -316,6 +316,18 @@
   top: calc(-1 * var(--lift));
 }
 
+/* A row a slideshow has just finished, and the rows above it, for the one
+   frame in which they take their closed places (set and cleared from script):
+   its credits go back to one line at once, no fade, no easing. The text's
+   dimming still fades. */
+.list .row[data-snap] {
+  transition-property: color, border-color, opacity;
+}
+
+.list .row[data-snap] :is(.creditsLine, .creditsList) {
+  transition: none;
+}
+
 .credits[data-open] .creditsList {
   opacity: 1;
   visibility: visible;

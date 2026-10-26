@@ -181,6 +181,8 @@ export function IndexPage() {
   /** Where the user last left the page by scrolling it themselves, which a reset keeps. */
   const userScrollRef = React.useRef(0);
   const moveRef = React.useRef<number | null>(null);
+  /** The row a slideshow just finished, whose credits go back to one line at once. */
+  const finishedRef = React.useRef<number | null>(null);
   const rowsRef = React.useRef<(HTMLButtonElement | null)[]>([]);
 
   const clearCommit = () => {
@@ -470,6 +472,7 @@ export function IndexPage() {
     // The next row lights up on its first image and rises onto the centre line,
     // replacing the last. Its playhead starts at the left edge, the start of its
     // timeline, and sets off once that has painted.
+    finishedRef.current = index;
     activate(index + 1, 0);
     centre(rowsRef.current[index + 1]);
     setSpot({ pos: 0, transition: "none" });
@@ -624,15 +627,19 @@ export function IndexPage() {
   // upward around them and the rows above slide up to make room. Each row gets
   // the targets, and CSS eases them all on one curve: --grow, how much taller
   // it is (the open run's extra height, 0 when closed), and --lift, the sum of
-  // the --grow of the rows below it. The row that closes eases back while the
-  // next opens, so a slideshow's handover doesn't snap. Nothing below moves and
-  // the row's line stays where it is, so the list's own moves are untouched.
+  // the --grow of the rows below it. Nothing below moves and the row's line
+  // stays where it is, so the list's own moves are untouched.
+  //
+  // A row closing because the hand took over eases back. A row a slideshow has
+  // finished goes back to one line at once, no fade (the owner's call): it and
+  // the rows above it take their closed places in this same frame, then the
+  // next row opens as usual.
   React.useLayoutEffect(() => {
     const rows = rowsRef.current;
+    const list = listRef.current;
     const cell = openRow === null ? null : rows[openRow]?.querySelector<HTMLElement>(`.${styles.credits}`);
     const run = cell?.querySelector<HTMLElement>(`.${styles.creditsList}`);
-    const update = () => {
-      const extra = cell && run ? Math.max(0, run.offsetHeight - cell.offsetHeight) : 0;
+    const place = (extra: number) => {
       let below = 0;
       for (let i = rows.length - 1; i >= 0; i--) {
         const row = rows[i];
@@ -643,6 +650,16 @@ export function IndexPage() {
         below += grow;
       }
     };
+    const update = () => place(cell && run ? Math.max(0, run.offsetHeight - cell.offsetHeight) : 0);
+    const finished = finishedRef.current;
+    finishedRef.current = null;
+    if (finished !== null && finished !== openRow) {
+      const snapped = rows.slice(0, finished + 1).filter((row) => row !== null);
+      for (const row of snapped) row.dataset.snap = "";
+      place(0);
+      void list?.offsetHeight; // lay out the closed places with no transition
+      for (const row of snapped) delete row.dataset.snap;
+    }
     update();
     if (!run) return;
     const resized = new ResizeObserver(update);
