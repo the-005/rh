@@ -33,23 +33,51 @@ export interface ProjectEntry {
  * place, so every row shows the full format until its real details arrive.
  *
  * A credit is `{ "role": "Photography", "name": "Cassandra Troost" }`, or just
- * the name as a string while its role isn't known.
+ * the name as a string while its role isn't known, which shows "Role" in its
+ * place. A stand-in word rather than a guess: a made-up role beside a real
+ * person's name could be read as true.
  */
 type ProjectInfo = { name?: string; kind?: string; year?: string; credits?: (string | { role?: string; name: string })[] };
 const INFO: Record<string, ProjectInfo> = projectInfo;
 
 /**
  * Stand-ins for a project with no entry in `info.json` yet. The credits run
- * from two to six names down the list, so some rows show all of theirs and
- * some a "+N", under generic roles of different lengths.
+ * from two to six down the list, so some rows show all of theirs and some a
+ * "+N", and the roles and names vary in length (short, long, hyphenated, a
+ * middle name, a studio) to show how real ones would sit. Still plainly
+ * placeholders: no real person's name.
  */
-const PLACEHOLDER_ROLES = ["Photography", "Styling", "Hair", "Make-up", "Set design", "Production"];
+const PLACEHOLDER_ROLES = [
+  "Photography",
+  "Styling",
+  "Hair",
+  "Make-up",
+  "Set design",
+  "Art direction",
+  "Casting",
+  "Production",
+  "Retouching",
+  "Assistant",
+];
+const PLACEHOLDER_NAMES = [
+  "Name Surname",
+  "Firstname Lastname",
+  "N. Surname",
+  "Name Double-Surname",
+  "Firstname Middle Lastname",
+  "Name van Surname",
+  "Studio Name",
+  "Na Me",
+];
 function placeholder(order: number): Required<ProjectInfo> {
   return {
     name: "Project name",
     kind: "Kind",
     year: "Year",
-    credits: Array.from({ length: 2 + ((order * 3) % 5) }, (_, i) => ({ role: PLACEHOLDER_ROLES[i], name: "Name Surname" })),
+    credits: Array.from({ length: 2 + ((order * 3) % 5) }, (_, i) => ({
+      role: PLACEHOLDER_ROLES[(order * 3 + i) % PLACEHOLDER_ROLES.length],
+      name: PLACEHOLDER_NAMES[(order * 5 + i * 3) % PLACEHOLDER_NAMES.length],
+    })),
   };
 }
 
@@ -76,7 +104,7 @@ export const PROJECTS: ProjectEntry[] = (() => {
       kind: info.kind ?? "",
       year: info.year ?? yearFromUrl(items[0].url),
       credits: (info.credits ?? []).map((credit) =>
-        typeof credit === "string" ? { role: "", name: credit } : { role: credit.role ?? "", name: credit.name }
+        typeof credit === "string" ? { role: "Role", name: credit } : { role: credit.role ?? "Role", name: credit.name }
       ),
       count: items.length,
       cover: items[0].url,
