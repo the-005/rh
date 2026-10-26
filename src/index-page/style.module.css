@@ -119,7 +119,8 @@
   border-bottom: 1px solid transparent;
   padding: 8px calc(var(--page-padding, 1.5rem) + 12px);
   font: inherit;
-  font-size: 1.4rem;
+  /* Every field on the row, at every width. */
+  font-size: 14px;
   /* --ink: a text colour from the settings panel, as it must be drawn to read
      right through the blend (src/settings). */
   color: var(--ink, #eeeeee);
@@ -316,7 +317,6 @@
   .row {
     grid-template-columns: 5fr 2fr 2fr 3fr;
     gap: 1rem;
-    font-size: 1.15rem;
   }
 }
 
