@@ -64,10 +64,14 @@
 }
 
 /* One line per project, in columns that line up down the list: name, kind,
-   year or season, credits. At least 44px tall, the line centred in it. */
+   year or season, credits. After Dakota Giglio's work list
+   (dakotagiglio.com/work#list): the name takes whatever the window leaves, and
+   the other three keep fixed widths at the right, credits against the edge, so
+   they hold still as the window changes and the credits' "+N" counts the same
+   at any width. At least 44px tall, the line centred in it. */
 .row {
   display: grid;
-  grid-template-columns: 5fr 2fr 2fr 3fr;
+  grid-template-columns: 1fr 120px 100px 300px;
   align-items: baseline;
   align-content: center;
   gap: 1.5rem;
@@ -230,6 +234,7 @@
 
 .creditsLine {
   display: flex;
+  justify-content: flex-end;
   min-width: 0;
   transition: opacity 0.3s ease;
 }
@@ -246,17 +251,19 @@
   color: #444444;
 }
 
-/* Credits are the last column, so the list may run into the row's padding but
-   stops at the page's edge (past it, the page would scroll sideways); a name
-   too long for that wraps. */
+/* Right-aligned, like the line it opens from, so it hangs from the page's edge
+   inward and never pushes past it (past it, the page would scroll sideways); a
+   name longer than the column wraps. */
 .creditsList {
   position: absolute;
   top: 0;
-  left: 0;
+  right: 0;
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
   width: max-content;
-  max-width: calc(100% + var(--page-padding, 1.5rem) + 12px);
+  max-width: 100%;
+  text-align: right;
   white-space: normal;
   opacity: 0;
   visibility: hidden;
@@ -303,8 +310,11 @@
   width: max-content;
 }
 
+/* Narrow windows: the fixed columns would leave the name no room, so all four
+   share the row by proportion instead. */
 @media screen and (max-width: 53em) {
   .row {
+    grid-template-columns: 5fr 2fr 2fr 3fr;
     gap: 1rem;
     font-size: 1.15rem;
   }
