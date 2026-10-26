@@ -1,10 +1,9 @@
 /* Dials: the values most likely to be tuned, together (each has a row in the
    Notion tuning table). */
 .page {
-  /* The active row's line and playhead while hovering. */
-  --active-opacity: 0.4;
-  /* ...and while a slideshow plays, or is stopped where it is, until the hand
-     moves: nearly gone, so the pictures have the screen. */
+  /* The played row's line and playhead (playing, or stopped where it is, until
+     the hand moves): nearly gone, so the pictures have the screen. Hovering
+     shows neither. */
   --playing-opacity: 0.2;
   /* Preview size by shape, r being width ÷ height:
        height = anchor × (r ÷ 0.8)^−k
@@ -68,16 +67,13 @@
    (dakotagiglio.com/work#list): the name takes whatever the window leaves, and
    the other three keep fixed widths at the right, credits against the edge, so
    they hold still as the window changes and the credits' "+N" counts the same
-   at any width. At least 44px tall, the text at the top, just under the row's
-   line. */
+   at any width. Sized by its padding, 20px above and below the text. */
 .row {
   display: grid;
   grid-template-columns: 1fr 120px 100px 300px;
   align-items: baseline;
-  align-content: start;
   gap: 1.5rem;
   width: 100%;
-  min-height: 44px;
   text-align: left;
 }
 
@@ -120,11 +116,11 @@
   height: 0;
 }
 
-/* Square and flush: no gap between rows, 8px 12px inside the page margin.
-   No lines at rest. Hovered, the active row shows a line along its top and
-   its bottom, edge to edge; played (playing, or stopped where it is), only the
-   top one, the centre line a played row is brought to, with the playhead
-   sitting on it. The text sits at the top, just under the top line.
+/* Square and flush: no gap between rows, 20px above and below the text and
+   12px inside the page margin (the rows were a 44px minimum until 26 Oct). No
+   lines at rest or while hovering: only a played row (playing, or stopped
+   where it is) shows one, along its top, edge to edge: the centre line a
+   played row is brought to, with the playhead standing on it.
 
    Everything on a row is drawn light and blended by difference, so it inverts
    whatever is behind it: dark on the white page, light over a dark picture,
@@ -137,8 +133,7 @@
   background: none;
   border: none;
   border-top: 1px solid transparent;
-  border-bottom: 1px solid transparent;
-  padding: 8px calc(var(--page-padding, 1.5rem) + 12px);
+  padding: 20px calc(var(--page-padding, 1.5rem) + 12px);
   font: inherit;
   /* Every field on the row, at every width. */
   font-size: 14px;
@@ -159,23 +154,13 @@
 
 /* The active row is the one under the cursor or, once a slideshow has carried
    on down the list, the one playing. Everything else dims, so the eye has one
-   place to be. The active row's lines fade in along its top and bottom. */
+   place to be. Played, its line fades in along its top. */
 .list:has(.active) .row:not(.active) {
   color: #444444;
 }
 
-.list .active {
-  border-color: color-mix(in srgb, var(--ink, #eeeeee) calc(var(--active-opacity) * 100%), transparent);
-}
-
-/* Played: the top line only, the centre line. */
 .list .active[data-quiet] {
   border-top-color: color-mix(in srgb, var(--ink, #eeeeee) calc(var(--playing-opacity) * 100%), transparent);
-  border-bottom-color: transparent;
-}
-
-.active[data-quiet] .stop {
-  background: color-mix(in srgb, var(--ink, #eeeeee) calc(var(--playing-opacity) * 100%), transparent);
 }
 
 .list .row:focus-visible {
@@ -225,7 +210,7 @@
 .stop {
   width: 8px;
   height: 8px;
-  background: color-mix(in srgb, var(--ink, #eeeeee) calc(var(--active-opacity) * 100%), transparent);
+  background: color-mix(in srgb, var(--ink, #eeeeee) calc(var(--playing-opacity) * 100%), transparent);
 }
 
 .play {
@@ -333,8 +318,7 @@
    above moves and the list's own moves are untouched. */
 .list .row {
   margin-bottom: calc(-1 * var(--grow));
-  padding-bottom: calc(8px + var(--grow));
-  min-height: calc(44px + var(--grow));
+  padding-bottom: calc(20px + var(--grow));
   top: var(--lift);
 }
 
