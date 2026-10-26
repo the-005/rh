@@ -206,8 +206,9 @@
 }
 
 /* Kind, year and credits: the name's size, in grey (#666 reads as #999), and
-   dimmed with the rest of their row when another row is active. A column too
-   narrow for its text ends it with an ellipsis rather than taking a second line. */
+   dimmed with the rest of their row when another row is active. Kind or year
+   too long for its column ends with an ellipsis rather than taking a second
+   line; credits are never cut (below). */
 .meta,
 .credits {
   min-width: 0;
@@ -225,8 +226,8 @@
 }
 
 /* --- credits --------------------------------------------------------------
-   Closed: the names that fit, then a count of the rest, lighter (#444 reads
-   as #bbb). Open (the row playing): every name, one under another, the first
+   Closed: the whole names that fit, then a count of the rest, lighter (#444
+   reads as #bbb), or the count alone if not even one fits. Open (the row playing): every name, one under another, the first
    where the line was. The list hangs below the row over the rows under it,
    which have faded back while it plays. */
 .credits {
@@ -240,16 +241,18 @@
   transition: opacity 0.3s ease;
 }
 
+/* Whole names only: what shows is measured to fit, so nothing here clips. */
 .creditsNames {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  flex: none;
 }
 
 .creditsMore {
   flex: none;
-  margin-left: 0.35em;
   color: #444444;
+}
+
+.creditsNames + .creditsMore {
+  margin-left: 0.35em;
 }
 
 /* Right-aligned, like the line it opens from, so it hangs from the page's edge

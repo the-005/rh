@@ -719,15 +719,16 @@ function Playhead({ count, spot, playing }: { count: number; spot: Spot; playing
 }
 
 /**
- * A row's credits. Closed, on one line: as many names as fit the column, then a
- * count of the rest ("+2"), and always the first name, cut short if it alone
- * doesn't fit. Open, a list of every name, one under another, the first where
- * the line was and the rest hanging below the row, over the rows under it.
+ * A row's credits. Closed, on one line: as many whole names as fit the column,
+ * then a count of the rest ("+2"). A name is never cut short: when not even the
+ * first fits, the line is just the count of them all ("+3"). Open, a list of
+ * every name, one under another, the first where the line was and the rest
+ * hanging below the row, over the rows under it.
  *
  * What fits is measured, not guessed: a hidden copy of each candidate line (the
- * first name, the first two, ...) is laid out in the row's own type, and the
- * longest that fits the column wins. Measured again when the column changes
- * width and once the typeface has loaded.
+ * count alone, the first name, the first two, ...) is laid out in the row's own
+ * type, and the longest that fits the column wins. Measured again when the
+ * column changes width and once the typeface has loaded.
  */
 function Credits({ names, open }: { names: string[]; open: boolean }) {
   const cellRef = React.useRef<HTMLSpanElement>(null);
@@ -740,9 +741,10 @@ function Credits({ names, open }: { names: string[]; open: boolean }) {
     if (!cell || !measure) return;
     const update = () => {
       const room = cell.clientWidth;
+      // lines[k] shows the first k names; lines[0] is the count alone.
       const lines = [...measure.children].map((line) => line.getBoundingClientRect().width);
-      let k = lines.length;
-      while (k > 1 && lines[k - 1] > room) k -= 1;
+      let k = lines.length - 1;
+      while (k > 0 && lines[k] > room) k -= 1;
       setFit(k);
     };
     update();
@@ -761,7 +763,7 @@ function Credits({ names, open }: { names: string[]; open: boolean }) {
   if (names.length === 0) return <span />;
   const line = (k: number) => (
     <>
-      <span className={styles.creditsNames}>{names.slice(0, k).join(", ")}</span>
+      {k > 0 && <span className={styles.creditsNames}>{names.slice(0, k).join(", ")}</span>}
       {k < names.length && <span className={styles.creditsMore}>+{names.length - k}</span>}
     </>
   );
@@ -777,10 +779,10 @@ function Credits({ names, open }: { names: string[]; open: boolean }) {
         ))}
       </span>
       <span ref={measureRef} className={styles.creditsMeasure} aria-hidden="true">
-        {names.map((_, i) => (
+        {Array.from({ length: names.length + 1 }, (_, k) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: one line per count of names, in order.
-          <span key={i} className={styles.creditsLine}>
-            {line(i + 1)}
+          <span key={k} className={styles.creditsLine}>
+            {line(k)}
           </span>
         ))}
       </span>
