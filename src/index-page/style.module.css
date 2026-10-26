@@ -227,9 +227,9 @@
 
 /* --- credits --------------------------------------------------------------
    Closed: the whole names that fit, then a count of the rest, lighter (#444
-   reads as #bbb), or the count alone if not even one fits. Open (the row playing): every name, one under another, the first
-   where the line was. The list hangs below the row over the rows under it,
-   which have faded back while it plays. */
+   reads as #bbb), or the count alone if not even one fits. Open (the row
+   playing): every name, wrapped within the column and standing on the row,
+   over the rows above, which have faded back while it plays. */
 .credits {
   position: relative;
 }
@@ -255,18 +255,15 @@
   margin-left: 0.35em;
 }
 
-/* Right-aligned, like the line it opens from, so it hangs from the page's edge
-   inward and never pushes past it (past it, the page would scroll sideways); a
-   name longer than the column wraps. */
+/* Every name in one run, wrapping within the column, right-aligned like the
+   line it opens from and anchored at the bottom, so it stands on the row (its
+   last line where the closed line was) and never crosses the row's line or the
+   page's edge. */
 .creditsList {
   position: absolute;
-  top: 0;
+  bottom: 0;
   right: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  width: max-content;
-  max-width: 100%;
+  width: 100%;
   text-align: right;
   white-space: normal;
   opacity: 0;
@@ -280,7 +277,13 @@
   opacity: 0;
 }
 
-/* The list would land on the credits of the rows under it, so while one is
+/* A name wraps as a whole; only one longer than the column breaks inside. */
+.creditsName {
+  display: inline-block;
+  max-width: 100%;
+}
+
+/* Open credits would land on the credits of the rows above, so while one is
    open the other rows' credits go. */
 .credits {
   transition: opacity 0.3s ease;

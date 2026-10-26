@@ -6,8 +6,8 @@ import styles from "./style.module.css";
  * The index: the same projects the gallery holds, read as a list instead of a
  * space. One full-width row per project, on white, on one line: name, kind, year
  * or season, and credits, as many as fit with a count of the rest ("+1"), after
- * Play Grounds (play-grounds.studio). Playing a row drops its credits down into
- * a list of every name. The active row shows its images centred on screen, above
+ * Play Grounds (play-grounds.studio). Playing a row opens its credits to every
+ * name, wrapped within the column and standing on the row. The active row shows its images centred on screen, above
  * every other row but under that row itself: its text, playhead and line.
  *
  * Each row is also a player. Cursor x across the row maps to an image, so
@@ -721,9 +721,10 @@ function Playhead({ count, spot, playing }: { count: number; spot: Spot; playing
 /**
  * A row's credits. Closed, on one line: as many whole names as fit the column,
  * then a count of the rest ("+2"). A name is never cut short: when not even the
- * first fits, the line is just the count of them all ("+3"). Open, a list of
- * every name, one under another, the first where the line was and the rest
- * hanging below the row, over the rows under it.
+ * first fits, the line is just the count of them all ("+3"). Open, every name
+ * in one run that wraps within the column, standing on the row: its last line
+ * where the closed line was, the rest above it, over the rows above. A name
+ * moves to the next line whole; only one longer than the column breaks.
  *
  * What fits is measured, not guessed: a hidden copy of each candidate line (the
  * count alone, the first name, the first two, ...) is laid out in the row's own
@@ -775,7 +776,10 @@ function Credits({ names, open }: { names: string[]; open: boolean }) {
       <span className={styles.creditsList} aria-hidden={!open}>
         {names.map((name, i) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: names can repeat, and the list never reorders.
-          <span key={i}>{name}</span>
+          <React.Fragment key={i}>
+            {i > 0 && " "}
+            <span className={styles.creditsName}>{i < names.length - 1 ? `${name},` : name}</span>
+          </React.Fragment>
         ))}
       </span>
       <span ref={measureRef} className={styles.creditsMeasure} aria-hidden="true">
