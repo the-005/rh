@@ -95,6 +95,8 @@ Media items are `{ url, canvasUrl, width, height, project }`. Images live in `pu
 - `texture-manager.ts` — texture loading/caching, from each item's `canvasUrl` (the 1000px copy).
 - `utils.ts` — `generateChunkPlanes` (seeded RNG, QMC depth phases, staggered-lattice XY placement), LRU plane cache (max 256 entries), chunk update throttle logic.
 
+**Cursor on the canvas** (the owner, 26 Oct, from the "gallery: hover state and cursor" ticket): the pointing hand over an image you could open, the grab hand (pan) everywhere else, grabbing while dragging. Set in `SceneController.useFrame` by raycasting the pointer every frame against the planes (`imageUnder`; meshes carry `userData.clickable`), so it stays right while the gallery glides under a still cursor. Only images at least `HOVER_MIN_OPACITY` (0.15) visible count: fainter ones read as empty space. Nothing else on hover yet (the ticket's size or opacity change is still to try).
+
 **`src/app/index.tsx`** — root `App`; wires manifest → `InfiniteCanvas` + `SplashVideo` + `Frame`. There is no loading overlay or progress bar (removed at the owner's request); planes simply fade in as their textures arrive.
 
 **`src/project/`** — project page + canvas↔page transition. This is the owner's priority surface. Every rule below was asked for; the reasons are given so they don't get undone.

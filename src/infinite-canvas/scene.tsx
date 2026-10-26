@@ -452,6 +452,8 @@ function MediaPlane({
         scale={displayScale}
         visible={false}
         geometry={PLANE_GEOMETRY}
+        // What the canvas's cursor looks for (imageUnder).
+        userData={{ clickable: true }}
         onClick={(e) => {
           const mesh = meshRef.current;
           const mat = materialRef.current;
@@ -750,7 +752,25 @@ function Chunk({
   );
 }
 
+/** How visible an image must be for the cursor to offer it: faint ones far off read as empty space. */
+const HOVER_MIN_OPACITY = 0.15;
+const hoverRay = new THREE.Raycaster();
+const hoverPoint = new THREE.Vector2();
+
+/** Whether an image you'd see and could click is under this point (normalised device coordinates). */
+function imageUnder(scene: THREE.Scene, camera: THREE.Camera, ndc: { x: number; y: number }) {
+  hoverPoint.set(ndc.x, ndc.y);
+  hoverRay.setFromCamera(hoverPoint, camera);
+  return hoverRay.intersectObjects(scene.children, true).some(({ object }) => {
+    if (!object.userData.clickable || !object.visible) return false;
+    const material = (object as THREE.Mesh).material as THREE.MeshBasicMaterial;
+    return material.opacity > HOVER_MIN_OPACITY;
+  });
+}
+
 type ControllerState = {
+  /** The pointer is over the canvas itself (not the frame, a page or a panel). */
+  pointerOnCanvas: boolean;
   velocity: { x: number; y: number; z: number };
   targetVel: { x: number; y: number; z: number };
   basePos: { x: number; y: number; z: number };
@@ -767,6 +787,7 @@ type ControllerState = {
 };
 
 const createInitialState = (camZ: number): ControllerState => ({
+  pointerOnCanvas: false,
   velocity: { x: 0, y: 0, z: 0 },
   targetVel: { x: 0, y: 0, z: 0 },
   basePos: { x: 0, y: 0, z: camZ },
@@ -783,7 +804,7 @@ const createInitialState = (camZ: number): ControllerState => ({
 });
 
 function SceneController({ media, onMediaClick, debugElRef, tuningGenVersion, showGuides, splashSrc, splashAspect, onSplashReady, onSplashGone }: { media: MediaItem[]; onMediaClick?: (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => void; debugElRef?: React.RefObject<HTMLDivElement | null>; tuningGenVersion?: number; showGuides?: boolean; splashSrc?: string; splashAspect?: number; onSplashReady?: () => void; onSplashGone?: () => void }) {
-  const { camera, gl } = useThree();
+  const { camera, gl, scene } = useThree();
   const isTouchDevice = useIsTouchDevice();
   const [, getKeys] = useKeyboardControls<keyof KeyboardKeys>();
 
@@ -826,11 +847,13 @@ function SceneController({ media, onMediaClick, debugElRef, tuningGenVersion, sh
       // opening under a still cursor also "leaves" the canvas; resetting then
       // made a close land untilted and slide on the first move after it.
       if (!e.relatedTarget) s.mouse = { x: 0, y: 0 };
+      s.pointerOnCanvas = false;
       s.isDragging = false;
       setCursor("grab");
     };
 
     const onMouseMove = (e: MouseEvent) => {
+      s.pointerOnCanvas = e.target === canvas;
       s.mouse = {
         x: (e.clientX / window.innerWidth) * 2 - 1,
         y: -(e.clientY / window.innerHeight) * 2 + 1,
@@ -906,6 +929,15 @@ function SceneController({ media, onMediaClick, debugElRef, tuningGenVersion, sh
     const s = state.current;
     const now = performance.now();
     const frozen = isCanvasFrozen();
+
+    // The cursor says what a click does: the pointing hand over an image you
+    // could open, the grab hand (pan) anywhere else, grabbing while dragging.
+    // Checked every frame, not on mouse moves, because the gallery glides
+    // under a still cursor.
+    if (!s.isDragging) {
+      const want = s.pointerOnCanvas && !frozen && imageUnder(scene, camera, s.mouse) ? "pointer" : "grab";
+      if (gl.domElement.style.cursor !== want) gl.domElement.style.cursor = want;
+    }
 
     const zoomFactor = clamp(s.basePos.z / 50, 0.3, 2.0);
     const driftAmount = PARALLAX_AMOUNT * zoomFactor;
