@@ -68,12 +68,13 @@
    (dakotagiglio.com/work#list): the name takes whatever the window leaves, and
    the other three keep fixed widths at the right, credits against the edge, so
    they hold still as the window changes and the credits' "+N" counts the same
-   at any width. At least 44px tall, the line centred in it. */
+   at any width. At least 44px tall, the text at the top, just under the row's
+   line. */
 .row {
   display: grid;
   grid-template-columns: 1fr 120px 100px 300px;
   align-items: baseline;
-  align-content: center;
+  align-content: start;
   gap: 1.5rem;
   width: 100%;
   min-height: 44px;
@@ -81,8 +82,8 @@
 }
 
 /* Per row, set from script and eased on the row (below): --grow, how much
-   taller the row is for its open credits; --lift, how far it slides up for the
-   rows below it that are growing (the sum of their --grow). Two rows can be
+   taller the row is for its open credits; --lift, how far it slides down for
+   the rows above it that are growing (the sum of their --grow). Two rows can be
    changing at once, the one closing and the one opening, so each has its own. */
 @property --grow {
   syntax: "<length>";
@@ -120,7 +121,9 @@
 }
 
 /* Square and flush: no gap between rows, 8px 12px inside the page margin.
-   No line at rest: only the active row shows one, under it, edge to edge.
+   No line at rest: only the active row shows one, along its top, edge to edge
+   (the line, playhead and text sat at the bottom until 26 Oct). The line is
+   the centre line a played row is brought to.
 
    Everything on a row is drawn light and blended by difference, so it inverts
    whatever is behind it: dark on the white page, light over a dark picture,
@@ -132,7 +135,7 @@
   position: relative;
   background: none;
   border: none;
-  border-bottom: 1px solid transparent;
+  border-top: 1px solid transparent;
   padding: 8px calc(var(--page-padding, 1.5rem) + 12px);
   font: inherit;
   /* Every field on the row, at every width. */
@@ -154,17 +157,17 @@
 
 /* The active row is the one under the cursor or, once a slideshow has carried
    on down the list, the one playing. Everything else dims, so the eye has one
-   place to be. The active row's line fades in under it. */
+   place to be. The active row's line fades in along its top. */
 .list:has(.active) .row:not(.active) {
   color: #444444;
 }
 
 .list .active {
-  border-bottom-color: color-mix(in srgb, var(--ink, #eeeeee) calc(var(--active-opacity) * 100%), transparent);
+  border-top-color: color-mix(in srgb, var(--ink, #eeeeee) calc(var(--active-opacity) * 100%), transparent);
 }
 
 .list .active[data-quiet] {
-  border-bottom-color: color-mix(in srgb, var(--ink, #eeeeee) calc(var(--playing-opacity) * 100%), transparent);
+  border-top-color: color-mix(in srgb, var(--ink, #eeeeee) calc(var(--playing-opacity) * 100%), transparent);
 }
 
 .active[data-quiet] .stop {
@@ -197,12 +200,12 @@
 
 /* --- playhead -------------------------------------------------------------
    Absolutely positioned in the row's padding box, so the grid never sees it,
-   and sitting on the line under the row. Its position is driven inline,
+   and hanging from the line along the row's top. Its position is driven inline,
    transition included: none while it follows the cursor, a constant-speed run
    while playing. */
 .playhead {
   position: absolute;
-  bottom: 0;
+  top: 0;
   transform: translateX(-50%);
   pointer-events: none;
 }
@@ -218,7 +221,8 @@
   height: 0;
   border-left: 5px solid transparent;
   border-right: 5px solid transparent;
-  border-bottom: 9px solid color-mix(in srgb, var(--ink, #eeeeee) calc(var(--playing-opacity) * 100%), transparent);
+  /* Pointing down, hanging from the line. */
+  border-top: 9px solid color-mix(in srgb, var(--ink, #eeeeee) calc(var(--playing-opacity) * 100%), transparent);
 }
 
 .title {
@@ -248,8 +252,8 @@
 /* --- credits --------------------------------------------------------------
    Closed: the whole names that fit, then a count of the rest, lighter (#444
    reads as #bbb), or the count alone if not even one fits. Open (the row
-   playing): one credit a line, role and name, standing on the row, over the
-   rows above, which have faded back while it plays. */
+   playing): one credit a line, role and name, hanging from the row's first
+   line, over the rows below, which have faded back while it plays. */
 .credits {
   position: relative;
 }
@@ -276,13 +280,13 @@
 }
 
 /* One credit a line: the role at the column's left in the kind and year grey,
-   the name at its right in the project name's colour. Anchored at the bottom
-   of the column, so it stands on the row (the last credit where the closed
-   line was) and never crosses the row's line or the page's edge; a name too
-   long for its side wraps. */
+   the name at its right in the project name's colour. Anchored at the top of
+   the column, so it hangs from the row's first line (the first credit where
+   the closed line was) and never crosses the row's line or the page's edge; a
+   name too long for its side wraps. */
 .creditsList {
   position: absolute;
-  bottom: 0;
+  top: 0;
   right: 0;
   width: 100%;
   display: grid;
@@ -309,27 +313,22 @@
   opacity: 0;
 }
 
-/* A row wraps its open credits: it grows upward by --grow (the extra lines),
-   its bottom and line staying put (the margin takes back what the padding
-   adds), and every row above slides up by --lift, relative offset rather than
-   a transform, which would cut them off from the blend. A row that closes
-   eases back as the next one opens, so nothing snaps. The list's layout never
-   changes, so nothing below moves and the list's own moves are untouched. */
+/* A row wraps its open credits: it grows downward by --grow (the extra lines),
+   its top and line staying put (the margin takes back what the padding adds),
+   and every row below slides down by --lift, relative offset rather than a
+   transform, which would cut them off from the blend. A row that closes eases
+   back as the next one opens. The list's layout never changes, so nothing
+   above moves and the list's own moves are untouched. */
 .list .row {
-  margin-top: calc(-1 * var(--grow));
-  padding-top: calc(8px + var(--grow));
+  margin-bottom: calc(-1 * var(--grow));
+  padding-bottom: calc(8px + var(--grow));
   min-height: calc(44px + var(--grow));
-  top: calc(-1 * var(--lift));
+  top: var(--lift);
 }
 
-/* A row a slideshow has just finished, and the rows above it, for the one
-   frame in which they take their closed places (set and cleared from script):
-   its credits go back to one line at once, no fade, no easing. The text's
-   dimming still fades. */
-.list .row[data-snap] {
-  transition-property: color, border-color, opacity;
-}
-
+/* A row a slideshow has just finished, for the one frame in which its credits
+   close (set and cleared from script): back to one line at once, no fade. Its
+   height still eases back, and its text's dimming still fades. */
 .list .row[data-snap] :is(.creditsLine, .creditsList) {
   transition: none;
 }

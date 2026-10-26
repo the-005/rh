@@ -6,9 +6,10 @@ import styles from "./style.module.css";
  * The index: the same projects the gallery holds, read as a list instead of a
  * space. One full-width row per project, on white, on one line: name, kind, year
  * or season, and credits, as many as fit with a count of the rest ("+1"), after
- * Play Grounds (play-grounds.studio). Playing a row opens its credits to every
- * name, wrapped within the column and standing on the row. The active row shows its images centred on screen, above
- * every other row but under that row itself: its text, playhead and line.
+ * Play Grounds (play-grounds.studio). Playing a row opens its credits into a
+ * list of role and name, hanging from the row. The active row shows its images
+ * centred on screen, above every other row but under that row itself: its text,
+ * playhead and line, which run along the row's top.
  *
  * Each row is also a player. Cursor x across the row maps to an image, so
  * sweeping left to right reads the whole album, and a square playhead on the
@@ -332,12 +333,15 @@ export function IndexPage() {
     return null;
   };
 
-  /** Move the list until this row's line is the centre line of the window. */
+  /** Move the list until this row's line (its top) is the centre line of the window. */
   const centre = (el: HTMLElement | null | undefined) => {
     const main = mainRef.current;
     if (!el || !main || window.matchMedia(NO_SPLIT).matches) return;
-    // How far below the centre line the row's line will be, once the list has arrived.
-    const by = el.getBoundingClientRect().bottom + toAim() - window.innerHeight / 2;
+    // How far below the centre line the row's line will be, once the list has
+    // arrived. Measured where the row sits in the list, without the slide an
+    // open row above gives it (--lift): that row is closing as this one opens.
+    const lift = Number.parseFloat(getComputedStyle(el).top) || 0;
+    const by = el.getBoundingClientRect().top - lift + toAim() - window.innerHeight / 2;
     const raised = aimRef.current.scroll - aimRef.current.shift + by;
     // Up is a scroll (growing room below if the page ends too soon); down past
     // the top is a shift.
@@ -624,41 +628,38 @@ export function IndexPage() {
   /** The row whose credits are open: the one playing, or stopped where it is. */
   const openRow = active !== null && (playing || stoppedHere) ? active : null;
   // Open credits wrap onto more lines than the row holds, so the row grows
-  // upward around them and the rows above slide up to make room. Each row gets
-  // the targets, and CSS eases them all on one curve: --grow, how much taller
-  // it is (the open run's extra height, 0 when closed), and --lift, the sum of
-  // the --grow of the rows below it. Nothing below moves and the row's line
-  // stays where it is, so the list's own moves are untouched.
+  // downward around them and the rows below slide down to make room. Each row
+  // gets the targets, and CSS eases them all on one curve: --grow, how much
+  // taller it is (the open run's extra height, 0 when closed), and --lift, the
+  // sum of the --grow of the rows above it. Nothing above moves and the row's
+  // line (its top) stays where it is, so the list's own moves are untouched.
   //
-  // A row closing because the hand took over eases back. A row a slideshow has
-  // finished goes back to one line at once, no fade (the owner's call): it and
-  // the rows above it take their closed places in this same frame, then the
-  // next row opens as usual.
+  // A row closing because the hand took over fades and eases back. A row a
+  // slideshow has finished shows its one line again at once, no fade (the
+  // owner's call), while its height eases back like any other: snapping that
+  // too would jump the next row, the one taking over, up by the whole list.
   React.useLayoutEffect(() => {
     const rows = rowsRef.current;
-    const list = listRef.current;
     const cell = openRow === null ? null : rows[openRow]?.querySelector<HTMLElement>(`.${styles.credits}`);
     const run = cell?.querySelector<HTMLElement>(`.${styles.creditsList}`);
     const place = (extra: number) => {
-      let below = 0;
-      for (let i = rows.length - 1; i >= 0; i--) {
-        const row = rows[i];
+      let above = 0;
+      for (const [i, row] of rows.entries()) {
         if (!row) continue;
         const grow = i === openRow ? extra : 0;
         row.style.setProperty("--grow", `${grow}px`);
-        row.style.setProperty("--lift", `${below}px`);
-        below += grow;
+        row.style.setProperty("--lift", `${above}px`);
+        above += grow;
       }
     };
     const update = () => place(cell && run ? Math.max(0, run.offsetHeight - cell.offsetHeight) : 0);
     const finished = finishedRef.current;
     finishedRef.current = null;
-    if (finished !== null && finished !== openRow) {
-      const snapped = rows.slice(0, finished + 1).filter((row) => row !== null);
-      for (const row of snapped) row.dataset.snap = "";
-      place(0);
-      void list?.offsetHeight; // lay out the closed places with no transition
-      for (const row of snapped) delete row.dataset.snap;
+    const done = finished !== null && finished !== openRow ? rows[finished] : null;
+    if (done) {
+      done.dataset.snap = "";
+      void done.offsetHeight; // apply the closed credits with no transition
+      delete done.dataset.snap;
     }
     update();
     if (!run) return;
@@ -771,9 +772,9 @@ function Playhead({ count, spot, playing }: { count: number; spot: Spot; playing
  * A row's credits. Closed, on one line: as many whole names as fit the column,
  * then a count of the rest ("+2"). A name is never cut short: when not even the
  * first fits, the line is just the count of them all ("+3"). Open, one credit a
- * line, the role at the column's left and the name at its right, standing on
- * the row: the last credit where the closed line was, the rest above it, over
- * the rows above. After a credits block the owner shared (26 Oct), with the
+ * line, the role at the column's left and the name at its right, hanging from
+ * the row: the first credit where the closed line was, the rest below it, over
+ * the rows below. After a credits block the owner shared (26 Oct), with the
  * sides swapped.
  *
  * What fits is measured, not guessed: a hidden copy of each candidate line (the
