@@ -80,10 +80,20 @@
   text-align: left;
 }
 
+/* How much taller the active row is for its open credits, set from script and
+   eased here, so the row and the rows above it move as one. */
+@property --grow {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
 .list {
   list-style: none;
   margin: 0;
   padding: 0;
+  --grow: 0px;
+  transition: --grow 0.3s cubic-bezier(0.42, 0, 0.58, 1);
   /* Brought down (top, set from script) only when a row near the top is
      played and there's nothing above to scroll: raising is a page scroll. Moved
      by relative positioning, not a transform: a transform would give the list a
@@ -283,14 +293,19 @@
   max-width: 100%;
 }
 
-/* Open credits would land on the credits of the rows above, so while one is
-   open the other rows' credits go. */
-.credits {
-  transition: opacity 0.3s ease;
+/* The row wraps its open credits: it grows upward by --grow (the extra
+   lines), its bottom and line staying put (the margin takes back what the
+   padding adds), and the rows above slide up as far by relative offset, not a
+   transform, which would cut them off from the blend. The list's layout never
+   changes, so nothing below moves and the list's own moves are untouched. */
+.list .row[data-grow] {
+  margin-top: calc(-1 * var(--grow));
+  padding-top: calc(8px + var(--grow));
+  min-height: calc(44px + var(--grow));
 }
 
-.list:has([data-open]) .row:not(.active) .credits {
-  opacity: 0;
+.list li:has(~ li > .row[data-grow]) > .row {
+  top: calc(-1 * var(--grow));
 }
 
 .credits[data-open] .creditsList {
