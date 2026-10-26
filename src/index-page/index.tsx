@@ -621,16 +621,28 @@ export function IndexPage() {
   /** The row whose credits are open: the one playing, or stopped where it is. */
   const openRow = active !== null && (playing || stoppedHere) ? active : null;
   // Open credits wrap onto more lines than the row holds, so the row grows
-  // upward around them and the rows above slide up to make room (CSS, on
-  // --grow): how much taller, measured from the open run. Nothing below moves
-  // and the row's line stays where it is, so the list's own moves are untouched.
+  // upward around them and the rows above slide up to make room. Each row gets
+  // the targets, and CSS eases them all on one curve: --grow, how much taller
+  // it is (the open run's extra height, 0 when closed), and --lift, the sum of
+  // the --grow of the rows below it. The row that closes eases back while the
+  // next opens, so a slideshow's handover doesn't snap. Nothing below moves and
+  // the row's line stays where it is, so the list's own moves are untouched.
   React.useLayoutEffect(() => {
-    const list = listRef.current;
-    if (!list) return;
-    const cell = openRow === null ? null : rowsRef.current[openRow]?.querySelector<HTMLElement>(`.${styles.credits}`);
+    const rows = rowsRef.current;
+    const cell = openRow === null ? null : rows[openRow]?.querySelector<HTMLElement>(`.${styles.credits}`);
     const run = cell?.querySelector<HTMLElement>(`.${styles.creditsList}`);
-    const update = () =>
-      list.style.setProperty("--grow", `${cell && run ? Math.max(0, run.offsetHeight - cell.offsetHeight) : 0}px`);
+    const update = () => {
+      const extra = cell && run ? Math.max(0, run.offsetHeight - cell.offsetHeight) : 0;
+      let below = 0;
+      for (let i = rows.length - 1; i >= 0; i--) {
+        const row = rows[i];
+        if (!row) continue;
+        const grow = i === openRow ? extra : 0;
+        row.style.setProperty("--grow", `${grow}px`);
+        row.style.setProperty("--lift", `${below}px`);
+        below += grow;
+      }
+    };
     update();
     if (!run) return;
     const resized = new ResizeObserver(update);
@@ -660,8 +672,6 @@ export function IndexPage() {
                 aria-pressed={active === index && playing}
                 // Quiet while playing, and while stopped where it is, until the hand moves.
                 data-quiet={active === index && (playing || stoppedHere) ? "" : undefined}
-                // The row that grows for its open credits (by --grow, 0 while closed).
-                data-grow={active === index ? "" : undefined}
                 onClick={(e) => onClick(e, index)}
                 // Keyboard focus lands on the project, not a position in it:
                 // there is no cursor to read, so it starts at the first image.
