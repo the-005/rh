@@ -121,9 +121,10 @@
 }
 
 /* Square and flush: no gap between rows, 8px 12px inside the page margin.
-   No line at rest: only the active row shows one, along its top, edge to edge
-   (the line, playhead and text sat at the bottom until 26 Oct). The line is
-   the centre line a played row is brought to.
+   No lines at rest. Hovered, the active row shows a line along its top and
+   its bottom, edge to edge; played (playing, or stopped where it is), only the
+   top one, the centre line a played row is brought to, with the playhead
+   sitting on it. The text sits at the top, just under the top line.
 
    Everything on a row is drawn light and blended by difference, so it inverts
    whatever is behind it: dark on the white page, light over a dark picture,
@@ -136,6 +137,7 @@
   background: none;
   border: none;
   border-top: 1px solid transparent;
+  border-bottom: 1px solid transparent;
   padding: 8px calc(var(--page-padding, 1.5rem) + 12px);
   font: inherit;
   /* Every field on the row, at every width. */
@@ -157,17 +159,19 @@
 
 /* The active row is the one under the cursor or, once a slideshow has carried
    on down the list, the one playing. Everything else dims, so the eye has one
-   place to be. The active row's line fades in along its top. */
+   place to be. The active row's lines fade in along its top and bottom. */
 .list:has(.active) .row:not(.active) {
   color: #444444;
 }
 
 .list .active {
-  border-top-color: color-mix(in srgb, var(--ink, #eeeeee) calc(var(--active-opacity) * 100%), transparent);
+  border-color: color-mix(in srgb, var(--ink, #eeeeee) calc(var(--active-opacity) * 100%), transparent);
 }
 
+/* Played: the top line only, the centre line. */
 .list .active[data-quiet] {
   border-top-color: color-mix(in srgb, var(--ink, #eeeeee) calc(var(--playing-opacity) * 100%), transparent);
+  border-bottom-color: transparent;
 }
 
 .active[data-quiet] .stop {
@@ -200,14 +204,22 @@
 
 /* --- playhead -------------------------------------------------------------
    Absolutely positioned in the row's padding box, so the grid never sees it,
-   and hanging from the line along the row's top. Its position is driven inline,
+   and sitting on the row's top line, the centre line, only once the row is
+   played. While hovering it's there but unseen, following the cursor, so a
+   click starts it gliding from the cursor. Its position is driven inline,
    transition included: none while it follows the cursor, a constant-speed run
    while playing. */
 .playhead {
   position: absolute;
-  top: 0;
+  /* Its bottom on the top line's top edge: the padding box's full height up,
+     and the line's 1px. */
+  bottom: calc(100% + 1px);
   transform: translateX(-50%);
   pointer-events: none;
+}
+
+.row:not([data-quiet]) .playhead {
+  visibility: hidden;
 }
 
 .stop {
@@ -221,8 +233,8 @@
   height: 0;
   border-left: 5px solid transparent;
   border-right: 5px solid transparent;
-  /* Pointing down, hanging from the line. */
-  border-top: 9px solid color-mix(in srgb, var(--ink, #eeeeee) calc(var(--playing-opacity) * 100%), transparent);
+  /* Pointing up, standing on the line. */
+  border-bottom: 9px solid color-mix(in srgb, var(--ink, #eeeeee) calc(var(--playing-opacity) * 100%), transparent);
 }
 
 .title {
