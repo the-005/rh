@@ -10,8 +10,11 @@
  * skipped. Projects and the images within them are ordered by name (natural
  * sort, so _2 comes before _10).
  *
- * Each image gets two copies, both to the shared spec in media.ts:
- *   public/work/<project>/<name>.jpg         longest side 3000px — project page, index
+ * Each image gets three copies, all to the shared spec in media.ts:
+ *   public/work/<project>/<name>.jpg         longest side 3000px — the project
+ *     page once it's settled
+ *   public/work/<project>/1500/<name>.jpg    longest side 1500px — the index, and
+ *     the project page until its images upgrade (2 Nov: "1500 is the new 1000")
  *   public/work/<project>/canvas/<name>.jpg  longest side 1000px — canvas textures,
  *     since the canvas holds every image on the GPU at once
  *
@@ -27,6 +30,7 @@ import sharp from "sharp";
 import { byName, encode, isFresh, LONGEST_SIDE, mb, QUALITY, SOURCE_EXT } from "./media.ts";
 
 const CANVAS_LONGEST_SIDE = 1000;
+const MID_LONGEST_SIDE = 1500;
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const OUT_DIR = path.join(ROOT, "public", "work");
@@ -58,7 +62,7 @@ function imagesIn(projectDir: string) {
   );
 }
 
-type Entry = { url: string; canvasUrl: string; width: number; height: number; project: string };
+type Entry = { url: string; midUrl: string; canvasUrl: string; width: number; height: number; project: string };
 const manifest: Entry[] = [];
 const expected = new Set<string>();
 
@@ -71,12 +75,14 @@ for (const project of projects) {
   const images = imagesIn(path.join(source, project));
   console.log(`\n${project}: ${images.length} images`);
   fs.mkdirSync(path.join(OUT_DIR, project, "canvas"), { recursive: true });
+  fs.mkdirSync(path.join(OUT_DIR, project, "1500"), { recursive: true });
 
   for (const src of images) {
     const name = `${path.parse(src).name}.jpg`;
     const full = path.join(OUT_DIR, project, name);
     const canvas = path.join(OUT_DIR, project, "canvas", name);
-    expected.add(full).add(canvas);
+    const mid = path.join(OUT_DIR, project, "1500", name);
+    expected.add(full).add(canvas).add(mid);
 
     const started = performance.now();
     const fullFresh = !force && isFresh(src, full);
@@ -85,11 +91,13 @@ for (const project of projects) {
       if (quality < QUALITY) console.log(`  ${project}/${name}: quality ${quality} to stay under 1 MB (${mb(size)})`);
     }
     if (force || !isFresh(src, canvas)) await encode(src, canvas, CANVAS_LONGEST_SIDE);
+    if (force || !isFresh(src, mid)) await encode(src, mid, MID_LONGEST_SIDE);
 
     // The full copy's dimensions stand for both; the aspect is what the site reads.
     const { width, height } = await sharp(full).metadata();
     manifest.push({
       url: `work/${project}/${name}`,
+      midUrl: `work/${project}/1500/${name}`,
       canvasUrl: `work/${project}/canvas/${name}`,
       width,
       height,
@@ -97,7 +105,7 @@ for (const project of projects) {
     });
 
     const secs = ((performance.now() - started) / 1000).toFixed(1);
-    const sizes = `${mb(fs.statSync(src).size)} → ${mb(fs.statSync(full).size)} + ${mb(fs.statSync(canvas).size)}`;
+    const sizes = `${mb(fs.statSync(src).size)} → ${mb(fs.statSync(full).size)} + ${mb(fs.statSync(mid).size)} + ${mb(fs.statSync(canvas).size)}`;
     console.log(`${fullFresh ? "skip" : "done"}  ${path.basename(src)}  ${width}×${height}  ${sizes}  ${secs}s`);
   }
 }

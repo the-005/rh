@@ -1,8 +1,10 @@
 import type * as THREE from "three";
 
 export type MediaItem = {
-  /** Full-size copy (3000px long side): the project page and the index. */
+  /** Full-size copy (3000px long side): the project page once it's settled. */
   url: string;
+  /** Middle copy (1500px long side): the index, and the project page until it upgrades. */
+  midUrl: string;
   /** Small copy (1000px long side) for the canvas, which holds every texture at once. */
   canvasUrl: string;
   width: number;

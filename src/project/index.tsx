@@ -64,8 +64,9 @@ const FUSE_PAUSE_MS = 260;
 /** Images that get taller than this share of the strip during the zoom are
  *  decoded before it (6–8 per project; the rest decode small, as shown). */
 const PREDECODE_ABOVE = 0.25;
-/** Longest side of the canvas copy of each image (`canvasUrl`, scripts/media.ts). */
-const CANVAS_COPY_PX = 1000;
+/** Longest side of the copy the page starts each image on (`midUrl`,
+ *  scripts/prepare-work.ts). It was the 1000px canvas copy until 2 Nov. */
+const START_COPY_PX = 1500;
 /** Full-size upgrades after the zoom run this many at a time, in strip order. */
 const UPGRADE_CONCURRENCY = 2;
 /** Longest the zoom waits for those decodes. */
@@ -208,7 +209,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   // about 31MB of downloads to about 5MB.
   const dpr = window.devicePixelRatio || 1;
   const startsFull = images.map((img, k) => {
-    const copyH = img.height * Math.min(1, CANVAS_COPY_PX / Math.max(img.width, img.height));
+    const copyH = img.height * Math.min(1, START_COPY_PX / Math.max(img.width, img.height));
     return peaks[k] * stripH * dpr > copyH;
   });
 
@@ -746,7 +747,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
             <img
               ref={k === 0 ? heroImgRef : null}
               data-pos={k}
-              src={`/${startsFull[k] || upgraded.has(k) ? img.url : img.canvasUrl}`}
+              src={`/${startsFull[k] || upgraded.has(k) ? img.url : img.midUrl}`}
               alt=""
               draggable={false}
               decoding="async"

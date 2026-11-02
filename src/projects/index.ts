@@ -133,5 +133,5 @@ export const PROJECTS: ProjectEntry[] = (() => {
 /** Width ÷ height of every Work image, by url, for anything sized by its shape. */
 export const ASPECTS: ReadonlyMap<string, number> = new Map(ALL_MEDIA.map((item) => [item.url, item.width / item.height]));
 
-/** Each image's 1000px canvas copy, keyed by its full-size url. */
-export const CANVAS_COPIES: ReadonlyMap<string, string> = new Map(ALL_MEDIA.map((item) => [item.url, item.canvasUrl]));
+/** Each image's 1500px copy, keyed by its full-size url. */
+export const MID_COPIES: ReadonlyMap<string, string> = new Map(ALL_MEDIA.map((item) => [item.url, item.midUrl]));

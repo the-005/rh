@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ASPECTS, CANVAS_COPIES, type Credit, PROJECTS, type ProjectEntry } from "~/src/projects";
+import { ASPECTS, type Credit, MID_COPIES, PROJECTS, type ProjectEntry } from "~/src/projects";
 import styles from "./style.module.css";
 
 /**
@@ -97,13 +97,14 @@ function rowMoveEase(t: number) {
 }
 
 /**
- * The file the index shows for an image: the 1000px canvas copy, to see if it
- * holds up at the index's size (the owner, 2 Nov, to avoid a third copy), or
- * the 3000px one at `/index?copy=3000`, to compare. Images are still known by
- * their full-size url everywhere else (sizes, order, the preview's layers).
+ * The file the index shows for an image: the 1500px copy (the owner, 2 Nov,
+ * after trying the 1000px canvas copy, which was a little soft at the index's
+ * size on retina), or the 3000px one at `/index?copy=3000`, to compare. Images
+ * are still known by their full-size url everywhere else (sizes, order, the
+ * preview's layers).
  */
 const FULL_SIZE = new URLSearchParams(window.location.search).get("copy") === "3000";
-const fileFor = (url: string) => `/${FULL_SIZE ? url : (CANVAS_COPIES.get(url) ?? url)}`;
+const fileFor = (url: string) => `/${FULL_SIZE ? url : (MID_COPIES.get(url) ?? url)}`;
 
 /** Every Work image, for the random picks. */
 const ALL_IMAGES = PROJECTS.flatMap((project) => project.images);
