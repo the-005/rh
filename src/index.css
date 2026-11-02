@@ -65,10 +65,11 @@
   --color-link-hover: #fff;
   --page-padding: 1.5rem;
   --font-sans: "Neue Haas Grotesk Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  /* The one type size on the site until the UI is refined (the owner, 2 Nov).
-     Every rule that sets a size uses it. The root's 12px above stays: it is the
-     rem that all the spacing is measured in. */
-  --font-size: 14px;
+  /* The one type size on the site until the UI is refined (the owner, 2 Nov;
+     14px for a first try, then 12px). Every rule that sets a size uses it. The
+     root's 12px above is a different thing: the rem that all the spacing is
+     measured in. */
+  --font-size: 12px;
 }
 
 /* Under the intro splash (index.html sets the class), black: the video opens on black. */
