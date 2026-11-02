@@ -24,7 +24,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import sharp from "sharp";
-import { byName, encode, isFresh, LONGEST_SIDE, mb, SOURCE_EXT } from "./media.ts";
+import { byName, encode, isFresh, LONGEST_SIDE, mb, QUALITY, SOURCE_EXT } from "./media.ts";
 
 const CANVAS_LONGEST_SIDE = 1000;
 
@@ -80,7 +80,10 @@ for (const project of projects) {
 
     const started = performance.now();
     const fullFresh = !force && isFresh(src, full);
-    if (!fullFresh) await encode(src, full, LONGEST_SIDE);
+    if (!fullFresh) {
+      const { quality, size } = await encode(src, full, LONGEST_SIDE);
+      if (quality < QUALITY) console.log(`  ${project}/${name}: quality ${quality} to stay under 1 MB (${mb(size)})`);
+    }
     if (force || !isFresh(src, canvas)) await encode(src, canvas, CANVAS_LONGEST_SIDE);
 
     // The full copy's dimensions stand for both; the aspect is what the site reads.
