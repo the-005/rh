@@ -37,6 +37,7 @@ import { getTexture } from "./texture-manager";
 import type { ChunkData, InfiniteCanvasProps, MediaItem, PlaneData } from "./types";
 import { tuning } from "./tuning";
 import { clearPlaneCache, generateChunkPlanesCached, getChunkCyclePositions, getChunkUpdateThrottleMs, shouldThrottleUpdate } from "./utils";
+import { galleryScale, galleryShown } from "./view-shrink";
 
 const PLANE_GEOMETRY = new THREE.PlaneGeometry(1, 1);
 
@@ -380,6 +381,10 @@ function MediaPlane({
     mesh.visible = isVisible;
     if (labelRef.current) labelRef.current.visible = isVisible;
 
+    // Shrinking away as the index opens, or growing back (view-shrink.ts).
+    const viewScale = galleryScale(regKey, zOffset);
+    mesh.scale.set(displayScale.x * viewScale, displayScale.y * viewScale, 1);
+
     // Depth de-confliction. Camera-relative direction flips mean two nearby
     // planes can drift to identical depths and then move in lockstep — welded
     // on screen with no parallax separation. While the canvas is at rest, ease
@@ -458,7 +463,7 @@ function MediaPlane({
         onClick={(e) => {
           const mesh = meshRef.current;
           const mat = materialRef.current;
-          if (!mesh || !onMediaClick) return;
+          if (!mesh || !onMediaClick || !galleryShown()) return;
 
           // depthTest is off, so the visually topmost image may not be the closest in 3D.
           // Yield to any intersected mesh with meaningfully higher opacity (more visible).
@@ -953,7 +958,7 @@ function SceneController({ media, onMediaClick, debugElRef, tuningGenVersion, sh
     // Checked every frame, not on mouse moves, because the gallery glides
     // under a still cursor.
     if (!s.isDragging) {
-      hoveredImage = s.pointerOnCanvas && !frozen ? imageUnder(scene, camera, s.mouse) : null;
+      hoveredImage = s.pointerOnCanvas && !frozen && galleryShown() ? imageUnder(scene, camera, s.mouse) : null;
       const want = hoveredImage ? "pointer" : "grab";
       if (gl.domElement.style.cursor !== want) gl.domElement.style.cursor = want;
     } else {

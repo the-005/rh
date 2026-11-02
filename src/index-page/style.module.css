@@ -18,6 +18,13 @@
      than this, so no text lies on it (the owner, 2 Nov, after
      emilieaubry.com/work). */
   --clear: 44vw;
+  /* Opening (src/infinite-canvas/view-shrink.ts has the gallery's half): the
+     rows fade in one after another from the top, the picture last; closing,
+     the whole page fades to white. --index-out matches INDEX_OUT_MS there. */
+  --row-in: 450ms;
+  --row-step: 70ms;
+  --photo-in: 700ms;
+  --index-out: 450ms;
 }
 
 .page {
@@ -30,7 +37,6 @@
   overflow-y: auto;
   font-family: var(--font-sans);
   font-weight: 300;
-  animation: fadeIn 0.35s ease both;
   /* No scrollbar: the page still scrolls by wheel, trackpad and keys, but
      nothing shows at the side, and where scrollbars take up space (Windows,
      or macOS set to always show them) none appears and narrows the page the
@@ -41,6 +47,27 @@
 
 .page::-webkit-scrollbar {
   display: none;
+}
+
+/* Leaving for the gallery: everything fades to white, and nothing takes a click on the way. */
+.leaving {
+  opacity: 0;
+  transition: opacity var(--index-out) ease;
+  pointer-events: none;
+}
+
+/* Opening: each row fades in after the one above it, at most a dozen steps in
+   so a long list doesn't keep the bottom waiting; the picture after the rows.
+   'backwards' only holds them invisible until they start: once in, the rows'
+   own dimming takes over their opacity again. */
+.list > li {
+  animation: fadeIn var(--row-in) ease backwards;
+  animation-delay: calc(min(var(--i, 0), 12) * var(--row-step));
+}
+
+.preview {
+  animation: fadeIn var(--photo-in) ease backwards;
+  animation-delay: calc(min(var(--rows, 0), 12) * var(--row-step) + var(--row-in) * 0.5);
 }
 
 @keyframes fadeIn {

@@ -120,7 +120,7 @@ type Spot = { pos: number; transition: string };
 /** A row, and the cursor's x across it. */
 type Cursor = { index: number; el: HTMLElement; x: number };
 
-export function IndexPage() {
+export function IndexPage({ leaving = false }: { leaving?: boolean }) {
   const [projects] = React.useState(listedProjects);
   /** The lit row: under the cursor, or the one a slideshow has carried on to. */
   const [active, setActive] = React.useState<number | null>(null);
@@ -684,13 +684,17 @@ export function IndexPage() {
   const src = current ? current.images[Math.min(shown, current.images.length - 1)] : (ambient?.src ?? null);
 
   return (
-    <main ref={mainRef} className={styles.page}>
+    <main
+      ref={mainRef}
+      className={`${styles.page} ${leaving ? styles.leaving : ""}`}
+      style={{ "--rows": projects.length } as React.CSSProperties}
+    >
       <div ref={innerRef} className={styles.inner}>
         {/* Idle only counts while a row is active: with none, there's no picture to
             clear. A slideshow playing counts at once, without the wait. */}
         <ul ref={listRef} className={`${styles.list} ${(idle || playing) && active !== null ? styles.idle : ""}`}>
           {projects.map((project, index) => (
-            <li key={`${project.id}-${index}`}>
+            <li key={`${project.id}-${index}`} style={{ "--i": index } as React.CSSProperties}>
               <button
                 ref={(el) => {
                   rowsRef.current[index] = el;
