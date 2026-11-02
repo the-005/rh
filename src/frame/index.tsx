@@ -1,3 +1,5 @@
+import * as React from "react";
+import { getTheme, setTheme, subscribeSettings } from "~/src/settings/store";
 import styles from "./style.module.css";
 
 export type View = "gallery" | "index" | "research" | "about";
@@ -16,6 +18,7 @@ export function Frame({
   onViewChange: (v: View) => void;
   showNav?: boolean;
 }) {
+  const theme = React.useSyncExternalStore(subscribeSettings, getTheme);
   const link = (v: View) => (
     <button
       key={v}
@@ -46,6 +49,10 @@ export function Frame({
           )}
           <nav className={styles.frame__view} aria-label="More">
             {SIDE.map(link)}
+            {/* Light and dark: names the one you'd switch to. */}
+            <button type="button" className={styles.frame__btn} onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+              {theme === "dark" ? "Light" : "Dark"}
+            </button>
           </nav>
         </>
       )}

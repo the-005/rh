@@ -371,7 +371,8 @@ function MediaPlane({
     const hidden = isPlaneHidden(regKey);
     if (hidden) state.opacity = 0;
 
-    const target = hidden || isDimmedPlane(regKey) ? 0 : naturalTarget;
+    const hovered = hoveredImage !== null && hoveredImage === mesh;
+    const target = hidden || isDimmedPlane(regKey) ? 0 : hovered ? naturalTarget + (1 - naturalTarget) * HOVER_GAIN : naturalTarget;
     state.opacity = target < INVIS_THRESHOLD && state.opacity < INVIS_THRESHOLD ? 0 : lerp(state.opacity, target, 0.1);
 
     material.opacity = state.opacity;
@@ -754,18 +755,35 @@ function Chunk({
 
 /** How visible an image must be for the cursor to offer it: faint ones far off read as empty space. */
 const HOVER_MIN_OPACITY = 0.15;
+/**
+ * The image under the pointer gains opacity (the owner, 2 Nov): it goes this
+ * share of the way from where its depth puts it to fully opaque, easing there
+ * as every plane's opacity does. Images already at full strength don't change;
+ * the faint, far ones come forward.
+ */
+const HOVER_GAIN = 0.6;
+/** The image the pointer is over, as the click would pick it; null when none. Set each frame by SceneController. */
+let hoveredImage: THREE.Object3D | null = null;
 const hoverRay = new THREE.Raycaster();
 const hoverPoint = new THREE.Vector2();
 
-/** Whether an image you'd see and could click is under this point (normalised device coordinates). */
-function imageUnder(scene: THREE.Scene, camera: THREE.Camera, ndc: { x: number; y: number }) {
+/**
+ * The image you'd see and could click under this point (normalised device
+ * coordinates), or null. Picked as a click is: the nearest one, unless another
+ * under the pointer is clearly more visible (depthTest is off, so the most
+ * visible reads as the top one).
+ */
+function imageUnder(scene: THREE.Scene, camera: THREE.Camera, ndc: { x: number; y: number }): THREE.Object3D | null {
   hoverPoint.set(ndc.x, ndc.y);
   hoverRay.setFromCamera(hoverPoint, camera);
-  return hoverRay.intersectObjects(scene.children, true).some(({ object }) => {
-    if (!object.userData.clickable || !object.visible) return false;
-    const material = (object as THREE.Mesh).material as THREE.MeshBasicMaterial;
-    return material.opacity > HOVER_MIN_OPACITY;
-  });
+  const hits = hoverRay
+    .intersectObjects(scene.children, true)
+    .filter(({ object }) => object.userData.clickable && object.visible)
+    .map(({ object }) => ({ object, o: ((object as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity }))
+    .filter(({ o }) => o > HOVER_MIN_OPACITY);
+  if (!hits.length) return null;
+  const most = Math.max(...hits.map(({ o }) => o));
+  return hits.find(({ o }) => o >= most - 0.05)?.object ?? null;
 }
 
 type ControllerState = {
@@ -935,8 +953,11 @@ function SceneController({ media, onMediaClick, debugElRef, tuningGenVersion, sh
     // Checked every frame, not on mouse moves, because the gallery glides
     // under a still cursor.
     if (!s.isDragging) {
-      const want = s.pointerOnCanvas && !frozen && imageUnder(scene, camera, s.mouse) ? "pointer" : "grab";
+      hoveredImage = s.pointerOnCanvas && !frozen ? imageUnder(scene, camera, s.mouse) : null;
+      const want = hoveredImage ? "pointer" : "grab";
       if (gl.domElement.style.cursor !== want) gl.domElement.style.cursor = want;
+    } else {
+      hoveredImage = null;
     }
 
     const zoomFactor = clamp(s.basePos.z / 50, 0.3, 2.0);
@@ -1116,10 +1137,9 @@ function SceneColours() {
   const invalidate = useThree((state) => state.invalidate);
   React.useEffect(() => {
     const apply = () => {
-      const settings = getSettings();
-      if (!settings.background && !scene.userData.siteColoured) return;
+      const bg = backgroundOf(getSettings());
+      if (bg === "#ffffff" && !scene.userData.siteColoured) return;
       scene.userData.siteColoured = true;
-      const bg = backgroundOf(settings);
       if (scene.background instanceof THREE.Color) scene.background.set(bg);
       scene.fog?.color.set(bg);
       invalidate();

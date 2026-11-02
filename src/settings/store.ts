@@ -32,6 +32,47 @@ export const DEFAULTS: Settings = { riseGapMs: RISE_GAP_MS, riseWaveMaxMs: RISE_
 const STORAGE_KEY = "rh:settings";
 const WHITE = "#ffffff";
 
+/**
+ * Light and dark (the owner, 2 Nov: "super simple" for now; the colours get
+ * tuned later). Dark only swaps the site's white for DARK: the text is blended
+ * by difference, so it turns light by itself, and the canvas's background and
+ * fog follow (SceneColours). The theme is on <html> as data-theme, for styles
+ * that want to differ. The visitor's choice (the Dark/Light link in the frame)
+ * is kept in THEME_KEY; without one, the system's setting decides. index.html
+ * applies it before anything paints. A background set in the settings panel
+ * still wins over either.
+ */
+export type Theme = "light" | "dark";
+const DARK = "#111111";
+const THEME_KEY = "rh:theme";
+const prefersDark = () => window.matchMedia("(prefers-color-scheme: dark)").matches;
+
+function loadTheme(): { theme: Theme; chosen: boolean } {
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved === "light" || saved === "dark") return { theme: saved, chosen: true };
+  } catch {
+    // Storage blocked: follow the system.
+  }
+  return { theme: prefersDark() ? "dark" : "light", chosen: false };
+}
+
+let { theme, chosen: themeChosen } = loadTheme();
+
+export const getTheme = () => theme;
+
+export function setTheme(next: Theme) {
+  theme = next;
+  themeChosen = true;
+  try {
+    localStorage.setItem(THEME_KEY, next);
+  } catch {
+    // Storage blocked: the theme still applies until a reload.
+  }
+  applyColours();
+  for (const listener of listeners) listener();
+}
+
 /** `#rgb` or `#rrggbb`, as `#rrggbb` in lower case; null for anything else. */
 export function normalizeHex(value: string): string | null {
   const m = value.trim().match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i);
@@ -97,8 +138,8 @@ export function changedKeys(settings: Settings = current): (keyof Settings)[] {
   return (Object.keys(DEFAULTS) as (keyof Settings)[]).filter((key) => settings[key] !== DEFAULTS[key]);
 }
 
-/** The background in use, the site's white included. */
-export const backgroundOf = (settings: Settings) => settings.background ?? WHITE;
+/** The background in use: the settings panel's, else the theme's (white or DARK). */
+export const backgroundOf = (settings: Settings) => settings.background ?? (theme === "dark" ? DARK : WHITE);
 
 export function setSettings(patch: Partial<Settings>) {
   current = { ...current, ...patch };
@@ -123,11 +164,20 @@ export const resetSettings = () => setSettings(DEFAULTS);
 function applyColours() {
   const root = document.documentElement.style;
   const put = (name: string, value: string | null) => (value ? root.setProperty(name, value) : root.removeProperty(name));
-  const { background, text } = current;
-  const bg = background ?? WHITE;
-  put("--site-bg", background);
-  put("--site-text", text ?? (background ? autoText(bg) : null));
+  const { text } = current;
+  const bg = backgroundOf(current);
+  document.documentElement.dataset.theme = theme;
+  put("--site-bg", bg === WHITE ? null : bg);
+  put("--site-text", text ?? (bg === WHITE ? null : autoText(bg)));
   put("--ink", text ? inkFor(bg, text) : null);
 }
 
 applyColours();
+
+// Without a choice of their own, the site follows the system as it changes.
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  if (themeChosen) return;
+  theme = prefersDark() ? "dark" : "light";
+  applyColours();
+  for (const listener of listeners) listener();
+});

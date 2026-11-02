@@ -24,6 +24,15 @@
       splash = splash && localStorage.getItem('rh:splash-seen') !== '1';
     } catch (e) {}
     document.documentElement.className = splash ? 'js splash' : 'js';
+    // Light or dark, also before anything paints (src/settings/store.ts keeps
+    // it from here): the visitor's choice, else the system's setting.
+    var theme = null;
+    try {
+      theme = localStorage.getItem('rh:theme');
+    } catch (e) {}
+    if (theme !== 'light' && theme !== 'dark') theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    document.documentElement.dataset.theme = theme;
+    if (theme === 'dark') document.documentElement.style.setProperty('--site-bg', '#111111');
   </script>
 </head>
 
