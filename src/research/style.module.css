@@ -94,11 +94,34 @@
   background: #f2f2f2;
 }
 
+/* The waterfall: columns side by side, each a stack of images. The script
+   decides how many columns and which images go in each; this only spaces them,
+   with the grid's gap both across and down. */
+.waterfall {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.5rem;
+  padding: 5rem var(--page-padding, 1.5rem) 6rem;
+}
+
+.column {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
 /* Phones get three columns, as in the demo, and no slider — there's no room
    for it beside the nav. */
 @media screen and (max-width: 767px) {
   .grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  .waterfall,
+  .column {
     gap: 0.75rem;
   }
 

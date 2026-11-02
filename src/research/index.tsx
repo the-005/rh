@@ -3,16 +3,21 @@ import manifest from "./manifest.json";
 import styles from "./style.module.css";
 
 /**
- * Research: the work as a contact sheet. A plain grid, images at their own
- * aspect ratios and hung from the top of each row. It started as the Codrops
+ * Research: the work as a contact sheet, images at their own aspect ratios.
+ * Laid out as a waterfall: columns of equal width, each image going into the
+ * shortest column so far, so the order still reads left to right and every
+ * column runs on at its own pace (the owner asked to try it, 2 Nov). The grid
+ * it replaced, images hung from the top of each row, is still at
+ * `/research?layout=grid` to compare. It started as the Codrops
  * grid-layout-transition demo; its numbering and its FLIP tween are gone, and
  * its five scale buttons became a slider.
  *
- * The slider sets a target tile width. The grid fits as many columns of at
- * least that width as the row holds and stretches them to fill it, so the
+ * The slider sets a target tile width. Both layouts fit as many columns of at
+ * least that width as the row holds and stretch them to fill it, so the
  * layout moves a column at a time and both edges stay put — Eagle's zoom, which
  * also lands each change in a single frame rather than tweening tiles between
- * cells (that read as lag).
+ * cells (that read as lag). The waterfall knows each image's height from the
+ * manifest, so it places them without waiting for anything to load.
  *
  * Images and their order come from `manifest.json`, written by
  * `npm run research:images` (see CLAUDE.md, "Research media").
@@ -42,10 +47,31 @@ function snap(value: number) {
   return Math.abs(nearest - value) <= SNAP ? nearest : value;
 }
 
+type Item = (typeof manifest)[number];
+
+// Phones get three columns, as in the demo (matches the stylesheet).
+const PHONE = "(max-width: 767px)";
+
+// Each image goes into the shortest column so far. Heights are in column
+// widths (an image's height ÷ width), plus the gap between images.
+function waterfall(items: Item[], columns: number, gapInWidths: number) {
+  const cols: Item[][] = Array.from({ length: columns }, () => []);
+  const heights = new Array<number>(columns).fill(0);
+  for (const item of items) {
+    const i = heights.indexOf(Math.min(...heights));
+    cols[i].push(item);
+    heights[i] += item.height / item.width + gapInWidths;
+  }
+  return cols;
+}
+
 export function ResearchPage() {
   const [scale, setScale] = React.useState(75);
   const [max, setMax] = React.useState(MAX_FLOOR * 3);
+  // The row the images share: its inner width and the gap between columns.
+  const [row, setRow] = React.useState(() => ({ width: window.innerWidth - 48, gap: 24, phone: window.matchMedia(PHONE).matches }));
   const gridRef = React.useRef<HTMLDivElement>(null);
+  const layout = new URLSearchParams(window.location.search).get("layout") === "grid" ? "grid" : "waterfall";
 
   // The far end. A row of R holds two tiles of t with gap g while 2t + g ≤ R,
   // so past (R − g) / 2 it holds one. Two per row spans tiles about 1.5× apart
@@ -58,6 +84,7 @@ export function ResearchPage() {
       const row = grid.clientWidth - Number.parseFloat(cs.paddingLeft) - Number.parseFloat(cs.paddingRight);
       const gap = Number.parseFloat(cs.columnGap) || 0;
       setMax(Math.max(MAX_FLOOR, ((1.5 * (row - gap)) / 2 / BASE_TILE) * 100));
+      setRow({ width: row, gap, phone: window.matchMedia(PHONE).matches });
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -66,6 +93,21 @@ export function ResearchPage() {
   }, []);
 
   const shown = Math.min(scale, max);
+  const tile = Math.min((BASE_TILE * shown) / 100, row.width);
+  const columns = row.phone ? 3 : Math.max(1, Math.floor((row.width + row.gap) / (tile + row.gap)));
+  const columnWidth = (row.width - (columns - 1) * row.gap) / columns;
+  const image = (item: Item) => (
+    <img
+      key={item.url}
+      className={styles.image}
+      src={`/${item.url}`}
+      width={item.width}
+      height={item.height}
+      alt=""
+      loading="lazy"
+      decoding="async"
+    />
+  );
   const toTrack = (value: number) => Math.round((TRACK * Math.log(value / MIN)) / Math.log(max / MIN));
   const fromTrack = (t: number) => MIN * (max / MIN) ** (t / TRACK);
 
@@ -100,24 +142,24 @@ export function ResearchPage() {
         />
       </div>
 
-      <div
-        ref={gridRef}
-        className={styles.grid}
-        style={{ "--tile": `${(BASE_TILE * shown) / 100}px` } as React.CSSProperties}
-      >
-        {manifest.map((item) => (
-          <img
-            key={item.url}
-            className={styles.image}
-            src={`/${item.url}`}
-            width={item.width}
-            height={item.height}
-            alt=""
-            loading="lazy"
-            decoding="async"
-          />
-        ))}
-      </div>
+      {layout === "grid" ? (
+        <div
+          ref={gridRef}
+          className={styles.grid}
+          style={{ "--tile": `${(BASE_TILE * shown) / 100}px` } as React.CSSProperties}
+        >
+          {manifest.map(image)}
+        </div>
+      ) : (
+        <div ref={gridRef} className={styles.waterfall}>
+          {waterfall(manifest, columns, row.gap / columnWidth).map((column, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: columns have no identity beyond their place
+            <div key={i} className={styles.column}>
+              {column.map(image)}
+            </div>
+          ))}
+        </div>
+      )}
     </main>
   );
 }
