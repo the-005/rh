@@ -13,6 +13,11 @@
   --size-k: 0.5;
   /* Never taller than this, and never wider than the page's margins allow. */
   --size-max: 80vh;
+  /* The middle of every row is kept empty for the picture: name and kind sit
+     to its left, year and credits to its right, and the picture is never wider
+     than this, so no text lies on it (the owner, 2 Nov, after
+     emilieaubry.com/work). */
+  --clear: 44vw;
 }
 
 .page {
@@ -62,15 +67,16 @@
   padding: 5rem 0;
 }
 
-/* One line per project, in columns that line up down the list: name, kind,
-   year or season, credits. After Dakota Giglio's work list
-   (dakotagiglio.com/work#list): the name takes whatever the window leaves, and
-   the other three keep fixed widths at the right, credits against the edge, so
-   they hold still as the window changes and the credits' "+N" counts the same
-   at any width. Sized by its padding, 20px above and below the text. */
+/* One line per project, in columns that line up down the list: name and kind
+   to the left of the middle, year or season and credits to its right, credits
+   against the edge. The middle track (--clear) stays empty for the picture,
+   and the two sides mirror each other so it's centred on the window, as the
+   picture is. Sized by its padding, 20px above and below the text. Until
+   2 Nov the name took the left and the other three sat at the right in fixed
+   widths (after dakotagiglio.com/work#list), under the picture. */
 .row {
   display: grid;
-  grid-template-columns: 1fr 120px 100px 300px;
+  grid-template-columns: minmax(0, 1fr) 100px var(--clear) 100px minmax(0, 1fr);
   align-items: baseline;
   gap: 1.5rem;
   width: 100%;
@@ -223,7 +229,16 @@
 }
 
 .title {
+  grid-column: 1;
   min-width: 0;
+}
+
+.kind {
+  grid-column: 2;
+}
+
+.year {
+  grid-column: 4;
 }
 
 /* Kind, year and credits: the name's size, in grey (#666 reads as #999), and
@@ -252,6 +267,7 @@
    playing): one credit a line, role and name, hanging from the row's first
    line, over the rows below, which have faded back while it plays. */
 .credits {
+  grid-column: 5;
   position: relative;
 }
 
@@ -360,6 +376,18 @@
     grid-template-columns: 5fr 2fr 2fr 3fr;
     gap: 1rem;
   }
+
+  .kind {
+    grid-column: 2;
+  }
+
+  .year {
+    grid-column: 3;
+  }
+
+  .credits {
+    grid-column: 4;
+  }
 }
 
 /* Fixed and centred on the screen, so it holds its place while the list scrolls
@@ -382,7 +410,7 @@
   height: min(
     calc(var(--size-anchor) * pow(var(--r) / 0.8, calc(-1 * var(--size-k)))),
     var(--size-max),
-    calc((100vw - 2 * var(--page-padding, 1.5rem)) / var(--r))
+    calc(var(--clear) / var(--r))
   );
   width: auto;
   aspect-ratio: var(--r);

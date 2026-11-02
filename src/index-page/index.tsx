@@ -702,8 +702,8 @@ export function IndexPage() {
                 }}
               >
                 <span className={styles.title}>{project.title}</span>
-                <span className={styles.meta}>{project.kind}</span>
-                <span className={styles.meta}>{project.year}</span>
+                <span className={`${styles.meta} ${styles.kind}`}>{project.kind}</span>
+                <span className={`${styles.meta} ${styles.year}`}>{project.year}</span>
                 {/* Open while the row plays, and while it's stopped where it is. */}
                 <Credits credits={project.credits} open={openRow === index} />
                 {active === index && <Playhead count={project.images.length} spot={spot} playing={playing} />}
