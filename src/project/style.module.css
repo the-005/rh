@@ -28,7 +28,7 @@
   border: none;
   color: var(--ink, #ffffff);
   mix-blend-mode: difference;
-  font-size: 1.75rem;
+  font-size: var(--font-size);
   line-height: 1;
   cursor: pointer;
   padding: 0.25rem 0.5rem;
@@ -50,7 +50,7 @@
   transform: translateX(-50%);
   z-index: 20;
   font-family: var(--font-sans);
-  font-size: 0.9rem;
+  font-size: var(--font-size);
   font-weight: 300;
   color: var(--ink, #ffffff);
   mix-blend-mode: difference;

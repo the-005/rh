@@ -65,6 +65,10 @@
   --color-link-hover: #fff;
   --page-padding: 1.5rem;
   --font-sans: "Neue Haas Grotesk Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  /* The one type size on the site until the UI is refined (the owner, 2 Nov).
+     Every rule that sets a size uses it. The root's 12px above stays: it is the
+     rem that all the spacing is measured in. */
+  --font-size: 14px;
 }
 
 /* Under the intro splash (index.html sets the class), black: the video opens on black. */
@@ -81,6 +85,7 @@
 body {
   margin: 0;
   padding: 0;
+  font-size: var(--font-size);
   color: var(--color-text);
   background-color: var(--color-background);
 }
