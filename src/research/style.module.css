@@ -75,13 +75,12 @@
   outline-offset: 4px;
 }
 
-/* Clears the frame's top row. auto-fill + minmax fits as many columns of at
-   least --tile as the row holds and stretches them to fill it; align-items:
-   start hangs every image from the top of its row. No transitions: a change
-   lands in a single frame. */
+/* The grid (/research?layout=grid). Clears the frame's top row; --columns
+   comes from the slider; align-items: start hangs every image from the top of
+   its row. No transitions: a change lands in a single frame. */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(var(--tile), 100%), 1fr));
+  grid-template-columns: repeat(var(--columns, 7), minmax(0, 1fr));
   align-items: start;
   gap: 1.5rem;
   padding: 5rem var(--page-padding, 1.5rem) 6rem;
