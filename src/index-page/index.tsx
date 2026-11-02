@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ASPECTS, type Credit, PROJECTS, type ProjectEntry } from "~/src/projects";
+import { ASPECTS, CANVAS_COPIES, type Credit, PROJECTS, type ProjectEntry } from "~/src/projects";
 import styles from "./style.module.css";
 
 /**
@@ -95,6 +95,15 @@ function rowMoveEase(t: number) {
   const u = (lo + hi) / 2;
   return 3 * u * u - 2 * u * u * u;
 }
+
+/**
+ * The file the index shows for an image: the 1000px canvas copy, to see if it
+ * holds up at the index's size (the owner, 2 Nov, to avoid a third copy), or
+ * the 3000px one at `/index?copy=3000`, to compare. Images are still known by
+ * their full-size url everywhere else (sizes, order, the preview's layers).
+ */
+const FULL_SIZE = new URLSearchParams(window.location.search).get("copy") === "3000";
+const fileFor = (url: string) => `/${FULL_SIZE ? url : (CANVAS_COPIES.get(url) ?? url)}`;
 
 /** Every Work image, for the random picks. */
 const ALL_IMAGES = PROJECTS.flatMap((project) => project.images);
@@ -220,7 +229,7 @@ export function IndexPage() {
     warmedRef.current.add(project.id);
     for (const url of project.images) {
       const img = new Image();
-      img.src = `/${url}`;
+      img.src = fileFor(url);
     }
   };
 
@@ -904,7 +913,7 @@ function Crossfade({ src, playing }: { src: string | null; playing: boolean }) {
         if (el) elsRef.current.set(layer.id, el);
         else elsRef.current.delete(layer.id);
       }}
-      src={`/${layer.src}`}
+      src={fileFor(layer.src)}
       alt=""
       decoding="async"
       className={`${styles.previewImg} ${layer.leaving ? styles.previewLeaving : ""}`}

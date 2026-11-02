@@ -44,9 +44,26 @@ const INFO: Record<string, ProjectInfo> = projectInfo;
  * Stand-ins for a project with no entry in `info.json` yet. The credits run
  * from two to six down the list, so some rows show all of theirs and some a
  * "+N", and the roles and names vary in length (short, long, hyphenated, a
- * middle name, a studio) to show how real ones would sit. Still plainly
- * placeholders: no real person's name.
+ * middle name, a studio) to show how real ones would sit. Names, kinds and
+ * years vary in length too (the owner, 2 Nov), from one word to a name long
+ * enough to wrap, so the rows show what has to move around the picture. Still
+ * plainly placeholders: no real person's name, no real project.
  */
+const PLACEHOLDER_TITLES = [
+  "Project name",
+  "Name",
+  "A longer project name",
+  "Project name for a campaign in several parts",
+  "Short",
+  "Project name, chapter two",
+  "Title of the project",
+  "A project name that runs on for quite a while",
+  "Two words",
+  "Project",
+  "Project name with a subtitle",
+];
+const PLACEHOLDER_KINDS = ["Kind", "Longer kind", "Kind of work", "Kind", "A longer kind of work"];
+const PLACEHOLDER_YEARS = ["Year", "Season Year", "Year", "Season, Year", "Year–Year"];
 const PLACEHOLDER_ROLES = [
   "Photography",
   "Styling",
@@ -71,9 +88,9 @@ const PLACEHOLDER_NAMES = [
 ];
 function placeholder(order: number): Required<ProjectInfo> {
   return {
-    name: "Project name",
-    kind: "Kind",
-    year: "Year",
+    name: PLACEHOLDER_TITLES[order % PLACEHOLDER_TITLES.length],
+    kind: PLACEHOLDER_KINDS[(order * 2) % PLACEHOLDER_KINDS.length],
+    year: PLACEHOLDER_YEARS[(order * 3) % PLACEHOLDER_YEARS.length],
     credits: Array.from({ length: 2 + ((order * 3) % 5) }, (_, i) => ({
       role: PLACEHOLDER_ROLES[(order * 3 + i) % PLACEHOLDER_ROLES.length],
       name: PLACEHOLDER_NAMES[(order * 5 + i * 3) % PLACEHOLDER_NAMES.length],
@@ -115,3 +132,6 @@ export const PROJECTS: ProjectEntry[] = (() => {
 
 /** Width ÷ height of every Work image, by url, for anything sized by its shape. */
 export const ASPECTS: ReadonlyMap<string, number> = new Map(ALL_MEDIA.map((item) => [item.url, item.width / item.height]));
+
+/** Each image's 1000px canvas copy, keyed by its full-size url. */
+export const CANVAS_COPIES: ReadonlyMap<string, string> = new Map(ALL_MEDIA.map((item) => [item.url, item.canvasUrl]));
