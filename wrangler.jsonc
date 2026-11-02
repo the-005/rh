@@ -1,0 +1,17 @@
+// Hosting on Cloudflare (moving off Netlify, 2 Nov): a Worker that serves the
+// built site from dist/. Cloudflare builds it from GitHub on every push to main
+// (build command `npm run build`, deploy command `npx wrangler deploy`).
+{
+  "name": "rh",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./dist",
+    // A single-page app: /index, /research, /about and /project/:id all get
+    // index.html with a 200, so a reload or a shared link works. Real files
+    // (images, fonts, video) are served first.
+    "not_found_handling": "single-page-application",
+    // No guessing at .html files: otherwise /index would be read as the address
+    // of index.html and redirected home, the same trap Netlify had.
+    "html_handling": "none"
+  }
+}
