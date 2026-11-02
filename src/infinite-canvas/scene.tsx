@@ -758,15 +758,19 @@ function Chunk({
   );
 }
 
-/** How visible an image must be for the cursor to offer it: faint ones far off read as empty space. */
-const HOVER_MIN_OPACITY = 0.15;
+/**
+ * How visible an image must be for the cursor to offer it. It was 0.15 ("faint
+ * ones far off read as empty space"); lowered on 3 Nov so the faint ones can be
+ * hovered and brought forward, which the owner couldn't do with one in the middle.
+ */
+const HOVER_MIN_OPACITY = 0.05;
 /**
  * The image under the pointer gains opacity (the owner, 2 Nov): it goes this
  * share of the way from where its depth puts it to fully opaque, easing there
- * as every plane's opacity does. Images already at full strength don't change;
- * the faint, far ones come forward.
+ * as every plane's opacity does. Full (1) since 3 Nov: at 0.6 a faint one in
+ * the middle barely changed, and the owner wants to at least see the image.
  */
-const HOVER_GAIN = 0.6;
+const HOVER_GAIN = 1;
 /** The image the pointer is over, as the click would pick it; null when none. Set each frame by SceneController. */
 let hoveredImage: THREE.Object3D | null = null;
 const hoverRay = new THREE.Raycaster();

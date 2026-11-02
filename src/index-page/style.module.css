@@ -61,8 +61,25 @@
    'backwards' only holds them invisible until they start: once in, the rows'
    own dimming takes over their opacity again. */
 .list > li {
-  animation: fadeIn var(--row-in) ease backwards;
+  animation: rowIn var(--row-in) ease backwards;
   animation-delay: calc(min(var(--i, 0), 12) * var(--row-step));
+}
+
+/* A fading element is drawn on its own before it meets the page, so the row's
+   difference blend would see nothing behind it: the names (the lightest ink)
+   stayed invisible and popped in at the end while the greys faded. Blending
+   the fading <li> itself carries the difference through to the page, so every
+   column fades evenly. Only for the fade: after it, the row blends as before
+   and the active row still rises over the picture. */
+@keyframes rowIn {
+  from {
+    opacity: 0;
+    mix-blend-mode: difference;
+  }
+  to {
+    opacity: 1;
+    mix-blend-mode: difference;
+  }
 }
 
 .preview {
