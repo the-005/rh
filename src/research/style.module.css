@@ -93,6 +93,26 @@
   background: #f2f2f2;
 }
 
+/* The contact sheet (the slider's first notch). The script sets the box size
+   and the gap, the same across and down; each image is centred in its box, so
+   a row's images share its centre line. The sheet is centred in the window
+   while it fits, and starts under the frame once it doesn't. */
+.sheet {
+  display: grid;
+  grid-template-columns: repeat(var(--columns), var(--box));
+  grid-auto-rows: var(--box);
+  gap: var(--sheet-gap);
+  align-content: center;
+  min-height: 100%;
+  padding: 5rem var(--page-padding, 1.5rem) 6rem;
+}
+
+.cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* The waterfall: columns side by side, each a stack of images. The script
    decides how many columns and which images go in each; this only spaces them,
    with the grid's gap both across and down. */
