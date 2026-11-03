@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { type Credit, type Item, isImage, isVideo, KINDS, keys, type Options, type Project, ROLES, slug } from "../shared.ts";
 import { api, type Loaded, mediaUrl } from "./api.ts";
 import { Combo } from "./combo.tsx";
+import { filesFromDrop } from "./folders.ts";
 import { fieldValue } from "./material.ts";
 import { upload } from "./upload.ts";
 
@@ -34,6 +35,9 @@ export const createdHere = new Set<string>();
 
 const blank: Draft = { id: null, name: "", kind: "", year: "", credits: [{ role: "", name: "" }], items: [] };
 
+// A file's name without its extension, for telling whether it's already here.
+const stem = (name: string) => name.replace(/\.[^.]+$/, "").toLowerCase();
+
 const byName = (a: File, b: File) => a.name.localeCompare(b.name, undefined, { numeric: true });
 
 const size = (bytes = 0) =>
@@ -55,6 +59,7 @@ export function Editor({ id }: { id: string | null }) {
   const [over, setOver] = React.useState(false);
   const listRef = React.useRef<HTMLOListElement>(null);
   const fileRef = React.useRef<HTMLInputElement>(null);
+  const folderRef = React.useRef<HTMLInputElement>(null);
   // The project this editor already holds, so arriving at its address after
   // the first save doesn't load it again over this session's previews.
   const holding = React.useRef<string | null>(null);
@@ -129,9 +134,19 @@ export function Editor({ id }: { id: string | null }) {
     setNotice("");
     const projectId = await ensureId();
     if (!projectId) return;
-    const accepted = files.filter((f) => isImage(f.name, f.type) || isVideo(f.name, f.type)).sort(byName);
-    const skipped = files.filter((f) => !accepted.includes(f));
-    if (skipped.length) setNotice(`Skipped what isn't an image or a video: ${skipped.map((f) => f.name).join(", ")}`);
+    const media = files.filter((f) => isImage(f.name, f.type) || isVideo(f.name, f.type));
+    // A file the project already has (same name, any extension, same kind) is
+    // left out, so dropping a whole client folder onto a project brought in
+    // from the site adds only what it lacks: its videos (the owner, 4 Nov).
+    const kindOf = (name: string, type = "") => (isVideo(name, type) ? "video" : "image");
+    const has = new Set(draft.items.map((i) => `${i.type}:${stem(i.file)}`));
+    const accepted = media.filter((f) => !has.has(`${kindOf(f.name, f.type)}:${stem(f.name)}`)).sort(byName);
+    const notes = [];
+    if (accepted.length) notes.push(`Adding ${accepted.length} file${accepted.length === 1 ? "" : "s"} at the end.`);
+    if (media.length > accepted.length) notes.push(`${media.length - accepted.length} already in the project, skipped.`);
+    const other = files.filter((f) => !media.includes(f));
+    if (other.length) notes.push(`Not images or videos, skipped: ${other.map((f) => f.name).join(", ")}`);
+    setNotice(notes.join(" "));
     const rows: Row[] = accepted.map((file) => {
       const itemId = crypto.randomUUID().slice(0, 8);
       const original = keys.original(projectId, itemId, file.name);
@@ -330,13 +345,15 @@ export function Editor({ id }: { id: string | null }) {
           onDrop={(e) => {
             e.preventDefault();
             setOver(false);
-            add([...e.dataTransfer.files]);
+            filesFromDrop(e.dataTransfer).then(add);
           }}
           onClick={() => fileRef.current?.click()}
         >
           <md-icon>upload</md-icon>
-          <span className="md-typescale-body-large">Drop images and videos here, or click to choose</span>
-          <span className="md-typescale-body-medium">They upload as they are, any size.</span>
+          <span className="md-typescale-body-large">Drop images, videos or a whole folder here, or click to choose</span>
+          <span className="md-typescale-body-medium">
+            They upload as they are, any size. New ones go at the end; what the project already has is skipped.
+          </span>
         </button>
         <input
           ref={fileRef}
@@ -349,6 +366,21 @@ export function Editor({ id }: { id: string | null }) {
             e.target.value = "";
           }}
         />
+        <input
+          ref={folderRef}
+          type="file"
+          hidden
+          // A whole folder, subfolders included (Chrome, Safari, Firefox).
+          {...{ webkitdirectory: "" }}
+          onChange={(e) => {
+            add([...(e.target.files ?? [])].filter((f) => !f.name.startsWith(".")));
+            e.target.value = "";
+          }}
+        />
+        <md-text-button disabled={!!saving} onClick={() => folderRef.current?.click()}>
+          <md-icon slot="icon">folder_open</md-icon>
+          Choose a folder
+        </md-text-button>
 
         {draft.items.length > 0 && (
           <p className="hint md-typescale-body-medium">
