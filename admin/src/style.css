@@ -97,7 +97,8 @@ main {
   margin-top: 8px;
 }
 
-/* The project list: outlined cards, the whole card a link. */
+/* The project list: one row per project, the whole row a link, a handle at
+   its left to drag it up or down. */
 .list-head {
   display: flex;
   justify-content: space-between;
@@ -108,42 +109,66 @@ main {
 .projects {
   list-style: none;
   margin: 16px 0 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 16px;
+  padding: 8px;
+  border-radius: 16px;
+  background: var(--md-sys-color-surface-container-low);
 }
 
-.project-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 0 0 16px;
-  border: 1px solid var(--md-sys-color-outline-variant);
+.projects li {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+}
+
+.projects li + li {
+  border-top: 1px solid var(--md-sys-color-outline-variant);
+}
+
+.projects li.dragging {
   border-radius: 12px;
-  overflow: hidden;
-  background: var(--md-sys-color-surface-container-lowest);
+  background: var(--md-sys-color-secondary-container);
+}
+
+.project-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) auto 24px;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 12px 10px 4px;
+  border-radius: 12px;
   text-decoration: none;
   outline: none;
 }
 
-.project-card img,
+.project-row img,
 .cover.empty {
   display: block;
-  width: 100%;
-  aspect-ratio: 4 / 3;
+  width: 96px;
+  height: 64px;
   object-fit: cover;
+  border-radius: 8px;
   background: var(--md-sys-color-surface-container-high);
-  margin-bottom: 12px;
 }
 
-.project-card .name,
-.project-card .meta {
-  padding: 0 16px;
+.row-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.row-text .name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .meta {
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.chevron {
   color: var(--md-sys-color-on-surface-variant);
 }
 
@@ -386,6 +411,20 @@ md-outlined-select {
     grid-template-columns: 48px 72px minmax(0, 1fr) 48px 48px;
   }
 
+  .project-row {
+    grid-template-columns: 72px minmax(0, 1fr) 24px;
+  }
+
+  .project-row > .meta {
+    display: none;
+  }
+
+  .project-row img,
+  .cover.empty {
+    width: 72px;
+    height: 48px;
+  }
+
   .number,
   .state {
     display: none;
@@ -419,26 +458,14 @@ main.wide {
   padding: 0;
 }
 
-/* Project cards: a handle over each card's top left drags it. */
-.projects li {
-  position: relative;
-}
-
-.projects li.dragging .project-card {
-  outline: 2px solid var(--md-sys-color-primary);
-  opacity: 0.85;
-}
-
+/* Project rows: the handle at each row's left drags it. */
 .card-handle {
-  position: absolute;
-  z-index: 1;
-  top: 8px;
-  left: 8px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--md-sys-color-surface) 70%, transparent);
   cursor: grab;
   touch-action: none;
-  --md-icon-button-icon-color: var(--md-sys-color-on-surface);
+}
+
+.dragging .card-handle {
+  cursor: grabbing;
 }
 
 .list > .hint {

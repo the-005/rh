@@ -133,7 +133,7 @@ export function List() {
         <p className="hint md-typescale-body-medium">
           {orderNote || (
             <>
-              Drag <md-icon>drag_indicator</md-icon> to change the order of the projects on the site's index.
+              Drag <md-icon>drag_indicator</md-icon> up or down to change the order of the projects on the site's index.
             </>
           )}
         </p>
@@ -167,18 +167,21 @@ export function List() {
             >
               <md-icon>drag_indicator</md-icon>
             </md-icon-button>
-            <Link href={`/p/${encodeURIComponent(p.id)}`} className="project-card">
+            <Link href={`/p/${encodeURIComponent(p.id)}`} className="project-row">
               <md-ripple />
               <md-focus-ring />
               {p.cover ? <img src={mediaUrl(p.cover)} alt="" loading="lazy" /> : <span className="cover empty" />}
-              <span className="name md-typescale-title-medium">{p.name}</span>
-              <span className="meta md-typescale-body-medium">
-                {[p.kind, p.year].filter(Boolean).join(" · ") || "No kind or year yet"}
+              <span className="row-text">
+                <span className="name md-typescale-title-medium">{p.name}</span>
+                <span className="meta md-typescale-body-medium">
+                  {[p.kind, p.year].filter(Boolean).join(" · ") || "No kind or year yet"}
+                </span>
               </span>
-              <span className="meta md-typescale-body-small">
+              <span className="meta md-typescale-body-medium">
                 {p.images} image{p.images === 1 ? "" : "s"}
                 {p.videos ? `, ${p.videos} video${p.videos === 1 ? "" : "s"}` : ""}
               </span>
+              <md-icon className="chevron">chevron_right</md-icon>
             </Link>
           </li>
         ))}
