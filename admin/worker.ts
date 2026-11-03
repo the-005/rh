@@ -239,21 +239,26 @@ async function completeUpload(request: Request, env: Env) {
   return json({ key: object.key, size: object.size });
 }
 
-// Today's web copies, copied from the site into storage, a few per request.
+// Today's web copies, copied from the site into storage, a few per request,
+// all at once: storage is in Western Europe and each copy is a round trip from
+// wherever the Worker runs (one at a time it took ~5s an image from Australia).
 async function importCopies(request: Request, env: Env) {
   const body = (await request.json()) as { copies: { from: string; to: string }[] };
   if (!Array.isArray(body.copies) || body.copies.length > 12) return fail("Up to 12 at a time.");
-  let copied = 0;
   for (const { from, to } of body.copies) {
     if (!/^work\/[^?#]+\.jpg$/.test(from) || !/^projects\/[\w-]+\/web\/(full|mid|canvas)\/[\w-]+\.jpg$/.test(to))
       return fail("Bad copy.");
-    if (await env.MEDIA.head(to)) continue;
-    const response = await env.SITE.fetch(`https://site/${from.split("/").map(encodeURIComponent).join("/")}`);
-    if (!response.ok) return fail(`Couldn't read ${from} from the site (${response.status}).`, 502);
-    await env.MEDIA.put(to, await response.arrayBuffer(), { httpMetadata: { contentType: "image/jpeg" } });
-    copied++;
   }
-  return json({ copied });
+  const copied = await Promise.all(
+    body.copies.map(async ({ from, to }) => {
+      if (await env.MEDIA.head(to)) return false;
+      const response = await env.SITE.fetch(`https://site/${from.split("/").map(encodeURIComponent).join("/")}`);
+      if (!response.ok) throw new Error(`Couldn't read ${from} from the site (${response.status}).`);
+      await env.MEDIA.put(to, await response.arrayBuffer(), { httpMetadata: { contentType: "image/jpeg" } });
+      return true;
+    })
+  );
+  return json({ copied: copied.filter(Boolean).length });
 }
 
 // A file from storage, with ranges so a video can play and seek.
