@@ -18,7 +18,8 @@
   "services": [{ "binding": "SITE", "service": "rh" }],
   "vars": {
     "TEAM_DOMAIN": "https://rubenhilkens.cloudflareaccess.com",
-    // The Access application's audience tag; until it's set, nothing gets in.
-    "POLICY_AUD": ""
+    // The Access application's audience tag (Worker > Access > Application
+    // values); requests signed for any other application are refused.
+    "POLICY_AUD": "f0894d03df5c2142f9421398b5f236dd9c0f00a8a7fefd2936c38c4713ff97e2"
   }
 }
