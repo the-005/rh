@@ -8,7 +8,7 @@ import { upload } from "./upload.ts";
  * One project: its name, kind, year and collaborators, and its images and
  * videos in order of appearance. Files upload as soon as they're added, as
  * they are; saving waits for them, then queues what's new (images for their web
- * copies, videos for the Preview Cutter). The order is dragged by the handle at
+ * copies, videos to be compressed with HandBrake and for the Preview Cutter). The order is dragged by the handle at
  * each row's left (or moved with the arrow keys on a focused handle).
  */
 
@@ -178,9 +178,12 @@ export function Editor({ id }: { id: string | null }) {
       };
       const saved = await api.save(project, !loaded);
       setLoaded(saved);
-      // Keep this session's previews until the web copies exist.
-      const locals = new Map(draft.items.map((i) => [i.id, i.local]));
-      setDraft((d) => ({ ...d, items: saved.project.items.map((i) => ({ ...i, local: locals.get(i.id) })) }));
+      // Keep this session's previews until the web copies exist, as they are
+      // now (the uploads finished while this waited).
+      setDraft((d) => {
+        const locals = new Map(d.items.map((i) => [i.id, i.local]));
+        return { ...d, items: saved.project.items.map((i) => ({ ...i, local: locals.get(i.id) })) };
+      });
       setDirty(false);
       setNotice("Saved.");
       holding.current = projectId;
@@ -305,6 +308,7 @@ export function Editor({ id }: { id: string | null }) {
         <button
           type="button"
           className={over ? "drop over" : "drop"}
+          disabled={!!saving}
           onDragOver={(e) => {
             e.preventDefault();
             setOver(true);
@@ -338,6 +342,7 @@ export function Editor({ id }: { id: string | null }) {
               <button
                 type="button"
                 className="handle"
+                disabled={!!saving}
                 aria-label={`Move ${item.file} (arrow keys)`}
                 onPointerDown={(e) => {
                   e.preventDefault();
@@ -366,6 +371,7 @@ export function Editor({ id }: { id: string | null }) {
               <button
                 type="button"
                 className="remove"
+                disabled={!!saving}
                 onClick={() => edit({ items: draft.items.filter((i) => i.id !== item.id) })}
                 aria-label={`Remove ${item.file}`}
               >
@@ -393,7 +399,8 @@ function Thumb({ item, loaded }: { item: Row; loaded: Loaded | null }) {
     const src = canvas ? mediaUrl(canvas) : item.local?.url;
     return src ? <img className="thumb" src={src} alt="" loading="lazy" /> : <span className="thumb empty" />;
   }
-  const src = item.local?.url ?? (item.original ? mediaUrl(item.original) : null);
+  const compressed = loaded?.status[item.id]?.video;
+  const src = item.local?.url ?? (compressed ? mediaUrl(compressed) : item.original ? mediaUrl(item.original) : null);
   return src ? <video className="thumb" src={`${src}#t=0.5`} preload="metadata" muted /> : <span className="thumb empty" />;
 }
 
@@ -402,14 +409,16 @@ function describe(item: Row, loaded: Loaded | null) {
   if (local?.state === "uploading") return `Uploading ${Math.floor(local.progress * 100)}%`;
   if (local?.state === "failed") return `Upload failed: ${local.error}`;
   const saved = loaded?.project.items.some((i) => i.id === item.id);
-  if (!saved)
-    return item.type === "image" ? "Uploaded. Processed once saved." : "Uploaded. Queued for the Preview Cutter once saved.";
-  if (item.type === "video") {
-    return loaded?.cutter.includes(item.id)
-      ? "In the Preview Cutter queue. Compression waits on the HandBrake presets."
-      : "Kept as uploaded.";
-  }
+  if (!saved) return "Uploaded. Processed once saved.";
   const status = loaded?.status[item.id];
+  if (item.type === "video") {
+    const cutter = loaded?.cutter.includes(item.id) ? " In the Preview Cutter queue." : "";
+    if (status?.state === "done") return `Compressed (${status.width}×${status.height}).${cutter}`;
+    if (status?.state === "failed") return `Couldn't compress: ${status.message ?? "unknown error"}`;
+    if (status?.state === "processing") return `Compressing with HandBrake…${cutter}`;
+    if (loaded?.processing.includes(item.id)) return `Waiting to be compressed (starts within about 15 minutes).${cutter}`;
+    return `Kept as uploaded.${cutter}`;
+  }
   if (item.copies || status?.state === "done") return "Ready";
   if (status?.state === "failed") return `Couldn't make the web copies: ${status.message ?? "unknown error"}`;
   if (status?.state === "processing") return "Processing…";

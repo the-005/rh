@@ -8,7 +8,7 @@
  * holds no password: each call carries a token GitHub signs for that workflow
  * run, and only a run of that workflow, from this repository's main branch,
  * gets in. Through it the processing reads what's queued, reads an original,
- * writes the web copies and records how each item went.
+ * writes the web copies (or a compressed video) and records how each item went.
  */
 
 import { createRemoteJWKSet, jwtVerify } from "jose";
@@ -68,6 +68,29 @@ async function pipeline(request: Request, env: Env, url: URL) {
       return json({ error: "Bad key." }, 400);
     await env.MEDIA.put(key, request.body, { httpMetadata: { contentType: "image/jpeg" } });
     return json({ ok: true });
+  }
+
+  // A compressed video, which can run to hundreds of MB: uploaded in pieces
+  // (R2 multipart), each under the Worker's request size limit.
+  if (url.pathname.startsWith("/api/pipeline/upload")) {
+    if (!/^projects\/[\w-]+\/web\/video\/[\w-]+\.mp4$/.test(key)) return json({ error: "Bad key." }, 400);
+    if (url.pathname === "/api/pipeline/upload" && request.method === "POST") {
+      const upload = await env.MEDIA.createMultipartUpload(key, { httpMetadata: { contentType: "video/mp4" } });
+      return json({ uploadId: upload.uploadId });
+    }
+    const uploadId = url.searchParams.get("uploadId");
+    if (!uploadId) return json({ error: "Bad upload." }, 400);
+    const upload = env.MEDIA.resumeMultipartUpload(key, uploadId);
+    if (url.pathname === "/api/pipeline/upload" && request.method === "PUT") {
+      const part = Number(url.searchParams.get("part"));
+      if (!Number.isInteger(part) || part < 1 || part > 10000 || !request.body) return json({ error: "Bad part." }, 400);
+      return json(await upload.uploadPart(part, request.body));
+    }
+    if (url.pathname === "/api/pipeline/upload/complete" && request.method === "POST") {
+      const { parts } = (await request.json()) as { parts: R2UploadedPart[] };
+      await upload.complete(parts);
+      return json({ ok: true });
+    }
   }
 
   // How an item went. Once it's done (or failed) it leaves the queue. The

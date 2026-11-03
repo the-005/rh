@@ -9,9 +9,9 @@
  *
  * Files go straight to storage (the rh-media bucket) in 10 MB pieces, so a
  * video of several GB uploads like a photo. Saving a project writes its
- * project.json and queues what's new: images for their web copies (made by
- * the processing on GitHub, see scripts/process-media.ts), videos for the
- * Preview Cutter.
+ * project.json and queues what's new for the processing on GitHub (see
+ * scripts/process-media.ts): images for their web copies, videos to be
+ * compressed with HandBrake. Videos also go to the Preview Cutter's queue.
  */
 
 import { createRemoteJWKSet, jwtVerify } from "jose";
@@ -185,17 +185,26 @@ async function saveProject(request: Request, env: Env, id: string, create: boole
     ...(item.original ? [item.original] : []),
     ...Object.values(item.copies ?? {}),
     ...Object.values(status[item.id]?.copies ?? {}),
+    ...(status[item.id]?.video ? [status[item.id]?.video as string] : []),
     keys.process(id, item.id),
     keys.cutter(id, item.id),
   ]);
   if (deletions.length) await env.MEDIA.delete(deletions);
 
-  // New items: images wait for their copies, videos for their preview.
+  // New items: images wait for their copies; videos wait to be compressed and,
+  // separately, for their preview in the Preview Cutter.
   const fresh = project.items.filter((i) => !before.has(i.id) && i.original);
   await Promise.all(
-    fresh.map((item) => {
-      const entry: QueueEntry = { project: id, item: item.id, original: item.original as string, file: item.file };
-      return writeJson(env, item.type === "image" ? keys.process(id, item.id) : keys.cutter(id, item.id), entry);
+    fresh.flatMap((item) => {
+      const entry: QueueEntry = {
+        project: id,
+        item: item.id,
+        type: item.type,
+        original: item.original as string,
+        file: item.file,
+      };
+      const queues = [keys.process(id, item.id), ...(item.type === "video" ? [keys.cutter(id, item.id)] : [])];
+      return queues.map((key) => writeJson(env, key, entry));
     })
   );
 

@@ -1,4 +1,5 @@
-# Web copies of the images uploaded through the admin (scripts/process-media.ts).
+# Web copies of the images uploaded through the admin, and the videos
+# compressed with HandBrake (scripts/process-media.ts).
 #
 # Every five minutes it asks the site whether anything is queued, and only sets
 # up when something is. It proves who it is with a token GitHub signs for each
@@ -24,17 +25,20 @@ concurrency:
 jobs:
   process:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # 4K HEVC is slow on GitHub's four cores: allow long videos.
+    timeout-minutes: 360
     steps:
       - name: Anything queued?
         id: queue
         run: |
           token=$(curl -sSf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
             "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=rh-pipeline" | jq -r .value)
-          count=$(curl -sSf -H "Authorization: Bearer $token" \
-            https://rh.rh-3b6.workers.dev/api/pipeline/queue | jq length)
-          echo "Queued: $count"
+          queue=$(curl -sSf -H "Authorization: Bearer $token" https://rh.rh-3b6.workers.dev/api/pipeline/queue)
+          count=$(echo "$queue" | jq length)
+          videos=$(echo "$queue" | jq '[.[] | select(.type == "video")] | length')
+          echo "Queued: $count ($videos videos)"
           echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "videos=$videos" >> "$GITHUB_OUTPUT"
 
       - if: steps.queue.outputs.count != '0'
         uses: actions/checkout@v4
@@ -47,6 +51,13 @@ jobs:
 
       - if: steps.queue.outputs.count != '0'
         run: npm ci
+
+      - if: steps.queue.outputs.videos != '0'
+        name: Install HandBrake
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq handbrake-cli ffmpeg
+          HandBrakeCLI --version
 
       - if: steps.queue.outputs.count != '0'
         # Node 22.14 (.nvmrc) runs TypeScript only with this flag.

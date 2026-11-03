@@ -11,14 +11,20 @@
  *   projects/<id>/web/full/<item>.jpg     3000px copy   } the three copies the
  *   projects/<id>/web/mid/<item>.jpg      1500px copy   } site uses today
  *   projects/<id>/web/canvas/<item>.jpg   1000px copy   } (see CLAUDE.md, Media)
+ *   projects/<id>/web/video/<item>.mp4    a video, compressed with HandBrake
  *   projects/index.json                   the projects, in order
- *   queue/process/<id>__<item>.json       an image waiting for its copies
+ *   queue/process/<id>__<item>.json       an image waiting for its copies, or a
+ *                                         video waiting to be compressed
  *   queue/cutter/<id>__<item>.json        a video waiting for its preview
  */
 
 // The kinds of work a project can be: one per project. Defaults until the
 // owner gives the real list (4 Nov).
 export const KINDS = ["Editorial", "Campaign", "Commission", "Personal"];
+
+// How videos are compressed: the owner's HandBrake settings (4 Nov), this
+// preset with cropping set to none, nothing else changed.
+export const HANDBRAKE_PRESET = "Fast 2160p60 4K HEVC";
 
 // Offered while typing a collaborator's role; any role can be written.
 export const ROLES = [
@@ -70,6 +76,8 @@ export type ItemStatus = {
   state: "processing" | "done" | "failed";
   message?: string;
   copies?: Copies;
+  // A video's compressed version.
+  video?: string;
   width?: number;
   height?: number;
   at: string;
@@ -77,7 +85,7 @@ export type ItemStatus = {
 
 export type Status = Record<string, ItemStatus>;
 
-export type QueueEntry = { project: string; item: string; original: string; file: string };
+export type QueueEntry = { project: string; item: string; type: Item["type"]; original: string; file: string };
 
 export const keys = {
   index: "projects/index.json",
@@ -85,6 +93,7 @@ export const keys = {
   status: (id: string) => `projects/${id}/status.json`,
   original: (id: string, item: string, file: string) => `projects/${id}/originals/${item}-${safeName(file)}`,
   web: (id: string, size: keyof Copies, item: string) => `projects/${id}/web/${size}/${item}.jpg`,
+  video: (id: string, item: string) => `projects/${id}/web/video/${item}.mp4`,
   process: (id: string, item: string) => `queue/process/${id}__${item}.json`,
   cutter: (id: string, item: string) => `queue/cutter/${id}__${item}.json`,
 };
