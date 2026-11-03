@@ -23,8 +23,13 @@
 export const KINDS = ["Editorial", "Campaign", "Commission", "Personal"];
 
 // How videos are compressed: the owner's HandBrake settings (4 Nov), this
-// preset with cropping set to none, nothing else changed.
+// preset with cropping set to none, nothing else changed, but at "2K" rather
+// than 4K (the owner, same day; HEVC confirmed over AV1): at most 2560 on the
+// long side and 1440 on the short, turned to suit each video, never enlarged.
+// HandBrake has no HEVC preset at 1440p, so the 4K one is capped.
 export const HANDBRAKE_PRESET = "Fast 2160p60 4K HEVC";
+export const VIDEO_LONG_SIDE = 2560;
+export const VIDEO_SHORT_SIDE = 1440;
 
 // Offered while typing a collaborator's role; any role can be written.
 export const ROLES = [

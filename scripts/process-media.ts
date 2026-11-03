@@ -6,8 +6,10 @@
  *   a copy under 1 MB, 3000 / 1500 / 1000px, never enlarged);
  * - videos: compressed with HandBrake the way the owner does it by hand
  *   (4 Nov): the "Fast 2160p60 4K HEVC" preset with cropping set to none,
- *   nothing else changed, plus "web optimized" so playback can start before the
- *   whole file has arrived (it only moves the file's index to the front).
+ *   capped at 2560 × 1440 ("2K", the cap turned for portrait videos: the
+ *   preset alone squeezes a portrait 4K video into 2160 × 2160 with stretched
+ *   pixels), plus "web optimized" so playback can start before the whole file
+ *   has arrived (it only moves the file's index to the front).
  *
  * Run by .github/workflows/process-media.yml every few minutes. It talks to
  * storage through the site's Worker (/api/pipeline/*, see worker/site.ts),
@@ -28,7 +30,16 @@ import * as path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream } from "node:stream/web";
-import { type Copies, HANDBRAKE_PRESET, type ItemStatus, isVideo, keys, type QueueEntry } from "../admin/shared.ts";
+import {
+  type Copies,
+  HANDBRAKE_PRESET,
+  type ItemStatus,
+  isVideo,
+  keys,
+  type QueueEntry,
+  VIDEO_LONG_SIDE,
+  VIDEO_SHORT_SIDE,
+} from "../admin/shared.ts";
 import { encode, LONGEST_SIDE, mb } from "./media.ts";
 
 const BASE = process.env.PIPELINE_URL ?? "https://rh.rh-3b6.workers.dev";
@@ -75,38 +86,71 @@ async function download(entry: QueueEntry, dir: string) {
   return src;
 }
 
-// Runs a program to the end; fails with the last of what it printed.
+// Runs a program to the end and returns what it printed; fails with the last
+// of what it printed to its error stream.
 function run(program: string, args: string[]) {
   return new Promise<string>((resolve, reject) => {
     const child = spawn(program, args);
     let out = "";
-    const keep = (chunk: Buffer) => {
-      out = (out + chunk.toString()).slice(-4000);
-    };
-    child.stdout.on("data", keep);
-    child.stderr.on("data", keep);
+    let err = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      out += chunk.toString();
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      err = (err + chunk.toString()).slice(-4000);
+    });
     child.on("error", reject);
-    child.on("close", (code) => (code === 0 ? resolve(out) : reject(new Error(`${program} exited ${code}: ${out.slice(-300)}`))));
+    child.on("close", (code) => (code === 0 ? resolve(out) : reject(new Error(`${program} exited ${code}: ${err.slice(-300)}`))));
   });
+}
+
+// A video's size as it's shown: phones often store portrait video landscape,
+// with a rotation tag.
+async function shownSize(file: string) {
+  const probe = JSON.parse(
+    await run("ffprobe", [
+      "-v",
+      "error",
+      "-select_streams",
+      "v:0",
+      "-show_entries",
+      "stream=width,height:stream_side_data=rotation:stream_tags=rotate",
+      "-of",
+      "json",
+      file,
+    ])
+  ) as {
+    streams: { width: number; height: number; side_data_list?: { rotation?: number }[]; tags?: { rotate?: string } }[];
+  };
+  const stream = probe.streams[0];
+  const rotation = stream.side_data_list?.find((d) => d.rotation !== undefined)?.rotation ?? Number(stream.tags?.rotate ?? 0);
+  const turned = Math.abs(rotation) % 180 === 90;
+  return turned ? { width: stream.height, height: stream.width } : { width: stream.width, height: stream.height };
 }
 
 async function processVideo(entry: QueueEntry, dir: string) {
   const src = await download(entry, dir);
   const out = path.join(dir, "video.mp4");
   const started = Date.now();
-  await run(HANDBRAKE, ["--preset", HANDBRAKE_PRESET, "--crop", "0:0:0:0", "--optimize", "-i", src, "-o", out]);
-  const probe = await run("ffprobe", [
-    "-v",
-    "error",
-    "-select_streams",
-    "v:0",
-    "-show_entries",
-    "stream=width,height",
-    "-of",
-    "csv=p=0",
+  const source = await shownSize(src);
+  const portrait = source.height > source.width;
+  const [maxWidth, maxHeight] = portrait ? [VIDEO_SHORT_SIDE, VIDEO_LONG_SIDE] : [VIDEO_LONG_SIDE, VIDEO_SHORT_SIDE];
+  await run(HANDBRAKE, [
+    "--preset",
+    HANDBRAKE_PRESET,
+    "--crop",
+    "0:0:0:0",
+    "--maxWidth",
+    String(maxWidth),
+    "--maxHeight",
+    String(maxHeight),
+    "--optimize",
+    "-i",
+    src,
+    "-o",
     out,
   ]);
-  const [width, height] = probe.trim().split(",").map(Number);
+  const { width, height } = await shownSize(out);
   const size = fs.statSync(out).size;
   console.log(`  ${width}×${height} ${mb(fs.statSync(src).size)} → ${mb(size)} in ${Math.round((Date.now() - started) / 1000)}s`);
 
