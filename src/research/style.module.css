@@ -20,7 +20,7 @@
   }
 }
 
-/* Centred, one line under the frame's Gallery and Index links. The frame above
+/* Centred, one line under the frame's top row. The frame above
    is pointer-events: none outside its own buttons, so the slider gets the drag. */
 .scale {
   position: fixed;
@@ -75,75 +75,26 @@
   outline-offset: 4px;
 }
 
-/* The grid (/research?layout=grid). Clears the frame's top row; --columns
-   comes from the slider; align-items: start hangs every image from the top of
-   its row. No transitions: a change lands in a single frame. */
-.grid {
-  display: grid;
-  grid-template-columns: repeat(var(--columns, 7), minmax(0, 1fr));
-  align-items: start;
-  gap: 1.5rem;
-  padding: 5rem var(--page-padding, 1.5rem) 6rem;
+/* Every image, placed by the script: absolutely, by a transform from the
+   stage's top left, at its waterfall size and scaled down for the sheet.
+   overflow: clip keeps images mid-move from making the page scroll further. */
+.stage {
+  position: relative;
+  overflow: clip;
 }
 
 .image {
+  position: absolute;
+  top: 0;
+  left: 0;
   display: block;
-  width: 100%;
-  height: auto;
+  transform-origin: 0 0;
   background: #f2f2f2;
 }
 
-/* The contact sheet (the slider's first notch). The script sets the box size
-   and the gap, the same across and down; each image is centred in its box, so
-   a row's images share its centre line. The sheet is centred in the window
-   while it fits, and starts under the frame once it doesn't. */
-.sheet {
-  display: grid;
-  grid-template-columns: repeat(var(--columns), var(--box));
-  grid-auto-rows: var(--box);
-  gap: var(--sheet-gap);
-  align-content: center;
-  min-height: 100%;
-  padding: 5rem var(--page-padding, 1.5rem) 6rem;
-}
-
-.cell {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* The waterfall: columns side by side, each a stack of images. The script
-   decides how many columns and which images go in each; this only spaces them,
-   with the grid's gap both across and down. */
-.waterfall {
-  display: flex;
-  align-items: flex-start;
-  gap: 1.5rem;
-  padding: 5rem var(--page-padding, 1.5rem) 6rem;
-}
-
-.column {
-  flex: 1 1 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-/* Phones get three columns, as in the demo, and no slider — there's no room
-   for it beside the nav. */
+/* Phones get the waterfall only (the script narrows its gap) and no slider:
+   there's no room for it beside the nav. */
 @media screen and (max-width: 767px) {
-  .grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.75rem;
-  }
-
-  .waterfall,
-  .column {
-    gap: 0.75rem;
-  }
-
   .scale {
     display: none;
   }
