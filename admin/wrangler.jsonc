@@ -1,0 +1,24 @@
+// The admin (rh-admin): its own Worker at rh-admin.rh-3b6.workers.dev, the
+// whole address behind Cloudflare Access. Cloudflare builds it from GitHub on
+// every push to main (build `npm run build:admin`, deploy
+// `npx wrangler deploy -c admin/wrangler.jsonc`). Paths are relative to this file.
+{
+  "name": "rh-admin",
+  "main": "./worker.ts",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    // Every request, the page included, goes through the sign-in check first.
+    "run_worker_first": true
+  },
+  "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "rh-media" }],
+  // The public site, to copy today's web images from.
+  "services": [{ "binding": "SITE", "service": "rh" }],
+  "vars": {
+    "TEAM_DOMAIN": "https://rubenhilkens.cloudflareaccess.com",
+    // The Access application's audience tag; until it's set, nothing gets in.
+    "POLICY_AUD": ""
+  }
+}

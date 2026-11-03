@@ -4,8 +4,13 @@
 {
   "name": "rh",
   "compatibility_date": "2026-11-01",
+  // Only /api/* runs this: the door the media processing comes through (see
+  // worker/site.ts). Everything else is the static site, served as before.
+  "main": "./worker/site.ts",
   "assets": {
     "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"],
     // A single-page app: /index, /research, /about and /project/:id all get
     // index.html with a 200, so a reload or a shared link works. Real files
     // (images, fonts, video) are served first.
@@ -13,5 +18,7 @@
     // No guessing at .html files: otherwise /index would be read as the address
     // of index.html and redirected home, the same trap Netlify had.
     "html_handling": "none"
-  }
+  },
+  // Storage for the admin's media (the rh-media bucket).
+  "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "rh-media" }]
 }

@@ -1,0 +1,53 @@
+# Web copies of the images uploaded through the admin (scripts/process-media.ts).
+#
+# Every five minutes it asks the site whether anything is queued, and only sets
+# up when something is. It proves who it is with a token GitHub signs for each
+# run (id-token: write), which the site's Worker checks: no storage key or
+# password is kept anywhere. GitHub may start scheduled runs a few minutes
+# late, so an upload is processed within about 5–15 minutes.
+name: Process media
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+# One run at a time, so items are never processed twice.
+concurrency:
+  group: process-media
+  cancel-in-progress: false
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Anything queued?
+        id: queue
+        run: |
+          token=$(curl -sSf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=rh-pipeline" | jq -r .value)
+          count=$(curl -sSf -H "Authorization: Bearer $token" \
+            https://rh.rh-3b6.workers.dev/api/pipeline/queue | jq length)
+          echo "Queued: $count"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+      - if: steps.queue.outputs.count != '0'
+        uses: actions/checkout@v4
+
+      - if: steps.queue.outputs.count != '0'
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - if: steps.queue.outputs.count != '0'
+        run: npm ci
+
+      - if: steps.queue.outputs.count != '0'
+        # Node 22.14 (.nvmrc) runs TypeScript only with this flag.
+        run: node --experimental-strip-types scripts/process-media.ts
