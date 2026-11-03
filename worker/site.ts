@@ -3,6 +3,8 @@
  * Cloudflare before this runs; only /api/* reaches it (`run_worker_first` in
  * wrangler.jsonc).
  *
+ * /api/order is the projects' order set in the admin, for the index.
+ *
  * /api/pipeline/* is the door the processing comes through
  * (scripts/process-media.ts, run by .github/workflows/process-media.yml). It
  * holds no password: each call carries a token GitHub signs for that workflow
@@ -12,7 +14,8 @@
  */
 
 import { createRemoteJWKSet, jwtVerify } from "jose";
-import { type ItemStatus, keys, PROCESS_PREFIX, type QueueEntry, type Status } from "../admin/shared.ts";
+import manifest from "../src/work/manifest.json";
+import { type ItemStatus, keys, PROCESS_PREFIX, previewStatusId, type QueueEntry, type Status } from "../admin/shared.ts";
 
 interface Env {
   ASSETS: Fetcher;
@@ -73,7 +76,7 @@ async function pipeline(request: Request, env: Env, url: URL) {
   // A compressed video, which can run to hundreds of MB: uploaded in pieces
   // (R2 multipart), each under the Worker's request size limit.
   if (url.pathname.startsWith("/api/pipeline/upload")) {
-    if (!/^projects\/[\w-]+\/web\/video\/[\w-]+\.mp4$/.test(key)) return json({ error: "Bad key." }, 400);
+    if (!/^projects\/[\w-]+\/web\/(video|preview)\/[\w-]+\.mp4$/.test(key)) return json({ error: "Bad key." }, 400);
     if (url.pathname === "/api/pipeline/upload" && request.method === "POST") {
       const upload = await env.MEDIA.createMultipartUpload(key, { httpMetadata: { contentType: "video/mp4" } });
       return json({ uploadId: upload.uploadId });
@@ -96,22 +99,39 @@ async function pipeline(request: Request, env: Env, url: URL) {
   // How an item went. Once it's done (or failed) it leaves the queue. The
   // processing runs one item at a time, so status.json has a single writer.
   if (url.pathname === "/api/pipeline/status" && request.method === "POST") {
-    const body = (await request.json()) as { project: string; item: string; status: ItemStatus };
+    const body = (await request.json()) as { project: string; item: string; preview?: boolean; status: ItemStatus };
     if (!/^[\w-]+$/.test(body.project) || !/^[\w-]+$/.test(body.item)) return json({ error: "Bad item." }, 400);
     const statusKey = keys.status(body.project);
     const status = ((await (await env.MEDIA.get(statusKey))?.json()) as Status | null) ?? {};
-    status[body.item] = { ...body.status, at: new Date().toISOString() };
+    // A preview's status sits beside its video's, under its own id.
+    status[body.preview ? previewStatusId(body.item) : body.item] = { ...body.status, at: new Date().toISOString() };
     await env.MEDIA.put(statusKey, JSON.stringify(status), { httpMetadata: { contentType: "application/json" } });
-    if (body.status.state !== "processing") await env.MEDIA.delete(keys.process(body.project, body.item));
+    if (body.status.state !== "processing")
+      await env.MEDIA.delete(body.preview ? keys.processPreview(body.project, body.item) : keys.process(body.project, body.item));
     return json({ ok: true });
   }
 
   return json({ error: "Not found." }, 404);
 }
 
+// The projects the site shows today (the manifest built into it).
+const onSite = new Set(manifest.map((m) => m.project));
+
+// The order the projects were dragged into on the admin's list, for the index
+// (src/projects/order.ts). Only projects the site already shows are listed, so
+// the names of ones still in the works don't leak.
+async function projectOrder(env: Env) {
+  const index = (await (await env.MEDIA.get(keys.index))?.json()) as { order?: string[] } | null;
+  const order = (index?.order ?? []).filter((id) => onSite.has(id));
+  return new Response(JSON.stringify({ order }), {
+    headers: { "content-type": "application/json", "cache-control": "public, max-age=60" },
+  });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.pathname === "/api/order" && request.method === "GET") return projectOrder(env);
     if (url.pathname.startsWith("/api/pipeline/")) {
       try {
         return await pipeline(request, env, url);

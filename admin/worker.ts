@@ -22,8 +22,13 @@ import {
   KINDS,
   keys,
   type Options,
+  PIECE_MIN,
+  PREVIEW_MAX,
+  type Piece,
   PROCESS_PREFIX,
+  type PreviewPlan,
   type Project,
+  previewStatusId,
   type QueueEntry,
   ROLES,
   type Status,
@@ -213,6 +218,7 @@ async function saveProject(request: Request, env: Env, id: string, create: boole
     ...(status[item.id]?.video ? [status[item.id]?.video as string] : []),
     keys.process(id, item.id),
     keys.cutter(id, item.id),
+    ...(item.type === "video" ? [keys.preview(id, item.id), keys.plan(id, item.id), keys.processPreview(id, item.id)] : []),
   ]);
   if (deletions.length) await env.MEDIA.delete(deletions);
 
@@ -296,6 +302,97 @@ async function importCopies(request: Request, env: Env) {
   return json({ copied: copied.filter(Boolean).length });
 }
 
+// The projects' order, as dragged on the admin's list: the same projects, in a
+// new order (the site's index follows it, through the site's /api/order).
+async function saveOrder(request: Request, env: Env) {
+  const body = (await request.json()) as { order?: unknown };
+  const current = await order(env);
+  const next = Array.isArray(body.order) ? body.order.filter((id): id is string => typeof id === "string") : [];
+  if (next.length !== current.length || new Set(next).size !== next.length || !next.every((id) => current.includes(id)))
+    return fail("The order has to list every project once.");
+  await writeJson(env, keys.index, { order: next });
+  return json({ order: next });
+}
+
+// The Preview Cutter's list: every video in every project, whether its preview
+// is still to do (in the cutter queue), being made, or made.
+async function cutterList(env: Env) {
+  const ids = await order(env);
+  const waiting = new Set(
+    (await env.MEDIA.list({ prefix: CUTTER_PREFIX, limit: 1000 })).objects.map((o) =>
+      o.key.slice(CUTTER_PREFIX.length, -".json".length)
+    )
+  );
+  const rows = await Promise.all(
+    ids.map(async (id) => {
+      const [project, status] = await Promise.all([
+        readJson<Project>(env, keys.project(id)),
+        readJson<Status>(env, keys.status(id)),
+      ]);
+      if (!project) return [];
+      return project.items
+        .filter((i) => i.type === "video")
+        .map((item) => {
+          const preview = status?.[previewStatusId(item.id)];
+          return {
+            project: id,
+            projectName: project.name,
+            item: item.id,
+            file: item.file,
+            todo: waiting.has(`${id}__${item.id}`),
+            preview: preview?.state ?? null,
+            compressed: status?.[item.id]?.state === "done" ? (status?.[item.id]?.video ?? null) : null,
+            original: item.original ?? null,
+          };
+        });
+    })
+  );
+  return rows.flat();
+}
+
+function cleanPieces(raw: unknown): Piece[] | string {
+  if (!Array.isArray(raw) || raw.length === 0) return "No pieces.";
+  const pieces = raw
+    .map((p) => ({ s: Number(p?.s), e: Number(p?.e) }))
+    .filter((p) => Number.isFinite(p.s) && Number.isFinite(p.e))
+    .sort((a, b) => a.s - b.s);
+  if (pieces.length !== raw.length) return "Bad pieces.";
+  let total = 0;
+  for (const [i, p] of pieces.entries()) {
+    if (p.s < 0 || p.e - p.s < PIECE_MIN - 1e-3) return "A piece is too short.";
+    if (i > 0 && p.s < pieces[i - 1].e - 1e-3) return "Pieces overlap.";
+    total += p.e - p.s;
+  }
+  if (total > PREVIEW_MAX + 0.05) return `Pieces add up to more than ${PREVIEW_MAX} s.`;
+  return pieces;
+}
+
+// A video's cuts and pieces. Saving pieces queues the preview to be made and
+// takes the video off the cutter's to-do list; cuts alone are only kept.
+async function previews(request: Request, env: Env, id: string, itemId: string) {
+  const planKey = keys.plan(id, itemId);
+  if (request.method === "GET") return json((await readJson<PreviewPlan>(env, planKey)) ?? {});
+  if (request.method !== "PUT") return fail("Method not allowed.", 405);
+  const project = await readJson<Project>(env, keys.project(id));
+  const item = project?.items.find((i) => i.id === itemId && i.type === "video");
+  if (!project || !item) return fail("No such video.", 404);
+  const body = (await request.json()) as { cuts?: unknown; pieces?: unknown };
+  const plan = (await readJson<PreviewPlan>(env, planKey)) ?? {};
+  if (Array.isArray(body.cuts)) plan.cuts = body.cuts.map(Number).filter(Number.isFinite).slice(0, 5000);
+  if (body.pieces !== undefined) {
+    const pieces = cleanPieces(body.pieces);
+    if (typeof pieces === "string") return fail(pieces);
+    if (!item.original) return fail("This video has no original in storage to cut from.");
+    plan.pieces = pieces;
+    plan.saved = new Date().toISOString();
+    const entry: QueueEntry = { project: id, item: itemId, type: "preview", original: item.original, file: item.file, pieces };
+    await writeJson(env, keys.processPreview(id, itemId), entry);
+    await env.MEDIA.delete(keys.cutter(id, itemId));
+  }
+  await writeJson(env, planKey, plan);
+  return json(plan);
+}
+
 // A file from storage, with ranges so a video can play and seek.
 async function media(request: Request, env: Env, key: string) {
   if (!/^projects\/[\w-]+\//.test(key)) return fail("Not found.", 404);
@@ -330,6 +427,14 @@ export default {
       if (path === "/api/me") return json({ email });
       if (path === "/api/projects" && method === "GET") return json(await listProjects(env));
       if (path === "/api/options" && method === "GET") return json(await options(env));
+      if (path === "/api/cutter" && method === "GET") return json(await cutterList(env));
+      if (path === "/api/order" && method === "PUT") return await saveOrder(request, env);
+      const previewMatch = path.match(/^\/api\/previews\/([^/]+)\/([^/]+)$/);
+      if (previewMatch) {
+        const [id, itemId] = [decodeURIComponent(previewMatch[1]), decodeURIComponent(previewMatch[2])];
+        if (!isId(id) || !/^[\w-]+$/.test(itemId)) return fail("Bad video.");
+        return await previews(request, env, id, itemId);
+      }
       const match = path.match(/^\/api\/projects\/([^/]+)$/);
       if (match) {
         const id = decodeURIComponent(match[1]);

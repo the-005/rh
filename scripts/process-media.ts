@@ -4,6 +4,8 @@
  * - images: three web copies, made exactly as `npm run work:images` makes them
  *   (the same `encode` from media.ts: MozJPEG at 85, stepping down only to keep
  *   a copy under 1 MB, 3000 / 1500 / 1000px, never enlarged);
+ * - previews: the pieces picked in the Preview Cutter, joined and compressed
+ *   the same way (processPreview);
  * - videos: compressed with HandBrake the way the owner does it by hand
  *   (4 Nov): the "Fast 2160p60 4K HEVC" preset with cropping set to none,
  *   capped at 2560 × 1440 ("2K", the cap turned for portrait videos: the
@@ -76,7 +78,12 @@ async function call(method: string, route: string, body?: string | Buffer, conte
 }
 
 const report = (entry: QueueEntry, status: Omit<ItemStatus, "at">) =>
-  call("POST", "/api/pipeline/status", JSON.stringify({ project: entry.project, item: entry.item, status }), "application/json");
+  call(
+    "POST",
+    "/api/pipeline/status",
+    JSON.stringify({ project: entry.project, item: entry.item, preview: entry.type === "preview", status }),
+    "application/json"
+  );
 
 // The original, streamed to disk: some run to hundreds of MB, videos to GBs.
 async function download(entry: QueueEntry, dir: string) {
@@ -128,10 +135,9 @@ async function shownSize(file: string) {
   return turned ? { width: stream.height, height: stream.width } : { width: stream.width, height: stream.height };
 }
 
-async function processVideo(entry: QueueEntry, dir: string) {
-  const src = await download(entry, dir);
-  const out = path.join(dir, "video.mp4");
-  const started = Date.now();
+// HandBrake with the owner's settings, capped at 2K and turned to suit the
+// video (see the top of this file).
+async function compress(src: string, out: string) {
   const source = await shownSize(src);
   const portrait = source.height > source.width;
   const [maxWidth, maxHeight] = portrait ? [VIDEO_SHORT_SIDE, VIDEO_LONG_SIDE] : [VIDEO_LONG_SIDE, VIDEO_SHORT_SIDE];
@@ -150,24 +156,25 @@ async function processVideo(entry: QueueEntry, dir: string) {
     "-o",
     out,
   ]);
-  const { width, height } = await shownSize(out);
-  const size = fs.statSync(out).size;
-  console.log(`  ${width}×${height} ${mb(fs.statSync(src).size)} → ${mb(size)} in ${Math.round((Date.now() - started) / 1000)}s`);
+  return shownSize(out);
+}
 
-  const key = keys.video(entry.project, entry.item);
+// A finished video up to storage, in pieces under the Worker's request limit.
+async function uploadVideo(file: string, key: string) {
+  const size = fs.statSync(file).size;
   const at = `/api/pipeline/upload?key=${encodeURIComponent(key)}`;
   const { uploadId } = (await (await call("POST", at)).json()) as { uploadId: string };
   const parts = [];
-  const file = fs.openSync(out, "r");
+  const handle = fs.openSync(file, "r");
   try {
     for (let n = 1, offset = 0; offset < size; n++, offset += PART) {
       const piece = Buffer.alloc(Math.min(PART, size - offset));
-      fs.readSync(file, piece, 0, piece.length, offset);
+      fs.readSync(handle, piece, 0, piece.length, offset);
       const response = await call("PUT", `${at}&uploadId=${encodeURIComponent(uploadId)}&part=${n}`, piece);
       parts.push(await response.json());
     }
   } finally {
-    fs.closeSync(file);
+    fs.closeSync(handle);
   }
   await call(
     "POST",
@@ -175,6 +182,61 @@ async function processVideo(entry: QueueEntry, dir: string) {
     JSON.stringify({ parts }),
     "application/json"
   );
+}
+
+async function processVideo(entry: QueueEntry, dir: string) {
+  const src = await download(entry, dir);
+  const out = path.join(dir, "video.mp4");
+  const started = Date.now();
+  const { width, height } = await compress(src, out);
+  console.log(
+    `  ${width}×${height} ${mb(fs.statSync(src).size)} → ${mb(fs.statSync(out).size)} in ${Math.round((Date.now() - started) / 1000)}s`
+  );
+  const key = keys.video(entry.project, entry.item);
+  await uploadVideo(out, key);
+  await report(entry, { state: "done", video: key, width, height });
+}
+
+// A preview, as the owner decided (2 Nov): the pieces picked in the Preview
+// Cutter cut from the original and joined without loss (frame-exact, so a
+// lossless intermediate rather than a stream copy, which can only cut on
+// keyframes), then one HandBrake encode with the same settings as the video.
+// No sound: previews loop silently.
+async function processPreview(entry: QueueEntry, dir: string) {
+  const pieces = entry.pieces ?? [];
+  if (!pieces.length) throw new Error("No pieces saved.");
+  const src = await download(entry, dir);
+  const joined = path.join(dir, "joined.mkv");
+  const out = path.join(dir, "preview.mp4");
+  const started = Date.now();
+  const trims = pieces.map((p, i) => `[0:v]trim=start=${p.s}:end=${p.e},setpts=PTS-STARTPTS[p${i}]`);
+  const filter = `${trims.join(";")};${pieces.map((_, i) => `[p${i}]`).join("")}concat=n=${pieces.length}:v=1:a=0[out]`;
+  await run("ffmpeg", [
+    "-y",
+    "-v",
+    "error",
+    "-i",
+    src,
+    "-filter_complex",
+    filter,
+    "-map",
+    "[out]",
+    "-an",
+    "-c:v",
+    "libx264",
+    "-qp",
+    "0",
+    "-preset",
+    "ultrafast",
+    joined,
+  ]);
+  const { width, height } = await compress(joined, out);
+  const seconds = pieces.reduce((t, p) => t + p.e - p.s, 0);
+  console.log(
+    `  preview ${seconds.toFixed(1)}s from ${pieces.length} pieces, ${width}×${height} ${mb(fs.statSync(out).size)} in ${Math.round((Date.now() - started) / 1000)}s`
+  );
+  const key = keys.preview(entry.project, entry.item);
+  await uploadVideo(out, key);
   await report(entry, { state: "done", video: key, width, height });
 }
 
@@ -199,13 +261,17 @@ const queue = (await (await call("GET", "/api/pipeline/queue")).json()) as Queue
 console.log(`${queue.length} queued`);
 
 for (const entry of queue) {
-  console.log(`${entry.project} / ${entry.file}`);
+  console.log(`${entry.project} / ${entry.file}${entry.type === "preview" ? " (preview)" : ""}`);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rh-"));
   try {
     await report(entry, { state: "processing" });
     // Entries from before videos were processed carry no type.
-    const video = entry.type ? entry.type === "video" : isVideo(entry.file);
-    await (video ? processVideo(entry, dir) : processImage(entry, dir));
+    const type = entry.type ?? (isVideo(entry.file) ? "video" : "image");
+    await (type === "preview"
+      ? processPreview(entry, dir)
+      : type === "video"
+        ? processVideo(entry, dir)
+        : processImage(entry, dir));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`  failed: ${message}`);

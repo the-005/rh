@@ -12,12 +12,19 @@
  *   projects/<id>/web/mid/<item>.jpg      1500px copy   } site uses today
  *   projects/<id>/web/canvas/<item>.jpg   1000px copy   } (see CLAUDE.md, Media)
  *   projects/<id>/web/video/<item>.mp4    a video, compressed with HandBrake
+ *   projects/<id>/web/preview/<item>.mp4  its looping preview, made from the pieces
+ *   projects/<id>/previews/<item>.json    the Preview Cutter's cuts and pieces
  *   projects/index.json                   the projects, in order
  *   options.json                          the kinds of work and roles to pick from
  *   queue/process/<id>__<item>.json       an image waiting for its copies, or a
  *                                         video waiting to be compressed
+ *   queue/process/<id>__<item>__preview.json  a preview waiting to be made
  *   queue/cutter/<id>__<item>.json        a video waiting for its preview
  */
+
+// Where the site is, for the admin's links to each project on it. Changes when
+// the site moves to Ruben's domain.
+export const SITE_URL = "https://rh.rh-3b6.workers.dev";
 
 // The kinds of work a project can be (one per project) and the roles a
 // collaborator can have: what the lists start with. Anything typed that isn't
@@ -94,7 +101,29 @@ export type ItemStatus = {
 
 export type Status = Record<string, ItemStatus>;
 
-export type QueueEntry = { project: string; item: string; type: Item["type"]; original: string; file: string };
+// A job for the processing: an image's copies, a video's compression, or a
+// video's preview made from the pieces picked in the Preview Cutter.
+export type QueueEntry = {
+  project: string;
+  item: string;
+  type: Item["type"] | "preview";
+  original: string;
+  file: string;
+  pieces?: Piece[];
+};
+
+// A stretch of a video, in seconds. A preview is up to PREVIEW_MAX seconds of
+// pieces joined with straight cuts, looping.
+export type Piece = { s: number; e: number };
+export const PREVIEW_MAX = 10;
+export const PIECE_MIN = 0.3;
+
+// What the Preview Cutter keeps per video: the cuts it found (so reopening is
+// instant) and the pieces last saved.
+export type PreviewPlan = { cuts?: number[]; pieces?: Piece[]; saved?: string };
+
+// Status entries for previews sit beside the video's own, under this id.
+export const previewStatusId = (item: string) => `${item}__preview`;
 
 export const keys = {
   index: "projects/index.json",
@@ -104,6 +133,9 @@ export const keys = {
   original: (id: string, item: string, file: string) => `projects/${id}/originals/${item}-${safeName(file)}`,
   web: (id: string, size: keyof Copies, item: string) => `projects/${id}/web/${size}/${item}.jpg`,
   video: (id: string, item: string) => `projects/${id}/web/video/${item}.mp4`,
+  preview: (id: string, item: string) => `projects/${id}/web/preview/${item}.mp4`,
+  plan: (id: string, item: string) => `projects/${id}/previews/${item}.json`,
+  processPreview: (id: string, item: string) => `queue/process/${id}__${item}__preview.json`,
   process: (id: string, item: string) => `queue/process/${id}__${item}.json`,
   cutter: (id: string, item: string) => `queue/cutter/${id}__${item}.json`,
 };

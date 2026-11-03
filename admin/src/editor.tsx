@@ -1,6 +1,20 @@
 import * as React from "react";
 import { useLocation } from "wouter";
-import { type Credit, type Item, isImage, isVideo, KINDS, keys, type Options, type Project, ROLES, slug } from "../shared.ts";
+import manifest from "../../src/work/manifest.json";
+import {
+  type Credit,
+  type Item,
+  isImage,
+  isVideo,
+  KINDS,
+  keys,
+  type Options,
+  type Project,
+  previewStatusId,
+  ROLES,
+  SITE_URL,
+  slug,
+} from "../shared.ts";
 import { api, type Loaded, mediaUrl } from "./api.ts";
 import { Combo } from "./combo.tsx";
 import { filesFromDrop } from "./folders.ts";
@@ -34,6 +48,11 @@ type Draft = { id: string | null; name: string; kind: string; year: string; cred
 export const createdHere = new Set<string>();
 
 const blank: Draft = { id: null, name: "", kind: "", year: "", credits: [{ role: "", name: "" }], items: [] };
+
+// The projects the site shows today (the manifest built into it): only these
+// get a link to their page on the site. Projects made in the admin join the
+// site once it reads its projects from storage.
+const onSite = new Set(manifest.map((m) => m.project));
 
 // A file's name without its extension, for telling whether it's already here.
 const stem = (name: string) => name.replace(/\.[^.]+$/, "").toLowerCase();
@@ -284,7 +303,18 @@ export function Editor({ id }: { id: string | null }) {
         <md-icon slot="icon">arrow_back</md-icon>
         All projects
       </md-text-button>
-      <h1 className="md-typescale-headline-medium">{loaded ? draft.name || "Untitled" : "New project"}</h1>
+      <header className="editor-head">
+        <h1 className="md-typescale-headline-medium">{loaded ? draft.name || "Untitled" : "New project"}</h1>
+        {loaded &&
+          (onSite.has(loaded.project.id) ? (
+            <md-outlined-button href={`${SITE_URL}/project/${encodeURIComponent(loaded.project.id)}`} target="_blank">
+              View on the site
+              <md-icon slot="icon">open_in_new</md-icon>
+            </md-outlined-button>
+          ) : (
+            <span className="notice md-typescale-body-medium">Not on the site yet</span>
+          ))}
+      </header>
 
       <section className="card">
         <h2 className="md-typescale-title-medium">Details</h2>
@@ -421,6 +451,17 @@ export function Editor({ id }: { id: string | null }) {
                 {describe(item, loaded)}
                 {item.local?.state === "uploading" && <md-linear-progress value={item.local.progress} />}
               </span>
+              {item.type === "video" && loaded?.project.items.some((i) => i.id === item.id) ? (
+                <md-icon-button
+                  aria-label={`Cut a preview of ${item.file}`}
+                  title="Open in the Preview Cutter"
+                  onClick={() => navigate(`/cutter/${encodeURIComponent(loaded.project.id)}/${encodeURIComponent(item.id)}`)}
+                >
+                  <md-icon>content_cut</md-icon>
+                </md-icon-button>
+              ) : (
+                <span />
+              )}
               <md-icon-button
                 disabled={!!saving}
                 aria-label={`Remove ${item.file}`}
@@ -462,7 +503,19 @@ function describe(item: Row, loaded: Loaded | null) {
   if (!saved) return "Uploaded. Processed once saved.";
   const status = loaded?.status[item.id];
   if (item.type === "video") {
-    const cutter = loaded?.cutter.includes(item.id) ? " In the Preview Cutter queue." : "";
+    const preview = loaded?.status[previewStatusId(item.id)];
+    const cutter =
+      preview?.state === "done"
+        ? " Preview ready."
+        : preview?.state === "processing"
+          ? " Making the preview…"
+          : preview?.state === "failed"
+            ? ` The preview couldn't be made: ${preview.message ?? "unknown error"}`
+            : loaded?.processing.includes(previewStatusId(item.id))
+              ? " Preview waiting to be made."
+              : loaded?.cutter.includes(item.id)
+                ? " In the Preview Cutter queue."
+                : "";
     if (status?.state === "done") return `Compressed (${status.width}×${status.height}).${cutter}`;
     if (status?.state === "failed") return `Couldn't compress: ${status.message ?? "unknown error"}`;
     if (status?.state === "processing") return `Compressing with HandBrake…${cutter}`;

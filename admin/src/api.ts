@@ -1,4 +1,4 @@
-import type { Options, Project, Status } from "../shared.ts";
+import type { Options, Piece, PreviewPlan, Project, Status } from "../shared.ts";
 
 export type Summary = {
   id: string;
@@ -14,6 +14,18 @@ export type Summary = {
 // A project as the admin Worker returns it: what was saved, how the
 // processing went per item, and which items still wait in each queue.
 export type Loaded = { project: Project; status: Status; processing: string[]; cutter: string[] };
+
+// A video as the Preview Cutter lists it.
+export type CutterRow = {
+  project: string;
+  projectName: string;
+  item: string;
+  file: string;
+  todo: boolean;
+  preview: "processing" | "done" | "failed" | null;
+  compressed: string | null;
+  original: string | null;
+};
 
 export class ApiError extends Error {
   status: number;
@@ -39,6 +51,12 @@ export const api = {
   projects: () => call<Summary[]>("GET", "/api/projects"),
   options: () => call<Options>("GET", "/api/options"),
   project: (id: string) => call<Loaded>("GET", `/api/projects/${encodeURIComponent(id)}`),
+  order: (order: string[]) => call<{ order: string[] }>("PUT", "/api/order", { order }),
+  cutter: () => call<CutterRow[]>("GET", "/api/cutter"),
+  plan: (project: string, item: string) =>
+    call<PreviewPlan>("GET", `/api/previews/${encodeURIComponent(project)}/${encodeURIComponent(item)}`),
+  savePlan: (project: string, item: string, body: { cuts?: number[]; pieces?: Piece[] }) =>
+    call<PreviewPlan>("PUT", `/api/previews/${encodeURIComponent(project)}/${encodeURIComponent(item)}`, body),
   save: (project: Project, create: boolean) =>
     call<Loaded>("PUT", `/api/projects/${encodeURIComponent(project.id)}${create ? "?create" : ""}`, project),
 };

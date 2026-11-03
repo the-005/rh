@@ -152,7 +152,11 @@ main {
   margin-left: -12px;
 }
 
-.editor h1 {
+.editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   margin: 8px 0 24px;
 }
 
@@ -307,7 +311,7 @@ md-outlined-select {
 
 .items li {
   display: grid;
-  grid-template-columns: 48px 24px 72px minmax(0, 1fr) minmax(0, 1.2fr) 48px;
+  grid-template-columns: 48px 24px 72px minmax(0, 1fr) minmax(0, 1.2fr) 48px 48px;
   align-items: center;
   gap: 12px;
   padding: 8px 0;
@@ -379,11 +383,410 @@ md-outlined-select {
   }
 
   .items li {
-    grid-template-columns: 48px 72px minmax(0, 1fr) 48px;
+    grid-template-columns: 48px 72px minmax(0, 1fr) 48px 48px;
   }
 
   .number,
   .state {
     display: none;
   }
+}
+
+/* Top bar navigation: Projects, Preview Cutter. */
+.nav {
+  display: flex;
+  gap: 4px;
+  margin-right: auto;
+  margin-left: 32px;
+}
+
+.nav a {
+  padding: 8px 14px;
+  border-radius: 20px;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.nav a.current {
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+}
+
+main.wide {
+  max-width: none;
+  padding: 0;
+}
+
+/* Project cards: a handle over each card's top left drags it. */
+.projects li {
+  position: relative;
+}
+
+.projects li.dragging .project-card {
+  outline: 2px solid var(--md-sys-color-primary);
+  opacity: 0.85;
+}
+
+.card-handle {
+  position: absolute;
+  z-index: 1;
+  top: 8px;
+  left: 8px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--md-sys-color-surface) 70%, transparent);
+  cursor: grab;
+  touch-action: none;
+  --md-icon-button-icon-color: var(--md-sys-color-on-surface);
+}
+
+.list > .hint {
+  margin: -8px 0 8px;
+}
+
+/* The Preview Cutter's queue. */
+.cutter-list .intro {
+  margin: -8px 0 24px;
+  max-width: 70ch;
+}
+
+.cutter-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.cutter-rows a {
+  position: relative;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 8px;
+  border-radius: 8px;
+  text-decoration: none;
+}
+
+.cutter-rows .state {
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.cutter-rows .state.todo {
+  color: var(--md-sys-color-primary);
+}
+
+/* One video in the cutter, filling the window under the app bar. */
+.cutter {
+  --trim: var(--md-sys-color-primary);
+  --trim-ink: var(--md-sys-color-on-primary);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: calc(100vh - 64px);
+  padding: 8px 16px 16px;
+}
+
+.cutter-top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 48px;
+}
+
+.cutter-title {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cutter-title .dim,
+.cutter-status {
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.cutter-status {
+  min-width: 220px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.cutter-stage {
+  position: relative;
+  min-height: 0;
+  margin: 8px 0 12px;
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.cutter-stage video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  visibility: hidden;
+}
+
+.cutter-stage video.on {
+  visibility: visible;
+}
+
+.cutter-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.cutter-bar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 20px 16px 14px;
+  border-radius: 16px;
+  background: var(--md-sys-color-surface-container);
+}
+
+.cutter-bar button {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  border: 0;
+  cursor: pointer;
+}
+
+.cutter-bar button:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+
+.cutter-bar .play {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--md-sys-color-primary);
+}
+
+.cutter-bar .play svg {
+  width: 18px;
+  height: 18px;
+  fill: var(--md-sys-color-on-primary);
+}
+
+.cutter-bar .tonal,
+.cutter-bar .filled {
+  height: 40px;
+  padding: 0 20px;
+  border-radius: 20px;
+}
+
+.cutter-bar .tonal {
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+}
+
+.cutter-bar .filled {
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+}
+
+.track-wrap {
+  position: relative;
+  min-width: 0;
+  padding-inline: 10px;
+}
+
+.track {
+  position: relative;
+  height: 56px;
+  touch-action: none;
+  user-select: none;
+  cursor: pointer;
+  clip-path: inset(-14px -10px -8px -10px);
+}
+
+.track canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 4px;
+  background: #000;
+}
+
+.track .gap {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgb(0 0 0 / 0.62);
+  pointer-events: none;
+}
+
+.ticks {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -12px;
+  height: 8px;
+  pointer-events: none;
+}
+
+.tick {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 8px;
+  background: color-mix(in srgb, var(--md-sys-color-on-surface) 55%, transparent);
+}
+
+.tick.hot {
+  width: 2px;
+  margin-left: -0.5px;
+  background: var(--trim);
+}
+
+.piece {
+  position: absolute;
+  z-index: 1;
+  top: -3px;
+  bottom: -3px;
+  box-sizing: border-box;
+  border: 3px solid var(--trim);
+  border-left-width: 10px;
+  border-right-width: 10px;
+  border-radius: 6px;
+  cursor: grab;
+}
+
+.piece.sel {
+  box-shadow:
+    0 0 0 1px var(--trim-ink),
+    0 0 0 2px var(--trim);
+}
+
+.piece .h {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 10px;
+  cursor: ew-resize;
+}
+
+.piece .h::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  width: 2px;
+  height: 14px;
+  translate: 0 -50%;
+  background: var(--trim-ink);
+  border-radius: 1px;
+}
+
+.piece .h.l {
+  left: -10px;
+}
+
+.piece .h.r {
+  right: -10px;
+}
+
+.piece .del {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  display: none;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--trim);
+  color: var(--trim-ink);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.piece.sel .del {
+  display: block;
+}
+
+.cutter.dragging,
+.cutter.dragging * {
+  cursor: grabbing !important;
+}
+
+.playhead {
+  position: absolute;
+  z-index: 2;
+  top: -6px;
+  bottom: -6px;
+  display: none;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--md-sys-color-on-surface);
+  pointer-events: none;
+}
+
+.tip {
+  position: absolute;
+  z-index: 2;
+  bottom: calc(100% + 16px);
+  display: none;
+  padding: 3px 8px;
+  border-radius: 4px;
+  translate: -50% 0;
+  background: var(--md-sys-color-inverse-surface);
+  color: var(--md-sys-color-inverse-on-surface);
+  white-space: nowrap;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.tip.cut {
+  background: var(--trim);
+  color: var(--trim-ink);
+}
+
+.side {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
+.readout {
+  white-space: nowrap;
+  color: var(--md-sys-color-on-surface-variant);
+  font-variant-numeric: tabular-nums;
+}
+
+.readout b {
+  font-weight: 500;
+  color: var(--md-sys-color-on-surface);
+}
+
+.readout .low {
+  color: var(--md-sys-color-error);
+}
+
+.side .buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.side .hint {
+  max-width: 260px;
+  margin: 0;
+  text-align: right;
+  color: var(--md-sys-color-on-surface-variant);
 }
