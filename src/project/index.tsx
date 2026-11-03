@@ -1,5 +1,4 @@
 import * as React from "react";
-import allManifest from "~/src/work/manifest.json";
 import type { MediaItem } from "~/src/infinite-canvas/types";
 import {
   beginHeroTween,
@@ -13,8 +12,10 @@ import {
 } from "./transition-origin";
 import styles from "./style.module.css";
 import { getSettings } from "~/src/settings/store";
+import { MEDIA } from "~/src/work/data";
 
-const ALL_MEDIA = allManifest as MediaItem[];
+// What the site shows, loaded before the app (src/work/data).
+const ALL_MEDIA: MediaItem[] = MEDIA;
 
 const MARGIN = 32;
 const GAP = 4;
@@ -147,9 +148,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   };
   const rafRef = React.useRef(0);
   const scrollRef = React.useRef({ pos: 0, target: 0, raf: 0, last: 0 });
-  const dragRef = React.useRef<{ id: number; x: number; from: number; lastX: number; lastT: number; v: number } | null>(
-    null,
-  );
+  const dragRef = React.useRef<{ id: number; x: number; from: number; lastX: number; lastT: number; v: number } | null>(null);
   React.useEffect(
     () => () => {
       for (const t of timersRef.current) clearTimeout(t);
@@ -157,7 +156,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       cancelAnimationFrame(rafRef.current);
       cancelAnimationFrame(scrollRef.current.raf);
     },
-    [],
+    []
   );
 
   // One row, all images at equal height, scaled down until the row fits the screen
@@ -365,9 +364,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       hero.style.opacity = "0";
 
       // Only after the hero has landed do the supporting images rise in.
-      const satellites = Array.from(overlay.querySelectorAll<HTMLElement>("img[data-pos]")).filter(
-        (el) => el !== hero,
-      );
+      const satellites = Array.from(overlay.querySelectorAll<HTMLElement>("img[data-pos]")).filter((el) => el !== hero);
       holdBelow(satellites);
 
       const reveal = () => {
@@ -402,7 +399,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
           // bitmap is rasterizable; revealing an undecoded image paints nothing
           // for a few frames (the white flicker). Resolves instantly if warm.
           hero.decode().then(reveal, reveal);
-        },
+        }
       );
 
       // If the plane never arrives (edge: it unmounted), force the end state.
@@ -417,7 +414,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
 
       const cleanup = setTimeout(
         () => clearTransitions(satellites),
-        FLIGHT_MS + (riseDelays(satellites.length).at(-1) ?? 0) + RISE_MS + 500,
+        FLIGHT_MS + (riseDelays(satellites.length).at(-1) ?? 0) + RISE_MS + 500
       );
 
       return () => {
@@ -450,17 +447,11 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
             el.addEventListener("load", () => resolve(), { once: true });
             el.addEventListener("error", () => resolve(), { once: true });
           });
-    Promise.race([
-      Promise.all(imgs.map(loaded)),
-      new Promise((resolve) => setTimeout(resolve, ROW_LOAD_MAX_MS)),
-    ]).then(() => {
+    Promise.race([Promise.all(imgs.map(loaded)), new Promise((resolve) => setTimeout(resolve, ROW_LOAD_MAX_MS))]).then(() => {
       if (canceled) return;
       riseIn(imgs);
       setArriving(true);
-      cleanup = window.setTimeout(
-        () => clearTransitions(imgs),
-        (riseDelays(imgs.length).at(-1) ?? 0) + RISE_MS + 500,
-      );
+      cleanup = window.setTimeout(() => clearTransitions(imgs), (riseDelays(imgs.length).at(-1) ?? 0) + RISE_MS + 500);
     });
     return () => {
       canceled = true;
@@ -512,7 +503,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       // the images that get big in it are decoded (started when the page
       // opened, below). Never longer than DECODE_WAIT_MS.
       const big = Array.from(overlayRef.current?.querySelectorAll<HTMLImageElement>("img[data-pos]") ?? []).filter(
-        (el) => growsLarge[Number(el.dataset.pos)],
+        (el) => growsLarge[Number(el.dataset.pos)]
       );
       Promise.race([
         Promise.all(big.map((el) => el.decode().catch(() => {}))),
@@ -630,7 +621,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
           releaseTransition();
           onClose();
         },
-        "out",
+        "out"
       );
       hideTransitionSource(null);
       hero.style.opacity = "0";

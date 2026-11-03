@@ -4,13 +4,14 @@
 {
   "name": "rh",
   "compatibility_date": "2026-11-01",
-  // Only /api/* runs this: the door the media processing comes through (see
+  // Only /api/* and /media/* run this: what the site shows, read from storage,
+  // its files in storage, and the door the processing comes through (see
   // worker/site.ts). Everything else is the static site, served as before.
   "main": "./worker/site.ts",
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*"],
+    "run_worker_first": ["/api/*", "/media/*"],
     // A single-page app: /index, /research, /about and /project/:id all get
     // index.html with a 200, so a reload or a shared link works. Real files
     // (images, fonts, video) are served first.

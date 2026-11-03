@@ -1,6 +1,5 @@
 import * as React from "react";
 import { useLocation } from "wouter";
-import manifest from "../../src/work/manifest.json";
 import {
   type Credit,
   type Item,
@@ -13,6 +12,7 @@ import {
   previewStatusId,
   ROLES,
   SITE_URL,
+  shownOnSite,
   slug,
 } from "../shared.ts";
 import { api, type Loaded, mediaUrl } from "./api.ts";
@@ -42,18 +42,30 @@ type Local = {
 
 type Row = Item & { local?: Local };
 
-type Draft = { id: string | null; name: string; kind: string; year: string; credits: Credit[]; items: Row[] };
+type Draft = {
+  id: string | null;
+  name: string;
+  kind: string;
+  year: string;
+  credits: Credit[];
+  items: Row[];
+  // "Show on the site".
+  published: boolean;
+};
 
 // Projects created in this page session: their editor carries on as the
 // address changes from /new to the project's own (see main.tsx).
 export const createdHere = new Set<string>();
 
-const blank: Draft = { id: null, name: "", kind: "", year: "", credits: [{ role: "", name: "" }], items: [] };
-
-// The projects the site shows today (the manifest built into it): only these
-// get a link to their page on the site. Projects made in the admin join the
-// site once it reads its projects from storage.
-const onSite = new Set(manifest.map((m) => m.project));
+const blank: Draft = {
+  id: null,
+  name: "",
+  kind: "",
+  year: "",
+  credits: [{ role: "", name: "" }],
+  items: [],
+  published: false,
+};
 
 // A file's name without its extension, for telling whether it's already here.
 const stem = (name: string) => name.replace(/\.[^.]+$/, "").toLowerCase();
@@ -99,6 +111,7 @@ export function Editor({ id }: { id: string | null }) {
           year: project.year,
           credits: project.credits.length ? project.credits : [{ role: "", name: "" }],
           items: project.items,
+          published: shownOnSite(project),
         });
       },
       (error) => live && setNotice(error.message)
@@ -215,6 +228,7 @@ export function Editor({ id }: { id: string | null }) {
         year: draft.year,
         credits: draft.credits,
         items: draft.items.map(({ local: _, ...item }) => item),
+        published: draft.published,
         created: "",
         updated: "",
       };
@@ -306,15 +320,24 @@ export function Editor({ id }: { id: string | null }) {
       </md-text-button>
       <header className="editor-head">
         <h1 className="md-typescale-headline-medium">{loaded ? draft.name || "Untitled" : "New project"}</h1>
-        {loaded &&
-          (onSite.has(loaded.project.id) ? (
+        <div className="publish">
+          {/* biome-ignore lint/a11y/noLabelWithoutControl: md-switch is a form control (form-associated custom element) */}
+          <label className="md-typescale-body-large">
+            <md-switch
+              selected={draft.published}
+              onInput={(e: React.FormEvent<HTMLElement>) =>
+                edit({ published: (e.currentTarget as HTMLElement & { selected: boolean }).selected })
+              }
+            />
+            Show on the site
+          </label>
+          {loaded && shownOnSite(loaded.project) && (
             <md-outlined-button href={`${SITE_URL}/project/${encodeURIComponent(loaded.project.id)}`} target="_blank">
               View on the site
               <md-icon slot="icon">open_in_new</md-icon>
             </md-outlined-button>
-          ) : (
-            <span className="notice md-typescale-body-medium">Not on the site yet</span>
-          ))}
+          )}
+        </div>
       </header>
 
       <section className="card">

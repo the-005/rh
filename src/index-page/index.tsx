@@ -1,6 +1,5 @@
 import * as React from "react";
 import { ASPECTS, type Credit, MID_COPIES, PROJECTS, type ProjectEntry } from "~/src/projects";
-import { inAdminOrder, orderReady } from "~/src/projects/order";
 import styles from "./style.module.css";
 
 /**
@@ -78,10 +77,9 @@ const NO_SPLIT = "(hover: none), (max-width: 53em)";
  * behaves once there are more projects than fit. A test aid; nothing links to it.
  */
 function listedProjects(): ProjectEntry[] {
-  const ordered = inAdminOrder(PROJECTS);
   const rows = Number(new URLSearchParams(window.location.search).get("rows"));
-  if (!(rows > ordered.length)) return ordered;
-  return Array.from({ length: Math.min(rows, 500) }, (_, i) => ordered[i % ordered.length]);
+  if (!(rows > PROJECTS.length)) return PROJECTS;
+  return Array.from({ length: Math.min(rows, 500) }, (_, i) => PROJECTS[i % PROJECTS.length]);
 }
 
 /** The site's row-move curve, cubic-bezier(0.42, 0, 0.58, 1), for the list's moves, which run in script. */
@@ -123,16 +121,7 @@ type Spot = { pos: number; transition: string };
 type Cursor = { index: number; el: HTMLElement; x: number };
 
 export function IndexPage({ leaving = false }: { leaving?: boolean }) {
-  const [projects, setProjects] = React.useState(listedProjects);
-  // The admin's order, if it arrives after the index opened (a direct link).
-  React.useEffect(() => {
-    orderReady.then(() =>
-      setProjects((before) => {
-        const after = listedProjects();
-        return after.every((p, i) => p === before[i]) ? before : after;
-      })
-    );
-  }, []);
+  const [projects] = React.useState(listedProjects);
   /** The lit row: under the cursor, or the one a slideshow has carried on to. */
   const [active, setActive] = React.useState<number | null>(null);
   /** Where the playhead is heading, and how. */

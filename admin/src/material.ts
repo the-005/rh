@@ -17,6 +17,7 @@ import "@material/web/progress/linear-progress.js";
 import "@material/web/ripple/ripple.js";
 import "@material/web/select/outlined-select.js";
 import "@material/web/select/select-option.js";
+import "@material/web/switch/switch.js";
 import "@material/web/textfield/outlined-text-field.js";
 import { styles as typescale } from "@material/web/typography/md-typescale-styles.js";
 import type * as React from "react";
@@ -45,6 +46,7 @@ declare module "react" {
       "md-outlined-select": MdProps;
       "md-select-option": MdProps;
       "md-outlined-text-field": MdProps;
+      "md-switch": MdProps;
     }
   }
 }

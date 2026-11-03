@@ -15,6 +15,7 @@
  */
 
 import { createRemoteJWKSet, jwtVerify } from "jose";
+import { publishSite } from "./site-data.ts";
 import {
   CUTTER_PREFIX,
   type Item,
@@ -184,6 +185,7 @@ function clean(body: Project, id: string, existing: Project | null): Project | s
     .map((c) => ({ role: str(c?.role, 100), name: str(c?.name, 200) }))
     .filter((c) => c.role || c.name);
   const now = new Date().toISOString();
+  const published = typeof body.published === "boolean" ? body.published : existing?.published;
   return {
     id,
     name,
@@ -191,6 +193,7 @@ function clean(body: Project, id: string, existing: Project | null): Project | s
     year: str(body.year, 40),
     credits,
     items,
+    ...(published === undefined ? {} : { published }),
     created: existing?.created ?? now,
     updated: now,
   };
@@ -263,10 +266,13 @@ async function saveProject(request: Request, env: Env, ctx: ExecutionContext, id
   );
   if (fresh.length) startProcessing(env, ctx);
 
+  // A project made in the admin starts off the site, until it's switched on.
+  if (create && !imported && project.published === undefined) project.published = false;
   await writeJson(env, keys.project(id), project);
   await remember(env, project);
   const ids = await order(env);
   if (!ids.includes(id)) await writeJson(env, keys.index, { order: [...ids, id] });
+  await publishSite(env.MEDIA);
   return json(await getProject(env, id));
 }
 
@@ -327,7 +333,7 @@ async function importCopies(request: Request, env: Env) {
 }
 
 // The projects' order, as dragged on the admin's list: the same projects, in a
-// new order (the site's index follows it, through the site's /api/order).
+// new order (the site follows it, through site.json).
 async function saveOrder(request: Request, env: Env) {
   const body = (await request.json()) as { order?: unknown };
   const current = await order(env);
@@ -335,6 +341,7 @@ async function saveOrder(request: Request, env: Env) {
   if (next.length !== current.length || new Set(next).size !== next.length || !next.every((id) => current.includes(id)))
     return fail("The order has to list every project once.");
   await writeJson(env, keys.index, { order: next });
+  await publishSite(env.MEDIA);
   return json({ order: next });
 }
 

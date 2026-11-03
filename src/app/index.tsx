@@ -11,9 +11,10 @@ import { setPendingTransition } from "~/src/project/transition-origin";
 import { ResearchPage } from "~/src/research";
 import { SettingsPanel } from "~/src/settings";
 import { SplashVideo } from "~/src/splash";
-import allManifest from "~/src/work/manifest.json";
+import { MEDIA } from "~/src/work/data";
 
-const ALL_MEDIA = allManifest as MediaItem[];
+// What the site shows, loaded before the app (src/work/data).
+const ALL_MEDIA: MediaItem[] = MEDIA;
 
 const VIEW_PATHS: Record<View, string> = { gallery: "/", index: "/index", research: "/research", about: "/about" };
 
@@ -114,9 +115,7 @@ export function App() {
       {view === "research" && !projectId && <ResearchPage />}
       {view === "about" && !projectId && <AboutPage />}
       {view === "index" && !projectId && <IndexPage leaving={leavingIndex} />}
-      {projectId && (
-        <ProjectPage key={projectId} id={projectId} onClose={() => navigate("/")} />
-      )}
+      {projectId && <ProjectPage key={projectId} id={projectId} onClose={() => navigate("/")} />}
       <SettingsPanel />
     </>
   );

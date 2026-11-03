@@ -1,8 +1,9 @@
 import type { MediaItem } from "~/src/infinite-canvas/types";
-import allManifest from "~/src/work/manifest.json";
-import projectInfo from "./info.json";
+import { INFO as SITE_INFO, MEDIA } from "~/src/work/data";
+import type { ProjectInfo } from "./info";
 
-const ALL_MEDIA = allManifest as MediaItem[];
+// Read once, after src/index.tsx has loaded what the site shows (src/work/data).
+const ALL_MEDIA: MediaItem[] = MEDIA;
 
 /** One credit: who, and what they did. The role may be empty. */
 export type Credit = { role: string; name: string };
@@ -37,8 +38,7 @@ export interface ProjectEntry {
  * place. A stand-in word rather than a guess: a made-up role beside a real
  * person's name could be read as true.
  */
-type ProjectInfo = { name?: string; kind?: string; year?: string; credits?: (string | { role?: string; name: string })[] };
-const INFO: Record<string, ProjectInfo> = projectInfo;
+const INFO: Record<string, ProjectInfo> = SITE_INFO;
 
 /**
  * Stand-ins for a project with no entry in `info.json` yet. The credits run

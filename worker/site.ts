@@ -1,9 +1,10 @@
 /**
  * The site's Worker (rh). The site itself is static files (dist/), served by
- * Cloudflare before this runs; only /api/* reaches it (`run_worker_first` in
- * wrangler.jsonc).
+ * Cloudflare before this runs; only /api/* and /media/* reach it
+ * (`run_worker_first` in wrangler.jsonc).
  *
- * /api/order is the projects' order set in the admin, for the index.
+ * /api/site is what the site shows (admin/site-data.ts), read as it loads, and
+ * /media/* the files of it that live in storage.
  *
  * /api/pipeline/* is the door the processing comes through
  * (scripts/process-media.ts, run by .github/workflows/process-media.yml). It
@@ -14,8 +15,8 @@
  */
 
 import { createRemoteJWKSet, jwtVerify } from "jose";
-import manifest from "../src/work/manifest.json";
 import { type ItemStatus, keys, PROCESS_PREFIX, previewStatusId, type QueueEntry, type Status } from "../admin/shared.ts";
+import { publishSite, SITE_KEY, type SiteData } from "../admin/site-data.ts";
 
 interface Env {
   ASSETS: Fetcher;
@@ -106,32 +107,68 @@ async function pipeline(request: Request, env: Env, url: URL) {
     // A preview's status sits beside its video's, under its own id.
     status[body.preview ? previewStatusId(body.item) : body.item] = { ...body.status, at: new Date().toISOString() };
     await env.MEDIA.put(statusKey, JSON.stringify(status), { httpMetadata: { contentType: "application/json" } });
-    if (body.status.state !== "processing")
+    if (body.status.state !== "processing") {
       await env.MEDIA.delete(body.preview ? keys.processPreview(body.project, body.item) : keys.process(body.project, body.item));
+      // A finished item may be new on the site.
+      await publishSite(env.MEDIA);
+    }
     return json({ ok: true });
   }
 
   return json({ error: "Not found." }, 404);
 }
 
-// The projects the site shows today (the manifest built into it).
-const onSite = new Set(manifest.map((m) => m.project));
+// What the site shows (site.json, see admin/site-data.ts): read when the site
+// loads. Built here if it's never been written.
+async function site(env: Env): Promise<SiteData> {
+  const stored = (await (await env.MEDIA.get(SITE_KEY))?.json()) as SiteData | null;
+  return stored ?? publishSite(env.MEDIA);
+}
 
-// The order the projects were dragged into on the admin's list, for the index
-// (src/projects/order.ts). Only projects the site already shows are listed, so
-// the names of ones still in the works don't leak.
-async function projectOrder(env: Env) {
-  const index = (await (await env.MEDIA.get(keys.index))?.json()) as { order?: string[] } | null;
-  const order = (index?.order ?? []).filter((id) => onSite.has(id));
-  return new Response(JSON.stringify({ order }), {
-    headers: { "content-type": "application/json", "cache-control": "public, max-age=60" },
-  });
+// The projects whose files the site may serve, kept for half a minute per
+// Worker instance so files don't each read site.json.
+let shown: { ids: Set<string>; at: number } | null = null;
+async function shownProjects(env: Env) {
+  if (!shown || Date.now() - shown.at > 30_000) {
+    const data = await site(env);
+    shown = { ids: new Set(data.media.map((m) => m.project)), at: Date.now() };
+  }
+  return shown.ids;
+}
+
+// A file from storage: only web copies, videos and previews (never an
+// original), and only of projects shown on the site. Ranges, so videos seek.
+async function media(request: Request, env: Env, key: string) {
+  const match = key.match(/^projects\/([\w-]+)\/web\/(full|mid|canvas|video|preview)\/[\w-]+\.(jpg|mp4)$/);
+  if (!match || !(await shownProjects(env)).has(match[1])) return new Response("Not found", { status: 404 });
+  const object = await env.MEDIA.get(key, { range: request.headers, onlyIf: request.headers });
+  if (!object) return new Response("Not found", { status: 404 });
+  const headers = new Headers();
+  object.writeHttpMetadata(headers);
+  headers.set("etag", object.httpEtag);
+  headers.set("cache-control", "public, max-age=86400");
+  headers.set("accept-ranges", "bytes");
+  if (!("body" in object)) return new Response(null, { status: 304, headers });
+  const range = object.range as { offset?: number; length?: number; suffix?: number } | undefined;
+  if (range && request.headers.has("range")) {
+    const offset = range.suffix !== undefined ? object.size - range.suffix : (range.offset ?? 0);
+    const length = range.suffix ?? range.length ?? object.size - offset;
+    headers.set("content-range", `bytes ${offset}-${offset + length - 1}/${object.size}`);
+    headers.set("content-length", String(length));
+    return new Response(object.body, { status: 206, headers });
+  }
+  return new Response(object.body, { headers });
 }
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (url.pathname === "/api/order" && request.method === "GET") return projectOrder(env);
+    if (url.pathname === "/api/site" && request.method === "GET")
+      return new Response(JSON.stringify(await site(env)), {
+        headers: { "content-type": "application/json", "cache-control": "public, max-age=30" },
+      });
+    if (url.pathname.startsWith("/media/") && request.method === "GET")
+      return media(request, env, decodeURIComponent(url.pathname.slice("/media/".length)));
     if (url.pathname.startsWith("/api/pipeline/")) {
       try {
         return await pipeline(request, env, url);

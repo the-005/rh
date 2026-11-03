@@ -177,6 +177,19 @@ main {
   margin-left: -12px;
 }
 
+.publish {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.publish label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+}
+
 .editor-head {
   display: flex;
   align-items: center;

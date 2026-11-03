@@ -10,6 +10,12 @@ export type MediaItem = {
   width: number;
   height: number;
   project?: string;
+  /** A video: the copies above are its first frame; `video` is the video
+   *  itself (compressed with HandBrake) and `preview` its looping preview, once
+   *  one is made in the admin. */
+  type?: "video";
+  video?: string;
+  preview?: string;
 };
 
 export type InfiniteCanvasProps = {

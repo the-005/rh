@@ -84,9 +84,19 @@ export type Project = {
   credits: Credit[];
   // In order of appearance.
   items: Item[];
+  // Shown on the public site ("Show on the site" in the admin). Unset means
+  // shown for the 11 projects brought in from the site, hidden for the rest.
+  published?: boolean;
   created: string;
   updated: string;
 };
+
+// Brought in from the site: its images came with their web copies (videos
+// and images added through the admin since don't change that).
+export const fromSite = (project: Project) => project.items.some((i) => i.copies);
+
+// On the site unless switched off; projects made in the admin start off.
+export const shownOnSite = (project: Project) => project.published ?? fromSite(project);
 
 export type ItemStatus = {
   state: "processing" | "done" | "failed";
