@@ -519,12 +519,12 @@ function describe(item: Row, loaded: Loaded | null) {
     if (status?.state === "done") return `Compressed (${status.width}×${status.height}).${cutter}`;
     if (status?.state === "failed") return `Couldn't compress: ${status.message ?? "unknown error"}`;
     if (status?.state === "processing") return `Compressing with HandBrake…${cutter}`;
-    if (loaded?.processing.includes(item.id)) return `Waiting to be compressed (starts within about 15 minutes).${cutter}`;
+    if (loaded?.processing.includes(item.id)) return `Waiting to be compressed.${cutter}`;
     return `Kept as uploaded.${cutter}`;
   }
   if (item.copies || status?.state === "done") return "Ready";
   if (status?.state === "failed") return `Couldn't make the web copies: ${status.message ?? "unknown error"}`;
   if (status?.state === "processing") return "Processing…";
-  if (loaded?.processing.includes(item.id)) return "Waiting to be processed (usually within 15 minutes).";
+  if (loaded?.processing.includes(item.id)) return "Waiting to be processed.";
   return "";
 }

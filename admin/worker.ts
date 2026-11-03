@@ -43,6 +43,29 @@ interface Env {
   POLICY_AUD: string;
   // Local development only (.dev.vars), and only honoured on localhost.
   DEV_BYPASS?: string;
+  // A GitHub key that may start the processing workflow (Actions: read and
+  // write, on the-005/rh only), set as a secret in the dashboard. Without it,
+  // processing waits for the workflow's schedule or a run started by hand.
+  GITHUB_TOKEN?: string;
+}
+
+// Starts the processing on GitHub now, rather than at its next scheduled run
+// (which GitHub may start late, or, as on 4 Nov, not at all). A run already
+// going picks up new work at its end; the workflow lets only one run at a time.
+function startProcessing(env: Env, ctx: ExecutionContext) {
+  if (!env.GITHUB_TOKEN) return;
+  ctx.waitUntil(
+    fetch("https://api.github.com/repos/the-005/rh/actions/workflows/process-media.yml/dispatches", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${env.GITHUB_TOKEN}`,
+        accept: "application/vnd.github+json",
+        "x-github-api-version": "2022-11-28",
+        "user-agent": "rh-admin",
+      },
+      body: JSON.stringify({ ref: "main" }),
+    }).catch(() => {})
+  );
 }
 
 const json = (data: unknown, status = 200) =>
@@ -186,7 +209,7 @@ async function remember(env: Env, project: Project) {
     await writeJson(env, keys.options, { kinds, roles });
 }
 
-async function saveProject(request: Request, env: Env, id: string, create: boolean) {
+async function saveProject(request: Request, env: Env, ctx: ExecutionContext, id: string, create: boolean) {
   const existing = await readJson<Project>(env, keys.project(id));
   if (create && existing) return fail("A project with this name already exists.", 409);
   const body = (await request.json()) as Project;
@@ -238,6 +261,7 @@ async function saveProject(request: Request, env: Env, id: string, create: boole
       return queues.map((key) => writeJson(env, key, entry));
     })
   );
+  if (fresh.length) startProcessing(env, ctx);
 
   await writeJson(env, keys.project(id), project);
   await remember(env, project);
@@ -369,7 +393,7 @@ function cleanPieces(raw: unknown): Piece[] | string {
 
 // A video's cuts and pieces. Saving pieces queues the preview to be made and
 // takes the video off the cutter's to-do list; cuts alone are only kept.
-async function previews(request: Request, env: Env, id: string, itemId: string) {
+async function previews(request: Request, env: Env, ctx: ExecutionContext, id: string, itemId: string) {
   const planKey = keys.plan(id, itemId);
   if (request.method === "GET") return json((await readJson<PreviewPlan>(env, planKey)) ?? {});
   if (request.method !== "PUT") return fail("Method not allowed.", 405);
@@ -388,6 +412,7 @@ async function previews(request: Request, env: Env, id: string, itemId: string) 
     const entry: QueueEntry = { project: id, item: itemId, type: "preview", original: item.original, file: item.file, pieces };
     await writeJson(env, keys.processPreview(id, itemId), entry);
     await env.MEDIA.delete(keys.cutter(id, itemId));
+    startProcessing(env, ctx);
   }
   await writeJson(env, planKey, plan);
   return json(plan);
@@ -416,7 +441,7 @@ async function media(request: Request, env: Env, key: string) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const email = await signedInAs(request, env);
     if (!email) return new Response("Sign in through Cloudflare Access to use the admin.", { status: 403 });
 
@@ -433,7 +458,7 @@ export default {
       if (previewMatch) {
         const [id, itemId] = [decodeURIComponent(previewMatch[1]), decodeURIComponent(previewMatch[2])];
         if (!isId(id) || !/^[\w-]+$/.test(itemId)) return fail("Bad video.");
-        return await previews(request, env, id, itemId);
+        return await previews(request, env, ctx, id, itemId);
       }
       const match = path.match(/^\/api\/projects\/([^/]+)$/);
       if (match) {
@@ -443,7 +468,7 @@ export default {
           const found = await getProject(env, id);
           return found ? json(found) : fail("No such project.", 404);
         }
-        if (method === "PUT") return await saveProject(request, env, id, url.searchParams.has("create"));
+        if (method === "PUT") return await saveProject(request, env, ctx, id, url.searchParams.has("create"));
         return fail("Method not allowed.", 405);
       }
       if (path === "/api/uploads") return await uploads(request, env, url);

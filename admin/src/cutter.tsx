@@ -135,7 +135,7 @@ export function CutterView({ project, item }: { project: string; item: string })
         try {
           await api.savePlan(project, item, { pieces });
           setSaved(true);
-          setStatus("Saved. The preview is made on GitHub, usually within 15 minutes.");
+          setStatus("Saved. The preview is being made on GitHub.");
         } catch (e) {
           setStatus(`Couldn't save: ${e instanceof Error ? e.message : String(e)}`);
         }
