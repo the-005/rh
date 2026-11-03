@@ -1,4 +1,4 @@
-import type { Project, Status } from "../shared.ts";
+import type { Options, Project, Status } from "../shared.ts";
 
 export type Summary = {
   id: string;
@@ -37,6 +37,7 @@ export async function call<T>(method: string, path: string, body?: unknown): Pro
 export const api = {
   me: () => call<{ email: string }>("GET", "/api/me"),
   projects: () => call<Summary[]>("GET", "/api/projects"),
+  options: () => call<Options>("GET", "/api/options"),
   project: (id: string) => call<Loaded>("GET", `/api/projects/${encodeURIComponent(id)}`),
   save: (project: Project, create: boolean) =>
     call<Loaded>("PUT", `/api/projects/${encodeURIComponent(project.id)}${create ? "?create" : ""}`, project),

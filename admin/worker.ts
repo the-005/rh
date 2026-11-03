@@ -15,7 +15,19 @@
  */
 
 import { createRemoteJWKSet, jwtVerify } from "jose";
-import { CUTTER_PREFIX, type Item, isId, keys, PROCESS_PREFIX, type Project, type QueueEntry, type Status } from "./shared.ts";
+import {
+  CUTTER_PREFIX,
+  type Item,
+  isId,
+  KINDS,
+  keys,
+  type Options,
+  PROCESS_PREFIX,
+  type Project,
+  type QueueEntry,
+  ROLES,
+  type Status,
+} from "./shared.ts";
 
 interface Env {
   ASSETS: Fetcher;
@@ -156,6 +168,19 @@ function clean(body: Project, id: string, existing: Project | null): Project | s
   };
 }
 
+const options = async (env: Env) => (await readJson<Options>(env, keys.options)) ?? { kinds: KINDS, roles: ROLES };
+
+// A kind or role typed that isn't on its list yet joins it, for every project.
+async function remember(env: Env, project: Project) {
+  const current = await options(env);
+  const add = (list: string[], value: string) =>
+    value && !list.some((o) => o.toLowerCase() === value.toLowerCase()) ? [...list, value] : list;
+  const kinds = add(current.kinds, project.kind);
+  const roles = project.credits.reduce((list, c) => add(list, c.role), current.roles);
+  if (kinds.length !== current.kinds.length || roles.length !== current.roles.length)
+    await writeJson(env, keys.options, { kinds, roles });
+}
+
 async function saveProject(request: Request, env: Env, id: string, create: boolean) {
   const existing = await readJson<Project>(env, keys.project(id));
   if (create && existing) return fail("A project with this name already exists.", 409);
@@ -209,6 +234,7 @@ async function saveProject(request: Request, env: Env, id: string, create: boole
   );
 
   await writeJson(env, keys.project(id), project);
+  await remember(env, project);
   const ids = await order(env);
   if (!ids.includes(id)) await writeJson(env, keys.index, { order: [...ids, id] });
   return json(await getProject(env, id));
@@ -303,6 +329,7 @@ export default {
     try {
       if (path === "/api/me") return json({ email });
       if (path === "/api/projects" && method === "GET") return json(await listProjects(env));
+      if (path === "/api/options" && method === "GET") return json(await options(env));
       const match = path.match(/^\/api\/projects\/([^/]+)$/);
       if (match) {
         const id = decodeURIComponent(match[1]);

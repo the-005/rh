@@ -4,6 +4,7 @@ import { Link, Route, Switch, useRoute } from "wouter";
 import { api } from "./api.ts";
 import { createdHere, Editor } from "./editor.tsx";
 import { List } from "./list.tsx";
+import "./material.ts";
 import "./style.css";
 
 function App() {
@@ -26,10 +27,10 @@ function App() {
   return (
     <>
       <header className="top">
-        <Link href="/" className="brand">
+        <Link href="/" className="brand md-typescale-title-large">
           rh admin
         </Link>
-        <span className="who">{email && `Signed in as ${email}`}</span>
+        <span className="who md-typescale-body-medium">{email && `Signed in as ${email}`}</span>
       </header>
       <main>
         {isNew || projectId ? (
@@ -38,7 +39,7 @@ function App() {
           <Switch>
             <Route path="/" component={List} />
             <Route>
-              <p className="notice">
+              <p className="notice md-typescale-body-large">
                 Nothing here. <Link href="/">All projects</Link>
               </p>
             </Route>

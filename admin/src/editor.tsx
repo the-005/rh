@@ -1,7 +1,9 @@
 import * as React from "react";
-import { Link, useLocation } from "wouter";
-import { type Credit, type Item, isImage, isVideo, KINDS, keys, type Project, ROLES, slug } from "../shared.ts";
+import { useLocation } from "wouter";
+import { type Credit, type Item, isImage, isVideo, KINDS, keys, type Options, type Project, ROLES, slug } from "../shared.ts";
 import { api, type Loaded, mediaUrl } from "./api.ts";
+import { Combo } from "./combo.tsx";
+import { fieldValue } from "./material.ts";
 import { upload } from "./upload.ts";
 
 /**
@@ -44,6 +46,7 @@ const size = (bytes = 0) =>
 export function Editor({ id }: { id: string | null }) {
   const [, navigate] = useLocation();
   const [draft, setDraft] = React.useState<Draft>(blank);
+  const [options, setOptions] = React.useState<Options>({ kinds: KINDS, roles: ROLES });
   const [loaded, setLoaded] = React.useState<Loaded | null>(null);
   const [notice, setNotice] = React.useState("");
   const [saving, setSaving] = React.useState("");
@@ -79,6 +82,10 @@ export function Editor({ id }: { id: string | null }) {
       live = false;
     };
   }, [id]);
+
+  React.useEffect(() => {
+    api.options().then(setOptions, () => {});
+  }, []);
 
   const uploading = draft.items.some((i) => i.local?.state === "uploading");
 
@@ -210,7 +217,25 @@ export function Editor({ id }: { id: string | null }) {
 
   // Dragging: the item goes before the first row whose middle is below the
   // pointer.
+  // While dragging near the top or bottom of the window (under the app bar or
+  // above the save bar), the page scrolls, so an image can travel the length
+  // of a long project.
+  const pointerY = React.useRef(0);
+  React.useEffect(() => {
+    if (!dragging) return;
+    let frame = 0;
+    const tick = () => {
+      const y = pointerY.current;
+      const step = y > window.innerHeight - 120 ? 14 : y < 120 ? -14 : 0;
+      if (step) window.scrollBy(0, step);
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [dragging]);
+
   const onDragMove = (e: React.PointerEvent) => {
+    pointerY.current = e.clientY;
     if (!dragging || !listRef.current) return;
     const rows = [...listRef.current.children];
     let before = rows.findIndex((row) => {
@@ -225,86 +250,74 @@ export function Editor({ id }: { id: string | null }) {
   const credits = draft.credits;
   const setCredit = (i: number, patch: Partial<Credit>) =>
     edit({ credits: credits.map((c, j) => (j === i ? { ...c, ...patch } : c)) });
-  const kinds = draft.kind && !KINDS.includes(draft.kind) ? [...KINDS, draft.kind] : KINDS;
+  // The shared lists, plus whatever this project already uses that they lack.
+  const withValues = (list: string[], values: string[]) => [
+    ...list,
+    ...values.filter((v, i) => v && values.indexOf(v) === i && !list.some((o) => o.toLowerCase() === v.toLowerCase())),
+  ];
+  const kinds = withValues(options.kinds, [draft.kind]);
+  const roles = withValues(
+    options.roles,
+    credits.map((c) => c.role)
+  );
 
-  if (id && !loaded) return <p className="notice">{notice || "Loading…"}</p>;
+  if (id && !loaded) return <p className="notice md-typescale-body-large">{notice || "Loading…"}</p>;
 
   return (
     <div className="editor">
-      <p className="back">
-        <Link href="/">← All projects</Link>
-      </p>
-      <h1>{loaded ? draft.name || "Untitled" : "New project"}</h1>
+      <md-text-button onClick={() => navigate("/")}>
+        <md-icon slot="icon">arrow_back</md-icon>
+        All projects
+      </md-text-button>
+      <h1 className="md-typescale-headline-medium">{loaded ? draft.name || "Untitled" : "New project"}</h1>
 
-      <section className="fields">
-        <label>
-          <span>Project name</span>
-          <input value={draft.name} onChange={(e) => edit({ name: e.target.value })} placeholder="Heliot Emil" />
-        </label>
-        <label>
-          <span>Kind of work</span>
-          <select value={draft.kind} onChange={(e) => edit({ kind: e.target.value })}>
-            <option value="">Choose…</option>
-            {kinds.map((k) => (
-              <option key={k} value={k}>
-                {k}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span>Year</span>
-          <input
-            value={draft.year}
-            onChange={(e) => edit({ year: e.target.value.replace(/\D/g, "").slice(0, 4) })}
-            inputMode="numeric"
-            placeholder="2025"
+      <section className="card">
+        <h2 className="md-typescale-title-medium">Details</h2>
+        <div className="fields">
+          <md-outlined-text-field
+            label="Project name"
+            value={draft.name}
+            onInput={(e: React.FormEvent<HTMLElement>) => edit({ name: fieldValue(e) })}
           />
-        </label>
+          <Combo label="Kind of work" value={draft.kind} options={kinds} onChange={(kind) => edit({ kind })} />
+          <md-outlined-text-field
+            label="Year"
+            value={draft.year}
+            inputMode="numeric"
+            onInput={(e: React.FormEvent<HTMLElement>) => edit({ year: fieldValue(e).replace(/\D/g, "").slice(0, 4) })}
+          />
+        </div>
       </section>
 
-      <section>
-        <h2>Collaborators</h2>
-        <datalist id="roles">
-          {ROLES.map((r) => (
-            <option key={r} value={r} />
-          ))}
-        </datalist>
+      <section className="card">
+        <h2 className="md-typescale-title-medium">Collaborators</h2>
         <ul className="credits">
           {credits.map((credit, i) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: rows have no identity beyond their place
             <li key={i}>
-              <input
-                list="roles"
-                value={credit.role}
-                onChange={(e) => setCredit(i, { role: e.target.value })}
-                placeholder="Role"
-                aria-label="Role"
-              />
-              <input
+              <Combo label="Role" value={credit.role} options={roles} onChange={(role) => setCredit(i, { role })} />
+              <md-outlined-text-field
+                label="Name"
                 value={credit.name}
-                onChange={(e) => setCredit(i, { name: e.target.value })}
-                placeholder="Name"
-                aria-label="Name"
+                onInput={(e: React.FormEvent<HTMLElement>) => setCredit(i, { name: fieldValue(e) })}
               />
-              <button
-                type="button"
-                className="remove"
-                onClick={() => edit({ credits: credits.filter((_, j) => j !== i) })}
+              <md-icon-button
                 aria-label="Remove collaborator"
+                onClick={() => edit({ credits: credits.filter((_, j) => j !== i) })}
               >
-                ×
-              </button>
+                <md-icon>close</md-icon>
+              </md-icon-button>
             </li>
           ))}
         </ul>
-        <button type="button" className="link" onClick={() => edit({ credits: [...credits, { role: "", name: "" }] })}>
-          + Add collaborator
-        </button>
+        <md-text-button onClick={() => edit({ credits: [...credits, { role: "", name: "" }] })}>
+          <md-icon slot="icon">add</md-icon>
+          Add collaborator
+        </md-text-button>
       </section>
 
-      <section>
-        <h2>Images and videos</h2>
+      <section className="card">
+        <h2 className="md-typescale-title-medium">Images and videos</h2>
         <button
           type="button"
           className={over ? "drop over" : "drop"}
@@ -321,7 +334,9 @@ export function Editor({ id }: { id: string | null }) {
           }}
           onClick={() => fileRef.current?.click()}
         >
-          Drop images and videos here, or click to choose. They upload as they are.
+          <md-icon>upload</md-icon>
+          <span className="md-typescale-body-large">Drop images and videos here, or click to choose</span>
+          <span className="md-typescale-body-medium">They upload as they are, any size.</span>
         </button>
         <input
           ref={fileRef}
@@ -335,59 +350,62 @@ export function Editor({ id }: { id: string | null }) {
           }}
         />
 
-        {draft.items.length > 0 && <p className="hint">Drag ⠿ to change the order. The first one opens the project.</p>}
+        {draft.items.length > 0 && (
+          <p className="hint md-typescale-body-medium">
+            Drag <md-icon>drag_indicator</md-icon> to change the order. The first one opens the project.
+          </p>
+        )}
         <ol ref={listRef} className="items" onPointerMove={onDragMove}>
           {draft.items.map((item, index) => (
             <li key={item.id} className={dragging === item.id ? "dragging" : undefined}>
-              <button
-                type="button"
+              <md-icon-button
                 className="handle"
                 disabled={!!saving}
                 aria-label={`Move ${item.file} (arrow keys)`}
-                onPointerDown={(e) => {
+                onPointerDown={(e: React.PointerEvent<HTMLElement>) => {
                   e.preventDefault();
                   e.currentTarget.setPointerCapture(e.pointerId);
                   setDragging(item.id);
                 }}
                 onPointerUp={() => setDragging(null)}
                 onPointerCancel={() => setDragging(null)}
-                onKeyDown={(e) => {
+                onKeyDown={(e: React.KeyboardEvent<HTMLElement>) => {
                   if (e.key === "ArrowUp") move(item.id, index - 1);
                   if (e.key === "ArrowDown") move(item.id, index + 1);
                 }}
               >
-                ⠿
-              </button>
-              <span className="number">{index + 1}</span>
+                <md-icon>drag_indicator</md-icon>
+              </md-icon-button>
+              <span className="number md-typescale-label-large">{index + 1}</span>
               <Thumb item={item} loaded={loaded} />
               <span className="file">
-                {item.file}
-                <small>
+                <span className="md-typescale-body-large">{item.file}</span>
+                <span className="md-typescale-body-small">
                   {item.type === "video" ? "Video" : "Image"}
                   {item.size ? ` · ${size(item.size)}` : ""}
-                </small>
+                </span>
               </span>
-              <span className="state">{describe(item, loaded)}</span>
-              <button
-                type="button"
-                className="remove"
+              <span className="state md-typescale-body-medium">
+                {describe(item, loaded)}
+                {item.local?.state === "uploading" && <md-linear-progress value={item.local.progress} />}
+              </span>
+              <md-icon-button
                 disabled={!!saving}
-                onClick={() => edit({ items: draft.items.filter((i) => i.id !== item.id) })}
                 aria-label={`Remove ${item.file}`}
+                onClick={() => edit({ items: draft.items.filter((i) => i.id !== item.id) })}
               >
-                ×
-              </button>
+                <md-icon>delete</md-icon>
+              </md-icon-button>
             </li>
           ))}
         </ol>
       </section>
 
       <footer className="save">
-        <button type="button" className="primary" onClick={save} disabled={!!saving}>
+        <span className="notice md-typescale-body-medium">{notice || (dirty && !saving ? "Unsaved changes." : "")}</span>
+        <md-filled-button onClick={save} disabled={!!saving}>
           {saving || (loaded ? "Save" : "Save project")}
-        </button>
-        {notice && <span className="notice">{notice}</span>}
-        {!notice && dirty && !saving && <span className="notice">Unsaved changes.</span>}
+        </md-filled-button>
       </footer>
     </div>
   );

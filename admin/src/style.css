@@ -1,16 +1,39 @@
-/* The admin: plain, on white, in the site's fallback sans. Bigger than the
-   site's 12px, since it's a tool to fill in rather than a page to look at. */
+/* The admin in Material 3 (the owner, 4 Nov). The components are Google's
+   (@material/web); everything around them uses the same M3 tokens: the
+   baseline light colour scheme below, Roboto, and M3's shapes. Changing the
+   scheme is a matter of these colour tokens alone (for instance, rh's black
+   and white). */
 :root {
-  --ink: #111;
-  --grey: #777;
-  --line: #e4e4e4;
-  --soft: #f5f5f5;
-  --accent: #111;
-  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-  font-size: 14px;
-  line-height: 1.4;
-  color: var(--ink);
-  background: #fff;
+  --md-sys-color-primary: #6750a4;
+  --md-sys-color-on-primary: #ffffff;
+  --md-sys-color-primary-container: #eaddff;
+  --md-sys-color-on-primary-container: #21005d;
+  --md-sys-color-secondary: #625b71;
+  --md-sys-color-on-secondary: #ffffff;
+  --md-sys-color-secondary-container: #e8def8;
+  --md-sys-color-on-secondary-container: #1d192b;
+  --md-sys-color-tertiary: #7d5260;
+  --md-sys-color-error: #b3261e;
+  --md-sys-color-on-error: #ffffff;
+  --md-sys-color-background: #fef7ff;
+  --md-sys-color-on-background: #1d1b20;
+  --md-sys-color-surface: #fef7ff;
+  --md-sys-color-on-surface: #1d1b20;
+  --md-sys-color-surface-variant: #e7e0ec;
+  --md-sys-color-on-surface-variant: #49454f;
+  --md-sys-color-surface-container-lowest: #ffffff;
+  --md-sys-color-surface-container-low: #f7f2fa;
+  --md-sys-color-surface-container: #f3edf7;
+  --md-sys-color-surface-container-high: #ece6f0;
+  --md-sys-color-surface-container-highest: #e6e0e9;
+  --md-sys-color-outline: #79747e;
+  --md-sys-color-outline-variant: #cac4d0;
+  --md-ref-typeface-brand: "Roboto", system-ui, sans-serif;
+  --md-ref-typeface-plain: "Roboto", system-ui, sans-serif;
+
+  font-family: var(--md-ref-typeface-plain);
+  color: var(--md-sys-color-on-surface);
+  background: var(--md-sys-color-surface);
 }
 
 * {
@@ -25,221 +48,275 @@ a {
   color: inherit;
 }
 
-button,
-input,
-select {
-  font: inherit;
-  color: inherit;
+h1,
+h2,
+p {
+  margin: 0;
 }
 
+md-icon {
+  flex: none;
+}
+
+/* Top app bar (small). */
 .top {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
-  padding: 16px 24px;
-  border-bottom: 1px solid var(--line);
+  align-items: center;
+  height: 64px;
+  padding: 0 24px;
+  background: var(--md-sys-color-surface-container);
 }
 
 .brand {
   text-decoration: none;
-  font-weight: 700;
 }
 
 .who {
-  color: var(--grey);
+  color: var(--md-sys-color-on-surface-variant);
 }
 
 main {
-  max-width: 960px;
+  max-width: 1040px;
   margin: 0 auto;
   padding: 24px 24px 120px;
 }
 
-h1 {
-  font-size: 28px;
-  font-weight: 500;
-  margin: 8px 0 24px;
-}
-
-h2 {
-  font-size: 14px;
-  font-weight: 700;
-  margin: 32px 0 12px;
-}
-
 .notice {
-  color: var(--grey);
+  color: var(--md-sys-color-on-surface-variant);
 }
 
-.primary {
-  display: inline-block;
-  padding: 10px 18px;
-  border: 0;
-  border-radius: 6px;
-  background: var(--accent);
-  color: #fff;
-  text-decoration: none;
-  cursor: pointer;
+.notice md-linear-progress {
+  display: block;
+  margin-top: 8px;
 }
 
-.primary:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.link {
-  padding: 0;
-  border: 0;
-  background: none;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-/* The project list. */
+/* The project list: outlined cards, the whole card a link. */
 .list-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin: 8px 0 24px;
 }
 
 .projects {
   list-style: none;
-  margin: 0;
+  margin: 16px 0 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 24px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
 }
 
-.projects a {
-  display: block;
+.project-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 0 16px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--md-sys-color-surface-container-lowest);
   text-decoration: none;
+  outline: none;
 }
 
-.projects img,
+.project-card img,
 .cover.empty {
   display: block;
   width: 100%;
   aspect-ratio: 4 / 3;
   object-fit: cover;
-  background: var(--soft);
-  border-radius: 4px;
+  background: var(--md-sys-color-surface-container-high);
+  margin-bottom: 12px;
 }
 
-.name {
-  display: block;
-  margin-top: 8px;
-  font-weight: 500;
+.project-card .name,
+.project-card .meta {
+  padding: 0 16px;
 }
 
 .meta {
-  display: block;
-  color: var(--grey);
+  color: var(--md-sys-color-on-surface-variant);
 }
 
-/* The editor. */
-.back {
-  margin: 0;
+/* The editor: each section a filled card. */
+.editor > md-text-button {
+  margin-left: -12px;
+}
+
+.editor h1 {
+  margin: 8px 0 24px;
+}
+
+.card {
+  margin-bottom: 16px;
+  padding: 20px 24px 24px;
+  border-radius: 12px;
+  background: var(--md-sys-color-surface-container-low);
+}
+
+.card h2 {
+  margin-bottom: 16px;
 }
 
 .fields {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr;
+  grid-template-columns: 2fr 1.4fr 1fr;
+  align-items: start;
   gap: 16px;
 }
 
-label span {
-  display: block;
-  margin-bottom: 6px;
-  color: var(--grey);
-}
-
-input,
-select {
+md-outlined-text-field,
+md-outlined-select {
   width: 100%;
-  padding: 9px 10px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: #fff;
-}
-
-input:focus,
-select:focus {
-  outline: 2px solid var(--ink);
-  outline-offset: -1px;
 }
 
 .credits {
   list-style: none;
-  margin: 0 0 12px;
+  margin: 0 0 8px;
   padding: 0;
 }
 
 .credits li {
   display: grid;
-  grid-template-columns: 1fr 2fr 32px;
-  gap: 8px;
-  margin-bottom: 8px;
+  grid-template-columns: 1fr 2fr 48px;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
 }
 
-.remove {
+/* The Notion-style select: a text field with an M3 menu under it. */
+.combo {
+  position: relative;
+}
+
+.combo-menu {
+  position: absolute;
+  z-index: 3;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 8px 0;
+  border-radius: 4px;
+  background: var(--md-sys-color-surface-container);
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.3),
+    0 2px 6px 2px rgb(0 0 0 / 0.15);
+}
+
+.combo-hint {
+  padding: 8px 16px;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.combo-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 16px;
   border: 0;
   background: none;
-  font-size: 20px;
-  line-height: 1;
-  color: var(--grey);
+  font: inherit;
+  font-size: 14px;
+  color: var(--md-sys-color-on-surface);
+  text-align: left;
   cursor: pointer;
 }
 
-.remove:hover {
-  color: var(--ink);
+.combo-option.active {
+  background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent);
 }
 
-.drop {
-  display: block;
-  width: 100%;
-  padding: 40px 16px;
-  border: 1px dashed #bbb;
+.combo-option .check {
+  margin-left: auto;
+  color: var(--md-sys-color-primary);
+}
+
+/* An option as a small tonal chip, as Notion shows its options as tags. */
+.option-chip {
+  display: inline-block;
+  padding: 4px 10px;
   border-radius: 8px;
-  background: var(--soft);
-  color: var(--grey);
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+  font-weight: 500;
+}
+
+/* Images and videos. */
+.drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 32px 16px;
+  border: 1px dashed var(--md-sys-color-outline);
+  border-radius: 12px;
+  background: var(--md-sys-color-surface-container-lowest);
+  color: var(--md-sys-color-on-surface-variant);
+  font: inherit;
   cursor: pointer;
+}
+
+.drop md-icon {
+  --md-icon-size: 32px;
+  color: var(--md-sys-color-primary);
 }
 
 .drop.over {
-  border-color: var(--ink);
-  color: var(--ink);
+  border-color: var(--md-sys-color-primary);
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+}
+
+.drop:disabled {
+  opacity: 0.38;
+  cursor: default;
 }
 
 .hint {
-  color: var(--grey);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 16px;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.hint md-icon {
+  --md-icon-size: 18px;
 }
 
 .items {
   list-style: none;
-  margin: 0;
+  margin: 8px 0 0;
   padding: 0;
 }
 
 .items li {
   display: grid;
-  grid-template-columns: 28px 28px 64px minmax(0, 1fr) minmax(0, 1.2fr) 32px;
+  grid-template-columns: 48px 24px 72px minmax(0, 1fr) minmax(0, 1.2fr) 48px;
   align-items: center;
   gap: 12px;
   padding: 8px 0;
-  border-bottom: 1px solid var(--line);
-  background: #fff;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
 }
 
 .items li.dragging {
-  background: var(--soft);
+  background: var(--md-sys-color-secondary-container);
+  border-radius: 8px;
 }
 
 .handle {
-  border: 0;
-  background: none;
-  font-size: 18px;
-  color: var(--grey);
   cursor: grab;
   touch-action: none;
 }
@@ -249,52 +326,57 @@ select:focus {
 }
 
 .number {
-  color: var(--grey);
+  color: var(--md-sys-color-on-surface-variant);
   text-align: right;
 }
 
 .thumb {
   display: block;
-  width: 64px;
-  height: 48px;
+  width: 72px;
+  height: 54px;
   object-fit: cover;
-  border-radius: 3px;
-  background: var(--soft);
+  border-radius: 8px;
+  background: var(--md-sys-color-surface-container-high);
 }
 
 .file {
+  display: flex;
+  flex-direction: column;
   overflow-wrap: anywhere;
 }
 
-.file small {
-  display: block;
-  color: var(--grey);
-}
-
+.file .md-typescale-body-small,
 .state {
-  color: var(--grey);
+  color: var(--md-sys-color-on-surface-variant);
 }
 
+.state md-linear-progress {
+  display: block;
+  margin-top: 6px;
+}
+
+/* The save bar, along the bottom. */
 .save {
   position: fixed;
+  z-index: 2;
   left: 0;
   right: 0;
   bottom: 0;
   display: flex;
+  justify-content: flex-end;
   align-items: center;
   gap: 16px;
-  padding: 16px max(24px, calc((100vw - 960px) / 2 + 24px));
-  border-top: 1px solid var(--line);
-  background: #fff;
+  padding: 12px max(24px, calc((100vw - 1040px) / 2 + 24px));
+  background: var(--md-sys-color-surface-container);
 }
 
-@media (max-width: 640px) {
+@media (max-width: 720px) {
   .fields {
     grid-template-columns: 1fr;
   }
 
   .items li {
-    grid-template-columns: 28px 64px minmax(0, 1fr) 32px;
+    grid-template-columns: 48px 72px minmax(0, 1fr) 48px;
   }
 
   .number,

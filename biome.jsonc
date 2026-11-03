@@ -68,6 +68,15 @@
       }
     }
   },
+  "overrides": [
+    {
+      // The admin's Material 3 components (md-filled-button, md-icon-button…)
+      // are interactive custom elements; the rule only knows native ones, so it
+      // flags every click handler on them.
+      "includes": ["admin/src/**"],
+      "linter": { "rules": { "a11y": { "noStaticElementInteractions": "off" } } }
+    }
+  ],
   "formatter": {
     "enabled": true,
     "lineWidth": 130,

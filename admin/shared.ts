@@ -13,13 +13,16 @@
  *   projects/<id>/web/canvas/<item>.jpg   1000px copy   } (see CLAUDE.md, Media)
  *   projects/<id>/web/video/<item>.mp4    a video, compressed with HandBrake
  *   projects/index.json                   the projects, in order
+ *   options.json                          the kinds of work and roles to pick from
  *   queue/process/<id>__<item>.json       an image waiting for its copies, or a
  *                                         video waiting to be compressed
  *   queue/cutter/<id>__<item>.json        a video waiting for its preview
  */
 
-// The kinds of work a project can be: one per project. Defaults until the
-// owner gives the real list (4 Nov).
+// The kinds of work a project can be (one per project) and the roles a
+// collaborator can have: what the lists start with. Anything typed that isn't
+// on a list is added to it when the project is saved (options.json), after
+// Notion's selects (the owner, 4 Nov: "add an option that doesn't exist").
 export const KINDS = ["Editorial", "Campaign", "Commission", "Personal"];
 
 // How videos are compressed: the owner's HandBrake settings (4 Nov), this
@@ -31,7 +34,6 @@ export const HANDBRAKE_PRESET = "Fast 2160p60 4K HEVC";
 export const VIDEO_LONG_SIDE = 2560;
 export const VIDEO_SHORT_SIDE = 1440;
 
-// Offered while typing a collaborator's role; any role can be written.
 export const ROLES = [
   "Photography",
   "Styling",
@@ -44,6 +46,8 @@ export const ROLES = [
   "Production",
   "Video",
 ];
+
+export type Options = { kinds: string[]; roles: string[] };
 
 export type Credit = { role: string; name: string };
 
@@ -94,6 +98,7 @@ export type QueueEntry = { project: string; item: string; type: Item["type"]; or
 
 export const keys = {
   index: "projects/index.json",
+  options: "options.json",
   project: (id: string) => `projects/${id}/project.json`,
   status: (id: string) => `projects/${id}/status.json`,
   original: (id: string, item: string, file: string) => `projects/${id}/originals/${item}-${safeName(file)}`,
