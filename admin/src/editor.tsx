@@ -25,7 +25,8 @@ import { upload } from "./upload.ts";
  * One project: its name, kind, year and collaborators, and its images and
  * videos in order of appearance. Files upload as soon as they're added, as
  * they are; saving waits for them, then queues what's new (images for their web
- * copies, videos to be compressed with HandBrake and for the Preview Cutter). The order is dragged by the handle at
+ * copies, videos to be compressed with HandBrake). Each saved video has a
+ * "Create video preview" button that opens it in the preview cutter. The order is dragged by the handle at
  * each row's left (or moved with the arrow keys on a focused handle).
  */
 
@@ -450,18 +451,16 @@ export function Editor({ id }: { id: string | null }) {
               <span className="state md-typescale-body-medium">
                 {describe(item, loaded)}
                 {item.local?.state === "uploading" && <md-linear-progress value={item.local.progress} />}
+                {item.type === "video" && loaded?.project.items.some((i) => i.id === item.id) && (
+                  <md-outlined-button
+                    className="preview-button"
+                    onClick={() => navigate(`/cutter/${encodeURIComponent(loaded.project.id)}/${encodeURIComponent(item.id)}`)}
+                  >
+                    <md-icon slot="icon">content_cut</md-icon>
+                    Create video preview
+                  </md-outlined-button>
+                )}
               </span>
-              {item.type === "video" && loaded?.project.items.some((i) => i.id === item.id) ? (
-                <md-icon-button
-                  aria-label={`Cut a preview of ${item.file}`}
-                  title="Open in the Preview Cutter"
-                  onClick={() => navigate(`/cutter/${encodeURIComponent(loaded.project.id)}/${encodeURIComponent(item.id)}`)}
-                >
-                  <md-icon>content_cut</md-icon>
-                </md-icon-button>
-              ) : (
-                <span />
-              )}
               <md-icon-button
                 disabled={!!saving}
                 aria-label={`Remove ${item.file}`}
@@ -514,7 +513,7 @@ function describe(item: Row, loaded: Loaded | null) {
             : loaded?.processing.includes(previewStatusId(item.id))
               ? " Preview waiting to be made."
               : loaded?.cutter.includes(item.id)
-                ? " In the Preview Cutter queue."
+                ? " No preview yet."
                 : "";
     if (status?.state === "done") return `Compressed (${status.width}×${status.height}).${cutter}`;
     if (status?.state === "failed") return `Couldn't compress: ${status.message ?? "unknown error"}`;

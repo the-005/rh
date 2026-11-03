@@ -336,7 +336,7 @@ md-outlined-select {
 
 .items li {
   display: grid;
-  grid-template-columns: 48px 24px 72px minmax(0, 1fr) minmax(0, 1.2fr) 48px 48px;
+  grid-template-columns: 48px 24px 72px minmax(0, 1fr) minmax(0, 1.2fr) 48px;
   align-items: center;
   gap: 12px;
   padding: 8px 0;
@@ -382,6 +382,11 @@ md-outlined-select {
   color: var(--md-sys-color-on-surface-variant);
 }
 
+.state .preview-button {
+  display: inline-flex;
+  margin-top: 8px;
+}
+
 .state md-linear-progress {
   display: block;
   margin-top: 6px;
@@ -408,7 +413,7 @@ md-outlined-select {
   }
 
   .items li {
-    grid-template-columns: 48px 72px minmax(0, 1fr) 48px 48px;
+    grid-template-columns: 48px 72px minmax(0, 1fr) 48px;
   }
 
   .project-row {

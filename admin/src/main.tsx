@@ -33,14 +33,6 @@ function App() {
         <Link href="/" className="brand md-typescale-title-large">
           rh admin
         </Link>
-        <nav className="nav">
-          <Link href="/" className={!isCutterList && !isCutting ? "current" : undefined}>
-            Projects
-          </Link>
-          <Link href="/cutter" className={isCutterList || isCutting ? "current" : undefined}>
-            Preview Cutter
-          </Link>
-        </nav>
         <span className="who md-typescale-body-medium">{email && `Signed in as ${email}`}</span>
       </header>
       <main className={isCutting ? "wide" : undefined}>

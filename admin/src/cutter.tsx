@@ -27,7 +27,7 @@ export function CutterList() {
   return (
     <div className="cutter-list">
       <header className="list-head">
-        <h1 className="md-typescale-headline-medium">Preview Cutter</h1>
+        <h1 className="md-typescale-headline-medium">Video previews</h1>
         {rows && (
           <span className="notice md-typescale-body-medium">
             {todo} to do, {rows.length - todo} done
@@ -68,7 +68,9 @@ export function CutterList() {
   );
 }
 
-// One video in the cutter.
+// One video in the preview cutter, opened from its project's "Create video
+// preview" button (the owner, 4 Nov: a button on each video rather than a
+// "Preview Cutter" section). The queue above is still at /cutter, unlinked.
 export function CutterView({ project, item }: { project: string; item: string }) {
   const [, navigate] = useLocation();
   const [row, setRow] = React.useState<CutterRow | null>(null);
@@ -104,7 +106,8 @@ export function CutterView({ project, item }: { project: string; item: string })
         const here = rows.find((r) => r.project === project && r.item === item) ?? null;
         if (!here) setError("No such video.");
         setRow(here);
-        setNext(rows.find((r) => r.todo && !(r.project === project && r.item === item)) ?? null);
+        // After saving, the next video in the same project still without a preview.
+        setNext(rows.find((r) => r.project === project && r.todo && r.item !== item) ?? null);
         setPlan(found);
       },
       (e: Error) => live && setError(e.message)
@@ -148,9 +151,9 @@ export function CutterView({ project, item }: { project: string; item: string })
   return (
     <div className="cutter" ref={refs.root}>
       <header className="cutter-top">
-        <md-text-button onClick={() => navigate("/cutter")}>
+        <md-text-button onClick={() => navigate(`/p/${encodeURIComponent(project)}`)}>
           <md-icon slot="icon">arrow_back</md-icon>
-          Queue
+          {row?.projectName ?? "Back"}
         </md-text-button>
         <div className="cutter-title md-typescale-body-large">
           {row ? (
@@ -167,7 +170,7 @@ export function CutterView({ project, item }: { project: string; item: string })
             <md-filled-button
               onClick={() => navigate(`/cutter/${encodeURIComponent(next.project)}/${encodeURIComponent(next.item)}`)}
             >
-              Next video
+              Next video in this project
               <md-icon slot="icon">arrow_forward</md-icon>
             </md-filled-button>
           ) : (
