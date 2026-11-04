@@ -11,6 +11,7 @@ import {
   swapTransitionSource,
 } from "./transition-origin";
 import styles from "./style.module.css";
+import { useStripVideos } from "./videos";
 import { getSettings } from "~/src/settings/store";
 import { MEDIA } from "~/src/work/data";
 
@@ -251,7 +252,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     return best;
   };
 
-  const applyScroll = (pos: number) => {
+  const applyScroll = (pos: number, arrived = false) => {
     scrollRef.current.pos = pos;
     if (rowRef.current) rowRef.current.style.transform = `translate3d(${-pos}px, 0, 0)`;
     const k = imageAt(pos);
@@ -259,6 +260,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       currentRef.current = k;
       setCurrent(k);
     }
+    videos.scrolled(pos, arrived);
   };
 
   const tick = (now: number) => {
@@ -267,7 +269,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     s.last = now;
     const d = s.target - s.pos;
     if (Math.abs(d) < 0.5) {
-      applyScroll(s.target);
+      applyScroll(s.target, true);
       s.raf = 0;
       s.last = 0;
       return;
@@ -289,6 +291,22 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     s.last = 0;
     s.target = s.pos;
   };
+
+  // Videos in the strip (./videos): a click centres one, scrolling plays the
+  // one in view.
+  const videos = useStripVideos({
+    items: images,
+    current,
+    active: phase === "strip" && !busy,
+    centre: (k) => {
+      const L = layoutRef.current;
+      const target = clamp(L.xs[k] + L.widths[k] / 2 - L.vw / 2, 0, L.maxScroll);
+      scrollTo(target);
+      return target;
+    },
+  });
+  // Where a press began, to tell a click on a video from a drag.
+  const pressRef = React.useRef<{ k: number; x: number } | null>(null);
 
   // A resize can shorten the strip; keep the scroll inside it.
   React.useEffect(() => {
@@ -553,6 +571,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   React.useEffect(() => releaseTransition, []);
 
   const fadeClose = () => {
+    videos.hideAll();
     releaseTransition();
     const overlay = overlayRef.current;
     if (overlay) {
@@ -591,6 +610,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       return;
     }
     const sourceKey = t.sourceKey;
+    videos.hideAll();
     setCanvasPaused(false);
     // Stop the strip wherever it is.
     stopScroll();
@@ -672,7 +692,9 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   // carries on at the speed it was let go.
   const onPointerDown = (e: React.PointerEvent) => {
     if (phase !== "strip" || busy || (e.pointerType === "mouse" && e.button !== 0)) return;
-    if ((e.target as HTMLElement).closest("button")) return;
+    if ((e.target as HTMLElement).closest("button, [data-vui]")) return;
+    const slot = (e.target as HTMLElement).closest<HTMLElement>("[data-slot]");
+    pressRef.current = { k: slot ? Number(slot.dataset.slot) : -1, x: e.clientX };
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
     stopScroll();
@@ -697,6 +719,13 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     dragRef.current = null;
     setDragging(false);
     const v = e.timeStamp - d.lastT > FLING_STALE_MS ? 0 : d.v;
+    const press = pressRef.current;
+    pressRef.current = null;
+    // A press that didn't move is a click: on a video, it centres and plays it.
+    if (press && press.k >= 0 && Math.abs(e.clientX - press.x) < 5) {
+      videos.click(press.k);
+      return;
+    }
     scrollTo(scrollRef.current.pos + v * FLING_MS);
   };
 
@@ -722,11 +751,14 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
 
       <div className={`${styles.counter} ${phase === "strip" ? styles.counterShown : ""}`}>{counter}</div>
 
+      {videos.controls}
+
       <div className={styles.row} ref={rowRef}>
         {images.map((img, k) => (
           <div
             key={img.url}
-            className={styles.slot}
+            data-slot={k}
+            className={`${styles.slot} ${videos.fitted === k ? styles.fitted : ""}`}
             style={{
               width: widths[k],
               height: stripH,
@@ -744,6 +776,22 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
               decoding="async"
               className={styles.image}
             />
+            {img.type === "video" && (
+              <video
+                ref={videos.refFor(k)}
+                className={styles.video}
+                muted
+                loop
+                playsInline
+                preload="none"
+                poster={`/${img.midUrl}`}
+                // Fitted: wider than the screen, it scales down to fit it.
+                style={
+                  videos.fitted === k && widths[k] > viewport.w ? { transform: `scale(${viewport.w / widths[k]})` } : undefined
+                }
+                onPlaying={(e) => e.currentTarget.classList.add(styles.videoOn)}
+              />
+            )}
           </div>
         ))}
       </div>

@@ -184,6 +184,19 @@ async function uploadVideo(file: string, key: string) {
   );
 }
 
+// The three web copies of a picture, made and uploaded as for any image.
+async function webCopies(entry: QueueEntry, src: string, dir: string) {
+  const copies = {} as Copies;
+  for (const [name, side] of SIZES) {
+    const out = path.join(dir, `${name}.jpg`);
+    await encode(src, out, side);
+    const key = keys.web(entry.project, name, entry.item);
+    await call("PUT", `/api/pipeline/copy?key=${encodeURIComponent(key)}`, fs.readFileSync(out), "image/jpeg");
+    copies[name] = key;
+  }
+  return copies;
+}
+
 async function processVideo(entry: QueueEntry, dir: string) {
   const src = await download(entry, dir);
   const out = path.join(dir, "video.mp4");
@@ -194,7 +207,13 @@ async function processVideo(entry: QueueEntry, dir: string) {
   );
   const key = keys.video(entry.project, entry.item);
   await uploadVideo(out, key);
-  await report(entry, { state: "done", video: key, width, height });
+  // Its first frame as a picture (the Strip Video Bench's still), from the
+  // compressed video so it matches what plays: the gallery and the index show
+  // it, and the strip rests on it until the video plays.
+  const still = path.join(dir, "still.png");
+  await run("ffmpeg", ["-y", "-v", "error", "-i", out, "-frames:v", "1", still]);
+  const copies = await webCopies(entry, still, dir);
+  await report(entry, { state: "done", video: key, width, height, copies });
 }
 
 // A preview, as the owner decided (2 Nov): the pieces picked in the Preview

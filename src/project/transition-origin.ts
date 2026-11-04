@@ -122,7 +122,7 @@ export function beginHeroTween(
   target: TransitionRect,
   durationMs: number,
   onArrive: () => void,
-  mode: "in" | "out" = "in",
+  mode: "in" | "out" = "in"
 ): void {
   heroTween = { key, target, durationMs, mode, done: false, onArrive };
 }

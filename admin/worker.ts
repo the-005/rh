@@ -264,7 +264,23 @@ async function saveProject(request: Request, env: Env, ctx: ExecutionContext, id
       return queues.map((key) => writeJson(env, key, entry));
     })
   );
-  if (fresh.length) startProcessing(env, ctx);
+  // Videos compressed before they got a still (their first frame, which the
+  // site shows) go round again.
+  const stillless = project.items.filter(
+    (i) => i.type === "video" && i.original && status[i.id]?.state === "done" && !status[i.id]?.copies
+  );
+  await Promise.all(
+    stillless.map((item) =>
+      writeJson(env, keys.process(id, item.id), {
+        project: id,
+        item: item.id,
+        type: "video",
+        original: item.original as string,
+        file: item.file,
+      } satisfies QueueEntry)
+    )
+  );
+  if (fresh.length || stillless.length) startProcessing(env, ctx);
 
   // A project made in the admin starts off the site, until it's switched on.
   if (create && !imported && project.published === undefined) project.published = false;
