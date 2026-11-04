@@ -168,6 +168,12 @@ main {
   color: var(--md-sys-color-on-surface-variant);
 }
 
+.row-text .meta {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .chevron {
   color: var(--md-sys-color-on-surface-variant);
 }
@@ -333,8 +339,16 @@ md-outlined-select {
   display: flex;
   align-items: center;
   gap: 4px;
-  margin-top: 16px;
   color: var(--md-sys-color-on-surface-variant);
+}
+
+/* Under the drop zone: Choose a folder at the left, the reorder hint at the right. */
+.under-drop {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin: 8px 0 0 -12px;
 }
 
 .hint md-icon {
@@ -347,9 +361,11 @@ md-outlined-select {
   padding: 0;
 }
 
+/* One row per image or video: handle, number, picture, name with one line
+   under it, the preview button for a video, delete. */
 .items li {
   display: grid;
-  grid-template-columns: 48px 24px 72px minmax(0, 1.4fr) minmax(0, 1fr) 196px 48px;
+  grid-template-columns: 40px 20px 72px minmax(0, 1fr) auto 40px;
   min-height: 72px;
   align-items: center;
   gap: 12px;
@@ -385,61 +401,102 @@ md-outlined-select {
   background: var(--md-sys-color-surface-container-high);
 }
 
+/* A video's picture carries a small play mark. */
+.thumb-wrap {
+  position: relative;
+  display: block;
+}
+
+.thumb-wrap .badge {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  --md-icon-size: 16px;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.6);
+  color: #fff;
+}
+
 .file {
   display: flex;
   flex-direction: column;
-  overflow-wrap: anywhere;
-}
-
-.file .md-typescale-body-small {
-  color: var(--md-sys-color-on-surface-variant);
-}
-
-/* An item's state: an icon and a word or two, with what it means under it. */
-.state {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  color: var(--md-sys-color-on-surface);
-}
-
-.state md-icon {
-  --md-icon-size: 20px;
-  color: var(--md-sys-color-on-surface-variant);
-}
-
-.state.done md-icon {
-  color: var(--md-sys-color-primary);
-}
-
-.state.error,
-.state.error md-icon {
-  color: var(--md-sys-color-error);
-}
-
-.state-text {
-  display: flex;
-  flex-direction: column;
+  gap: 2px;
   min-width: 0;
 }
 
-.state .detail {
-  color: var(--md-sys-color-on-surface-variant);
+.file .name {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.state md-linear-progress {
+.file md-linear-progress {
   display: block;
-  width: 140px;
+  max-width: 240px;
   margin-top: 6px;
+}
+
+/* The line under the name: kind and size, then where the item stands. */
+.file .meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  white-space: nowrap;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.file .state {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file .state::before {
+  content: "·";
+  margin-right: 2px;
+}
+
+.file .state md-icon {
+  --md-icon-size: 16px;
+}
+
+.file .state-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file .state.busy,
+.file .state.wait {
+  color: var(--md-sys-color-primary);
+}
+
+.file .state.busy md-icon {
+  animation: spin 1.4s linear infinite;
+}
+
+.file .state.error {
+  color: var(--md-sys-color-error);
+}
+
+@keyframes spin {
+  to {
+    rotate: 360deg;
+  }
 }
 
 .action {
   display: flex;
   justify-content: flex-end;
+}
+
+/* Deleting the project: a text button under the cards. */
+.danger {
+  margin-top: 8px;
 }
 
 /* The save bar, along the bottom. */
@@ -458,20 +515,87 @@ md-outlined-select {
 }
 
 @media (max-width: 720px) {
+  main {
+    padding: 16px 16px 120px;
+  }
+
+  .top {
+    gap: 16px;
+    padding: 0 16px;
+  }
+
+  .who {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .card {
+    padding: 16px 16px 20px;
+  }
+
+  .editor-head {
+    flex-wrap: wrap;
+  }
+
   .fields {
     grid-template-columns: 1fr;
   }
 
+  /* A collaborator's role above their name, the × beside both. */
+  .credits li {
+    grid-template-columns: minmax(0, 1fr) 40px;
+    gap: 8px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  }
+
+  .credits li > md-icon-button {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+
   .items li {
-    grid-template-columns: 48px 72px minmax(0, 1fr) auto 48px;
+    grid-template-columns: 32px 56px minmax(0, 1fr) auto 40px;
+    gap: 8px;
+  }
+
+  .thumb {
+    width: 56px;
+    height: 42px;
+  }
+
+  .number {
+    display: none;
+  }
+
+  /* The preview button keeps only its icon. */
+  .action .label {
+    display: none;
+  }
+
+  .under-drop .hint {
+    display: none;
+  }
+
+  /* On a narrow row the line under the name is the item's state when it has
+     one, otherwise its kind and size. */
+  .file .meta:has(.state) > span:first-child {
+    display: none;
+  }
+
+  .file .state::before {
+    content: none;
+  }
+
+  .hidden-chip .label {
+    display: none;
   }
 
   .project-row {
-    grid-template-columns: 72px minmax(0, 1fr) 24px;
-  }
-
-  .project-row > .meta {
-    display: none;
+    grid-template-columns: 72px minmax(0, 1fr) auto;
+    gap: 12px;
   }
 
   .project-row img,
@@ -480,13 +604,8 @@ md-outlined-select {
     height: 48px;
   }
 
-  .number,
-  .state {
+  .project-row .chevron {
     display: none;
-  }
-
-  .action md-text-button {
-    --md-text-button-label-text-size: 0;
   }
 }
 
@@ -532,11 +651,6 @@ main.wide {
 }
 
 /* The Preview Cutter's queue. */
-.cutter-list .intro {
-  margin: -8px 0 24px;
-  max-width: 70ch;
-}
-
 .cutter-rows {
   list-style: none;
   margin: 0;
@@ -588,7 +702,6 @@ main.wide {
   text-overflow: ellipsis;
 }
 
-.cutter-title .dim,
 .cutter-status {
   color: var(--md-sys-color-on-surface-variant);
 }
@@ -640,6 +753,7 @@ main.wide {
 }
 
 .cutter-bar button {
+  white-space: nowrap;
   font: inherit;
   font-size: 14px;
   font-weight: 500;
@@ -877,6 +991,44 @@ main.wide {
   color: var(--md-sys-color-on-surface-variant);
 }
 
+/* The cutter on a phone: the video a 16:9 box, the side panel under the strip. */
+@media (max-width: 720px) {
+  .cutter {
+    height: auto;
+    grid-template-rows: auto 56vw auto;
+    padding: 8px 12px 16px;
+  }
+
+  .cutter-top {
+    gap: 8px;
+  }
+
+  .cutter-status {
+    min-width: 0;
+  }
+
+  .cutter-bar {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: 16px 12px 12px;
+  }
+
+  .cutter-bar .side {
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    justify-items: start;
+  }
+
+  .side .buttons {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .side .hint {
+    display: none;
+  }
+}
+
 /* Taking an option off its list: a small × at the end of its row. */
 .option-remove {
   display: grid;
@@ -931,13 +1083,11 @@ main.wide {
 }
 
 /* A project that isn't on the public site, marked on the list. */
-.counts {
+.hidden-chip {
   display: flex;
   align-items: center;
-  gap: 12px;
-}
-
-.hidden-chip {
+  gap: 4px;
+  --md-icon-size: 16px;
   padding: 2px 10px;
   border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: 8px;

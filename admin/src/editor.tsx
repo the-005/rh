@@ -26,8 +26,10 @@ import { upload } from "./upload.ts";
  * videos in order of appearance. Files upload as soon as they're added, as
  * they are; saving waits for them, then queues what's new (images for their web
  * copies, videos to be compressed with HandBrake). Each saved video has a
- * "Create video preview" button that opens it in the preview cutter. The order is dragged by the handle at
- * each row's left (or moved with the arrow keys on a focused handle).
+ * button that opens it in the preview cutter: "Create video preview", or
+ * "Edit video preview" once it has one (the owner, 5 Nov). The order is
+ * dragged by the handle at each row's left (or moved with the arrow keys on a
+ * focused handle).
  */
 
 // A file added in this session: its upload, and a preview from the file itself.
@@ -194,10 +196,10 @@ export function Editor({ id }: { id: string | null }) {
     const has = new Set(draft.items.map((i) => `${i.type}:${stem(i.file)}`));
     const accepted = media.filter((f) => !has.has(`${kindOf(f.name, f.type)}:${stem(f.name)}`)).sort(byName);
     const notes = [];
-    if (accepted.length) notes.push(`Adding ${accepted.length} file${accepted.length === 1 ? "" : "s"} at the end.`);
-    if (media.length > accepted.length) notes.push(`${media.length - accepted.length} already in the project, skipped.`);
-    const other = files.filter((f) => !media.includes(f));
-    if (other.length) notes.push(`Not images or videos, skipped: ${other.map((f) => f.name).join(", ")}`);
+    if (accepted.length) notes.push(`Adding ${accepted.length}.`);
+    if (media.length > accepted.length) notes.push(`${media.length - accepted.length} already here, skipped.`);
+    const other = files.filter((f) => !media.includes(f)).length;
+    if (other) notes.push(`${other} not ${other === 1 ? "an image or video" : "images or videos"}, skipped.`);
     setNotice(notes.join(" "));
     const rows: Row[] = accepted.map((file) => {
       const itemId = crypto.randomUUID().slice(0, 8);
@@ -235,7 +237,7 @@ export function Editor({ id }: { id: string | null }) {
     const results = await Promise.all(draft.items.map((i) => i.local?.finished ?? true));
     if (results.includes(false)) {
       setSaving("");
-      setNotice("Some files didn't upload. Remove them (×) and add them again, then save.");
+      setNotice("Some uploads failed. Remove them and add them again.");
       return;
     }
     setSaving("Saving…");
@@ -435,10 +437,7 @@ export function Editor({ id }: { id: string | null }) {
           onClick={() => fileRef.current?.click()}
         >
           <md-icon>upload</md-icon>
-          <span className="md-typescale-body-large">Drop images, videos or a whole folder here, or click to choose</span>
-          <span className="md-typescale-body-medium">
-            They upload as they are, any size. New ones go at the end; what the project already has is skipped.
-          </span>
+          <span className="md-typescale-body-large">Drop images, videos or folders, or click to choose</span>
         </button>
         <input
           ref={fileRef}
@@ -462,16 +461,17 @@ export function Editor({ id }: { id: string | null }) {
             e.target.value = "";
           }}
         />
-        <md-text-button disabled={!!saving} onClick={() => folderRef.current?.click()}>
-          <md-icon slot="icon">folder_open</md-icon>
-          Choose a folder
-        </md-text-button>
-
-        {draft.items.length > 0 && (
-          <p className="hint md-typescale-body-medium">
-            Drag <md-icon>drag_indicator</md-icon> to change the order. The first one opens the project.
-          </p>
-        )}
+        <div className="under-drop">
+          <md-text-button disabled={!!saving} onClick={() => folderRef.current?.click()}>
+            <md-icon slot="icon">folder_open</md-icon>
+            Choose a folder
+          </md-text-button>
+          {draft.items.length > 1 && (
+            <p className="hint md-typescale-body-medium">
+              Drag <md-icon>drag_indicator</md-icon> to reorder
+            </p>
+          )}
+        </div>
         <ol ref={listRef} className="items" onPointerMove={onDragMove}>
           {draft.items.map((item, index) => (
             <li key={item.id} className={dragging === item.id ? "dragging" : undefined}>
@@ -496,20 +496,18 @@ export function Editor({ id }: { id: string | null }) {
               <span className="number md-typescale-label-large">{index + 1}</span>
               <Thumb item={item} loaded={loaded} />
               <span className="file">
-                <span className="md-typescale-body-large">{item.file}</span>
-                <span className="md-typescale-body-small">
-                  {item.type === "video" ? "Video" : "Image"}
-                  {item.size ? ` · ${size(item.size)}` : ""}
+                <span className="name md-typescale-body-large" title={item.file}>
+                  {item.file}
                 </span>
+                <ItemMeta item={item} loaded={loaded} />
               </span>
-              <ItemState item={item} loaded={loaded} />
               <span className="action">
                 {item.type === "video" && loaded?.project.items.some((i) => i.id === item.id) && (
                   <md-text-button
                     onClick={() => navigate(`/cutter/${encodeURIComponent(loaded.project.id)}/${encodeURIComponent(item.id)}`)}
                   >
-                    <md-icon slot="icon">content_cut</md-icon>
-                    Create video preview
+                    <md-icon slot="icon">{hasPreview(item, loaded) ? "edit" : "content_cut"}</md-icon>
+                    <span className="label">{hasPreview(item, loaded) ? "Edit video preview" : "Create video preview"}</span>
                   </md-text-button>
                 )}
               </span>
@@ -526,13 +524,11 @@ export function Editor({ id }: { id: string | null }) {
       </section>
 
       {loaded && (
-        <section className="card danger">
-          <h2 className="md-typescale-title-medium">Delete project</h2>
+        <section className="danger">
           {confirming ? (
             <div className="confirm">
               <span className="md-typescale-body-medium">
-                This deletes {draft.name || "the project"} and all its files, from the admin and from the site. It can't be
-                undone.
+                Delete {loaded.project.name || "this project"} and all its files? This can't be undone.
               </span>
               <md-text-button onClick={() => setConfirming(false)}>Cancel</md-text-button>
               <md-filled-button
@@ -554,7 +550,7 @@ export function Editor({ id }: { id: string | null }) {
           ) : (
             <md-text-button className="delete-start" onClick={() => setConfirming(true)}>
               <md-icon slot="icon">delete</md-icon>
-              Delete this project
+              Delete project
             </md-text-button>
           )}
         </section>
@@ -572,66 +568,80 @@ export function Editor({ id }: { id: string | null }) {
   );
 }
 
+// An image's small copy; a video's first frame once it's processed (the still
+// the site shows), until then the video itself.
 function Thumb({ item, loaded }: { item: Row; loaded: Loaded | null }) {
   const canvas = item.copies?.canvas ?? loaded?.status[item.id]?.copies?.canvas;
-  if (item.type === "image") {
-    const src = canvas ? mediaUrl(canvas) : item.local?.url;
-    return src ? <img className="thumb" src={src} alt="" loading="lazy" /> : <span className="thumb empty" />;
+  let picture: React.ReactNode = <span className="thumb empty" />;
+  if (canvas) picture = <img className="thumb" src={mediaUrl(canvas)} alt="" loading="lazy" />;
+  else if (item.type === "image" && item.local) picture = <img className="thumb" src={item.local.url} alt="" />;
+  else if (item.type === "video") {
+    const compressed = loaded?.status[item.id]?.video;
+    const src = item.local?.url ?? (compressed ? mediaUrl(compressed) : item.original ? mediaUrl(item.original) : null);
+    if (src) picture = <video className="thumb" src={`${src}#t=0.5`} preload="metadata" muted />;
   }
-  const compressed = loaded?.status[item.id]?.video;
-  const src = item.local?.url ?? (compressed ? mediaUrl(compressed) : item.original ? mediaUrl(item.original) : null);
-  return src ? <video className="thumb" src={`${src}#t=0.5`} preload="metadata" muted /> : <span className="thumb empty" />;
+  if (item.type !== "video") return picture;
+  return (
+    <span className="thumb-wrap">
+      {picture}
+      <md-icon className="badge">play_arrow</md-icon>
+    </span>
+  );
 }
 
-type Tone = "done" | "busy" | "wait" | "error";
-const ICONS: Record<Tone, string> = { done: "check_circle", busy: "progress_activity", wait: "schedule", error: "error" };
+// A video has a preview once one is made, being made or waiting to be.
+function hasPreview(item: Row, loaded: Loaded | null) {
+  const id = previewStatusId(item.id);
+  return !!loaded?.status[id] || !!loaded?.processing.includes(id);
+}
 
-// Where an item stands, in a few words: what it is now (Ready, Waiting,
-// Processing…, or what went wrong) and, for a video, its preview.
-function describe(item: Row, loaded: Loaded | null): { tone: Tone; text: string; detail?: string } {
+type Tone = "plain" | "busy" | "wait" | "error";
+const ICONS: Record<Tone, string | null> = { plain: null, busy: "progress_activity", wait: "schedule", error: "error" };
+
+// Where an item stands, in a word or two, or nothing for an image that's
+// ready: the row only speaks up when something is still to happen or went
+// wrong. A ready video says what its preview is.
+function describe(item: Row, loaded: Loaded | null): { tone: Tone; text: string; why?: string } | null {
   const local = item.local;
   if (local?.state === "uploading") return { tone: "busy", text: `Uploading ${Math.floor(local.progress * 100)}%` };
-  if (local?.state === "failed") return { tone: "error", text: "Upload failed", detail: local.error };
+  if (local?.state === "failed") return { tone: "error", text: "Upload failed", why: local.error };
   const saved = loaded?.project.items.some((i) => i.id === item.id);
-  if (!saved) return { tone: "wait", text: "Uploaded", detail: "Processed after you save" };
+  if (!saved) return { tone: "wait", text: "Not saved yet" };
   const status = loaded?.status[item.id];
   if (item.copies || status?.state === "done") {
-    if (item.type !== "video") return { tone: "done", text: "Ready" };
+    if (item.type !== "video") return null;
     const preview = loaded?.status[previewStatusId(item.id)];
-    const making = loaded?.processing.includes(previewStatusId(item.id)) || preview?.state === "processing";
-    const detail =
-      preview?.state === "done" && !making
-        ? preview.auto
-          ? "Automatic preview"
-          : "Your preview"
-        : making
-          ? "Making the preview…"
-          : preview?.state === "failed"
-            ? "The preview couldn't be made"
-            : "No preview yet";
-    return { tone: "done", text: "Ready", detail };
+    if (loaded?.processing.includes(previewStatusId(item.id)) || preview?.state === "processing")
+      return { tone: "busy", text: "Making preview" };
+    if (preview?.state === "failed") return { tone: "error", text: "Preview failed", why: preview.message };
+    if (preview?.state === "done") return { tone: "plain", text: preview.auto ? "Automatic preview" : "Custom preview" };
+    return { tone: "plain", text: "No preview" };
   }
-  if (status?.state === "failed")
-    return {
-      tone: "error",
-      text: item.type === "video" ? "Couldn't be compressed" : "Couldn't be processed",
-      detail: status.message,
-    };
-  if (status?.state === "processing") return { tone: "busy", text: item.type === "video" ? "Compressing…" : "Processing…" };
-  if (loaded?.processing.includes(item.id)) return { tone: "wait", text: "Waiting", detail: "Starts within a few minutes" };
+  if (status?.state === "failed") return { tone: "error", text: "Couldn't process", why: status.message };
+  if (status?.state === "processing") return { tone: "busy", text: item.type === "video" ? "Compressing" : "Processing" };
+  if (loaded?.processing.includes(item.id)) return { tone: "wait", text: "Waiting" };
   return { tone: "wait", text: "Not processed" };
 }
 
-function ItemState({ item, loaded }: { item: Row; loaded: Loaded | null }) {
-  const { tone, text, detail } = describe(item, loaded);
+// The line under the file name: kind, size and where it stands.
+function ItemMeta({ item, loaded }: { item: Row; loaded: Loaded | null }) {
+  const state = describe(item, loaded);
+  const icon = state && ICONS[state.tone];
   return (
-    <span className={`state ${tone}`} title={detail}>
-      <md-icon>{ICONS[tone]}</md-icon>
-      <span className="state-text">
-        <span className="md-typescale-body-medium">{text}</span>
-        {detail && <span className="md-typescale-body-small detail">{detail}</span>}
-        {item.local?.state === "uploading" && <md-linear-progress value={item.local.progress} />}
+    <>
+      <span className="meta md-typescale-body-medium">
+        <span>
+          {item.type === "video" ? "Video" : "Image"}
+          {item.size ? ` · ${size(item.size)}` : ""}
+        </span>
+        {state && (
+          <span className={`state ${state.tone}`} title={state.why}>
+            {icon && <md-icon>{icon}</md-icon>}
+            <span className="state-text">{state.text}</span>
+          </span>
+        )}
       </span>
-    </span>
+      {item.local?.state === "uploading" && <md-linear-progress value={item.local.progress} />}
+    </>
   );
 }

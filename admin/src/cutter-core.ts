@@ -92,7 +92,7 @@ export function mountCutter(o: CutterOptions) {
   /* ---------- Opening ---------- */
 
   async function open() {
-    setStatus("Opening");
+    setStatus("Opening…");
     try {
       const input = new Input({ formats: ALL_FORMATS, source: new UrlSource(o.url) });
       const track = await input.getPrimaryVideoTrack();
@@ -134,8 +134,7 @@ export function mountCutter(o: CutterOptions) {
   function ready() {
     if (!cur) return;
     cur.scanned = true;
-    const n = cur.cuts.length;
-    setStatus(n ? `${n} ${n === 1 ? "cut" : "cuts"} in this video` : "No cuts in this video");
+    setStatus("");
     cur.pieces = o.pieces?.length ? o.pieces.map((p) => ({ ...p })) : suggestPieces(cur.cuts, cur.duration);
     el.playButton.disabled = false;
     el.saveButton.disabled = false;
@@ -348,14 +347,12 @@ export function mountCutter(o: CutterOptions) {
   function renderReadout() {
     if (!cur) return;
     if (!cur.scanned) {
-      el.readout.textContent = "Finding the cuts first";
-      el.hint.textContent = "Pieces are placed once the whole video has been checked.";
+      el.readout.textContent = "Finding cuts…";
+      el.hint.textContent = "";
       for (const b of buttons()) b.disabled = true;
       return;
     }
-    el.hint.textContent = strict()
-      ? "Handles snap to cuts; hold Alt to place them freely. Scroll or pinch the strip to zoom."
-      : "No cuts in this video. Scroll or pinch the strip to zoom.";
+    el.hint.textContent = strict() ? "Hold Alt to place freely · Scroll to zoom" : "Scroll to zoom";
     const k = loopCuts();
     el.readout.innerHTML = `<b>${total().toFixed(1)}</b> / ${PREVIEW_MAX} s · <span class="${k < 2 ? "low" : ""}">${k} ${k === 1 ? "cut" : "cuts"}</span>`;
     el.addButton.disabled = !newPiece();

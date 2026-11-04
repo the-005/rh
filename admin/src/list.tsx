@@ -7,10 +7,10 @@ import "./material.ts";
 // Every project, in the site's order, and the way to a new one. The first time
 // the admin opens, storage is empty: it brings the site's projects in first.
 //
-// The order is dragged by the handle on each card (or moved with the arrow
-// keys on it), and saved as soon as a card is let go: it's the order the
-// site's index lists the projects in (the owner, 4 Nov; through the site's
-// /api/order, see worker/site.ts).
+// The order is dragged by the handle on each row (or moved with the arrow
+// keys on it), and saved as soon as a row is let go: it's the order the
+// site lists the projects in (the owner, 4 Nov; site.json, see
+// admin/site-data.ts).
 export function List() {
   const [, navigate] = useLocation();
   const [projects, setProjects] = React.useState<Summary[] | null>(null);
@@ -24,10 +24,10 @@ export function List() {
   const startOrder = React.useRef("");
 
   async function saveOrder(list: Summary[]) {
-    setOrderNote("Saving the order…");
+    setOrderNote("Saving…");
     try {
       await api.order(list.map((p) => p.id));
-      setOrderNote("Order saved. The site's index follows it within a minute.");
+      setOrderNote("Order saved");
     } catch (e) {
       setOrderNote(`Couldn't save the order: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -133,7 +133,7 @@ export function List() {
         <p className="hint md-typescale-body-medium">
           {orderNote || (
             <>
-              Drag <md-icon>drag_indicator</md-icon> up or down to change the order of the projects on the site's index.
+              Drag <md-icon>drag_indicator</md-icon> to set the order on the site
             </>
           )}
         </p>
@@ -174,13 +174,23 @@ export function List() {
               <span className="row-text">
                 <span className="name md-typescale-title-medium">{p.name}</span>
                 <span className="meta md-typescale-body-medium">
-                  {[p.kind, p.year].filter(Boolean).join(" · ") || "No kind or year yet"}
+                  {[
+                    p.kind,
+                    p.year,
+                    p.images && `${p.images} image${p.images === 1 ? "" : "s"}`,
+                    p.videos && `${p.videos} video${p.videos === 1 ? "" : "s"}`,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </span>
               </span>
-              <span className="meta md-typescale-body-medium counts">
-                {!p.shown && <span className="hidden-chip md-typescale-label-medium">Not on the site</span>}
-                {p.images} image{p.images === 1 ? "" : "s"}
-                {p.videos ? `, ${p.videos} video${p.videos === 1 ? "" : "s"}` : ""}
+              <span>
+                {!p.shown && (
+                  <span className="hidden-chip md-typescale-label-medium" title="Not on the site">
+                    <md-icon>visibility_off</md-icon>
+                    <span className="label">Hidden</span>
+                  </span>
+                )}
               </span>
               <md-icon className="chevron">chevron_right</md-icon>
             </Link>

@@ -5,14 +5,14 @@ import { mountCutter } from "./cutter-core.ts";
 
 const stateOf = (row: CutterRow) =>
   row.preview === "done"
-    ? "Preview ready"
+    ? "Ready"
     : row.preview === "processing"
-      ? "Making the preview…"
+      ? "Making preview"
       : row.preview === "failed"
-        ? "The preview couldn't be made"
+        ? "Preview failed"
         : row.todo
           ? "To do"
-          : "Preview saved, waiting to be made";
+          : "Waiting";
 
 // The Preview Cutter's queue: every video in every project, to do first.
 export function CutterList() {
@@ -34,10 +34,6 @@ export function CutterList() {
           </span>
         )}
       </header>
-      <p className="notice md-typescale-body-medium intro">
-        For each video, pick a few pieces, up to 10 seconds in all. They're joined with straight cuts into a looping preview, made
-        on GitHub with the same HandBrake settings as the videos.
-      </p>
       {error && <p className="notice">{error}</p>}
       {!rows && !error && <p className="notice">Loading…</p>}
       {rows?.length === 0 && <p className="notice">No videos yet. Add some to a project.</p>}
@@ -55,7 +51,7 @@ export function CutterList() {
                     <span className="md-typescale-body-large">{row.file}</span>
                     <span className={`md-typescale-body-medium state${row.todo ? " todo" : ""}`}>
                       {stateOf(row)}
-                      {!row.compressed && " · not compressed yet"}
+                      {!row.compressed && " · not compressed"}
                     </span>
                   </Link>
                 </li>
@@ -76,7 +72,8 @@ export function CutterView({ project, item }: { project: string; item: string })
   const [row, setRow] = React.useState<CutterRow | null>(null);
   const [next, setNext] = React.useState<CutterRow | null>(null);
   const [plan, setPlan] = React.useState<{ cuts?: number[]; pieces?: { s: number; e: number }[] } | null>(null);
-  const [status, setStatus] = React.useState("Opening");
+  // Shown only while something's happening: opening, saving, an error.
+  const [status, setStatus] = React.useState("Opening…");
   const [error, setError] = React.useState("");
   const [saved, setSaved] = React.useState(false);
   const refs = {
@@ -134,11 +131,11 @@ export function CutterView({ project, item }: { project: string; item: string })
         api.savePlan(project, item, { cuts }).catch(() => {});
       },
       save: async (pieces) => {
-        setStatus("Saving");
+        setStatus("Saving…");
         try {
           await api.savePlan(project, item, { pieces });
           setSaved(true);
-          setStatus("Saved. The preview is being made on GitHub.");
+          setStatus("Saved. Ready in a few minutes.");
         } catch (e) {
           setStatus(`Couldn't save: ${e instanceof Error ? e.message : String(e)}`);
         }
@@ -155,16 +152,7 @@ export function CutterView({ project, item }: { project: string; item: string })
           <md-icon slot="icon">arrow_back</md-icon>
           {row?.projectName ?? "Back"}
         </md-text-button>
-        <div className="cutter-title md-typescale-body-large">
-          {row ? (
-            <>
-              <span className="dim">{row.projectName} · </span>
-              {row.file}
-            </>
-          ) : (
-            error || "Loading…"
-          )}
-        </div>
+        <div className="cutter-title md-typescale-body-large">{row ? row.file : error || "Loading…"}</div>
         <div className="cutter-status md-typescale-body-medium">
           {saved && next ? (
             <md-filled-button
