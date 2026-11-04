@@ -26,3 +26,4 @@ dist-ssr
 # Wrangler (local dev state and secrets)
 .wrangler
 .dev.vars*
+netlify-off/

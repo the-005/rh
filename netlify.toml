@@ -1,28 +1,17 @@
-# Staging on Netlify: every push to main rebuilds and redeploys the site.
+# Netlify is off (5 Nov): staging is on Cloudflare (see CLAUDE.md, Hosting).
+# Until the site is deleted in Netlify's dashboard, this forwards every old
+# Netlify address to the same page on Cloudflare, and Netlify builds only
+# when this file changes, so pushes to main no longer redeploy it.
 [build]
-  command = "npm run build"
-  publish = "dist"
+  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- netlify.toml"
+  command = "mkdir -p netlify-off && echo '<!doctype html><title>rh</title><a href=\"https://rh.rh-3b6.workers.dev/\">rh.rh-3b6.workers.dev</a>' > netlify-off/index.html"
+  publish = "netlify-off"
 
 [build.environment]
   NODE_VERSION = "22"
 
-# /index first, and forced: Netlify otherwise reads /index as the address of
-# index.html and 301s it home to / before the catch-all below gets a say.
-[[redirects]]
-  from = "/index"
-  to = "/index.html"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/index/"
-  to = "/index.html"
-  status = 200
-  force = true
-
-# A single-page app: /index, /research, /about and /project/:id all need index.html,
-# or a reload on them 404s. Real files (images, fonts, video) are served first.
 [[redirects]]
   from = "/*"
-  to = "/index.html"
-  status = 200
+  to = "https://rh.rh-3b6.workers.dev/:splat"
+  status = 301
+  force = true
