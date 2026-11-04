@@ -102,8 +102,10 @@ export type ItemStatus = {
   state: "processing" | "done" | "failed";
   message?: string;
   copies?: Copies;
-  // A video's compressed version.
+  // A video's compressed version (or, for a preview, the preview).
   video?: string;
+  // A preview made automatically from the suggested pieces, not by hand.
+  auto?: boolean;
   width?: number;
   height?: number;
   at: string;
@@ -130,7 +132,9 @@ export const PIECE_MIN = 0.3;
 
 // What the Preview Cutter keeps per video: the cuts it found (so reopening is
 // instant) and the pieces last saved.
-export type PreviewPlan = { cuts?: number[]; pieces?: Piece[]; saved?: string };
+// `auto` marks pieces suggested by the processing (the automatic preview),
+// which a save in the cutter replaces; pieces saved by hand are never touched.
+export type PreviewPlan = { cuts?: number[]; pieces?: Piece[]; saved?: string; auto?: boolean };
 
 // Status entries for previews sit beside the video's own, under this id.
 export const previewStatusId = (item: string) => `${item}__preview`;

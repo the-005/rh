@@ -127,6 +127,23 @@ export function Editor({ id }: { id: string | null }) {
     api.options().then(setOptions, () => {});
   }, []);
 
+  // While anything is being processed, check again every few seconds, so
+  // "Waiting" turns into "Ready" without a reload. Only the statuses change;
+  // what's being edited stays as it is.
+  const processingNow =
+    !!loaded && (loaded.processing.length > 0 || Object.values(loaded.status).some((st) => st.state === "processing"));
+  const loadedId = loaded?.project.id;
+  React.useEffect(() => {
+    if (!processingNow || !loadedId) return;
+    const timer = window.setInterval(() => {
+      api.project(loadedId).then(
+        (fresh) => setLoaded((before) => (before ? { ...fresh, project: before.project } : fresh)),
+        () => {}
+      );
+    }, 8000);
+    return () => window.clearInterval(timer);
+  }, [processingNow, loadedId]);
+
   const uploading = draft.items.some((i) => i.local?.state === "uploading");
 
   // Leaving with uploads running or changes unsaved asks first.
@@ -485,17 +502,15 @@ export function Editor({ id }: { id: string | null }) {
                   {item.size ? ` · ${size(item.size)}` : ""}
                 </span>
               </span>
-              <span className="state md-typescale-body-medium">
-                {describe(item, loaded)}
-                {item.local?.state === "uploading" && <md-linear-progress value={item.local.progress} />}
+              <ItemState item={item} loaded={loaded} />
+              <span className="action">
                 {item.type === "video" && loaded?.project.items.some((i) => i.id === item.id) && (
-                  <md-outlined-button
-                    className="preview-button"
+                  <md-text-button
                     onClick={() => navigate(`/cutter/${encodeURIComponent(loaded.project.id)}/${encodeURIComponent(item.id)}`)}
                   >
                     <md-icon slot="icon">content_cut</md-icon>
                     Create video preview
-                  </md-outlined-button>
+                  </md-text-button>
                 )}
               </span>
               <md-icon-button
@@ -546,8 +561,10 @@ export function Editor({ id }: { id: string | null }) {
       )}
 
       <footer className="save">
-        <span className="notice md-typescale-body-medium">{notice || (dirty && !saving ? "Unsaved changes." : "")}</span>
-        <md-filled-button onClick={save} disabled={!!saving}>
+        <span className="notice md-typescale-body-medium">
+          {notice || (saving ? "" : dirty ? "Unsaved changes." : loaded ? "All changes saved." : "")}
+        </span>
+        <md-filled-button onClick={save} disabled={!!saving || (!!loaded && !dirty && !uploading)}>
           {saving || (loaded ? "Save" : "Save project")}
         </md-filled-button>
       </footer>
@@ -566,36 +583,55 @@ function Thumb({ item, loaded }: { item: Row; loaded: Loaded | null }) {
   return src ? <video className="thumb" src={`${src}#t=0.5`} preload="metadata" muted /> : <span className="thumb empty" />;
 }
 
-function describe(item: Row, loaded: Loaded | null) {
+type Tone = "done" | "busy" | "wait" | "error";
+const ICONS: Record<Tone, string> = { done: "check_circle", busy: "progress_activity", wait: "schedule", error: "error" };
+
+// Where an item stands, in a few words: what it is now (Ready, Waiting,
+// Processing…, or what went wrong) and, for a video, its preview.
+function describe(item: Row, loaded: Loaded | null): { tone: Tone; text: string; detail?: string } {
   const local = item.local;
-  if (local?.state === "uploading") return `Uploading ${Math.floor(local.progress * 100)}%`;
-  if (local?.state === "failed") return `Upload failed: ${local.error}`;
+  if (local?.state === "uploading") return { tone: "busy", text: `Uploading ${Math.floor(local.progress * 100)}%` };
+  if (local?.state === "failed") return { tone: "error", text: "Upload failed", detail: local.error };
   const saved = loaded?.project.items.some((i) => i.id === item.id);
-  if (!saved) return "Uploaded. Processed once saved.";
+  if (!saved) return { tone: "wait", text: "Uploaded", detail: "Processed after you save" };
   const status = loaded?.status[item.id];
-  if (item.type === "video") {
+  if (item.copies || status?.state === "done") {
+    if (item.type !== "video") return { tone: "done", text: "Ready" };
     const preview = loaded?.status[previewStatusId(item.id)];
-    const cutter =
-      preview?.state === "done"
-        ? " Preview ready."
-        : preview?.state === "processing"
-          ? " Making the preview…"
+    const making = loaded?.processing.includes(previewStatusId(item.id)) || preview?.state === "processing";
+    const detail =
+      preview?.state === "done" && !making
+        ? preview.auto
+          ? "Automatic preview"
+          : "Your preview"
+        : making
+          ? "Making the preview…"
           : preview?.state === "failed"
-            ? ` The preview couldn't be made: ${preview.message ?? "unknown error"}`
-            : loaded?.processing.includes(previewStatusId(item.id))
-              ? " Preview waiting to be made."
-              : loaded?.cutter.includes(item.id)
-                ? " No preview yet."
-                : "";
-    if (status?.state === "done") return `Compressed (${status.width}×${status.height}).${cutter}`;
-    if (status?.state === "failed") return `Couldn't compress: ${status.message ?? "unknown error"}`;
-    if (status?.state === "processing") return `Compressing with HandBrake…${cutter}`;
-    if (loaded?.processing.includes(item.id)) return `Waiting to be compressed.${cutter}`;
-    return `Kept as uploaded.${cutter}`;
+            ? "The preview couldn't be made"
+            : "No preview yet";
+    return { tone: "done", text: "Ready", detail };
   }
-  if (item.copies || status?.state === "done") return "Ready";
-  if (status?.state === "failed") return `Couldn't make the web copies: ${status.message ?? "unknown error"}`;
-  if (status?.state === "processing") return "Processing…";
-  if (loaded?.processing.includes(item.id)) return "Waiting to be processed.";
-  return "";
+  if (status?.state === "failed")
+    return {
+      tone: "error",
+      text: item.type === "video" ? "Couldn't be compressed" : "Couldn't be processed",
+      detail: status.message,
+    };
+  if (status?.state === "processing") return { tone: "busy", text: item.type === "video" ? "Compressing…" : "Processing…" };
+  if (loaded?.processing.includes(item.id)) return { tone: "wait", text: "Waiting", detail: "Starts within a few minutes" };
+  return { tone: "wait", text: "Not processed" };
+}
+
+function ItemState({ item, loaded }: { item: Row; loaded: Loaded | null }) {
+  const { tone, text, detail } = describe(item, loaded);
+  return (
+    <span className={`state ${tone}`} title={detail}>
+      <md-icon>{ICONS[tone]}</md-icon>
+      <span className="state-text">
+        <span className="md-typescale-body-medium">{text}</span>
+        {detail && <span className="md-typescale-body-small detail">{detail}</span>}
+        {item.local?.state === "uploading" && <md-linear-progress value={item.local.progress} />}
+      </span>
+    </span>
+  );
 }

@@ -8,6 +8,8 @@ export type Summary = {
   images: number;
   videos: number;
   cover: string | null;
+  // On the public site ("Show on the site").
+  shown: boolean;
   updated: string;
 };
 

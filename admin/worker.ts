@@ -33,6 +33,7 @@ import {
   type QueueEntry,
   ROLES,
   type Status,
+  shownOnSite,
 } from "./shared.ts";
 
 interface Env {
@@ -134,6 +135,7 @@ async function listProjects(env: Env) {
         images: project.items.filter((i) => i.type === "image").length,
         videos: project.items.filter((i) => i.type === "video").length,
         cover: coverOf(project, s),
+        shown: shownOnSite(project),
         updated: project.updated,
       };
     })
@@ -463,6 +465,8 @@ async function previews(request: Request, env: Env, ctx: ExecutionContext, id: s
     if (!item.original) return fail("This video has no original in storage to cut from.");
     plan.pieces = pieces;
     plan.saved = new Date().toISOString();
+    // Saved by hand: no longer the automatic suggestion.
+    delete plan.auto;
     const entry: QueueEntry = { project: id, item: itemId, type: "preview", original: item.original, file: item.file, pieces };
     await writeJson(env, keys.processPreview(id, itemId), entry);
     await env.MEDIA.delete(keys.cutter(id, itemId));

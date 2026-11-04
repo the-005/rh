@@ -4,8 +4,9 @@
  * - images: three web copies, made exactly as `npm run work:images` makes them
  *   (the same `encode` from media.ts: MozJPEG at 85, stepping down only to keep
  *   a copy under 1 MB, 3000 / 1500 / 1000px, never enlarged);
- * - previews: the pieces picked in the Preview Cutter, joined and compressed
- *   the same way (processPreview);
+ * - previews: the pieces picked in the preview cutter, joined and compressed
+ *   the same way (processPreview); and, for every new video, an automatic
+ *   preview from the pieces the cutter would suggest (autoPreview);
  * - videos: compressed with HandBrake the way the owner does it by hand
  *   (4 Nov): the "Fast 2160p60 4K HEVC" preset with cropping set to none,
  *   capped at 2560 × 1440 ("2K", the cap turned for portrait videos: the
@@ -32,12 +33,14 @@ import * as path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream } from "node:stream/web";
+import { cutDetector, suggestPieces } from "../admin/pieces.ts";
 import {
   type Copies,
   HANDBRAKE_PRESET,
   type ItemStatus,
   isVideo,
   keys,
+  type Piece,
   type QueueEntry,
   VIDEO_LONG_SIDE,
   VIDEO_SHORT_SIDE,
@@ -214,6 +217,11 @@ async function processVideo(entry: QueueEntry, dir: string) {
   await run("ffmpeg", ["-y", "-v", "error", "-i", out, "-frames:v", "1", still]);
   const copies = await webCopies(entry, still, dir);
   await report(entry, { state: "done", video: key, width, height, copies });
+  // The video is ready; its automatic preview follows. A failure there leaves
+  // the video as it is.
+  await autoPreview(entry, src, out, dir).catch((error) =>
+    console.error(`  no automatic preview: ${error instanceof Error ? error.message : String(error)}`)
+  );
 }
 
 // A preview, as the owner decided (2 Nov): the pieces picked in the Preview
@@ -221,10 +229,9 @@ async function processVideo(entry: QueueEntry, dir: string) {
 // lossless intermediate rather than a stream copy, which can only cut on
 // keyframes), then one HandBrake encode with the same settings as the video.
 // No sound: previews loop silently.
-async function processPreview(entry: QueueEntry, dir: string) {
-  const pieces = entry.pieces ?? [];
-  if (!pieces.length) throw new Error("No pieces saved.");
-  const src = await download(entry, dir);
+// A preview from pieces of a video: cut from the original frame-exact and
+// joined without loss, then one HandBrake encode, as for the video itself.
+async function makePreview(entry: QueueEntry, src: string, pieces: Piece[], dir: string, auto: boolean) {
   const joined = path.join(dir, "joined.mkv");
   const out = path.join(dir, "preview.mp4");
   const started = Date.now();
@@ -252,11 +259,82 @@ async function processPreview(entry: QueueEntry, dir: string) {
   const { width, height } = await compress(joined, out);
   const seconds = pieces.reduce((t, p) => t + p.e - p.s, 0);
   console.log(
-    `  preview ${seconds.toFixed(1)}s from ${pieces.length} pieces, ${width}×${height} ${mb(fs.statSync(out).size)} in ${Math.round((Date.now() - started) / 1000)}s`
+    `  ${auto ? "automatic " : ""}preview ${seconds.toFixed(1)}s from ${pieces.length} pieces, ${width}×${height} ${mb(fs.statSync(out).size)} in ${Math.round((Date.now() - started) / 1000)}s`
   );
   const key = keys.preview(entry.project, entry.item);
   await uploadVideo(out, key);
-  await report(entry, { state: "done", video: key, width, height });
+  await report({ ...entry, type: "preview" }, { state: "done", video: key, width, height, ...(auto ? { auto: true } : {}) });
+}
+
+// A preview saved in the cutter.
+async function processPreview(entry: QueueEntry, dir: string) {
+  const pieces = entry.pieces ?? [];
+  if (!pieces.length) throw new Error("No pieces saved.");
+  const src = await download(entry, dir);
+  await makePreview(entry, src, pieces, dir, false);
+}
+
+// A video's cuts, found the way the preview cutter finds them (admin/pieces.ts):
+// every frame at 64×36 in grey, compared with the one before.
+async function findCuts(file: string) {
+  const probe = JSON.parse(
+    await run("ffprobe", [
+      "-v",
+      "error",
+      "-select_streams",
+      "v:0",
+      "-show_entries",
+      "stream=avg_frame_rate:format=duration",
+      "-of",
+      "json",
+      file,
+    ])
+  ) as { streams: { avg_frame_rate: string }[]; format: { duration: string } };
+  const [num, den] = probe.streams[0].avg_frame_rate.split("/").map(Number);
+  const fps = den ? num / den : num || 30;
+  const duration = Number(probe.format.duration);
+  const W = 64;
+  const H = 36;
+  const detect = cutDetector(fps);
+  const cuts: number[] = [];
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn("ffmpeg", ["-v", "error", "-i", file, "-vf", `scale=${W}:${H},format=gray`, "-f", "rawvideo", "pipe:1"]);
+    let pending = Buffer.alloc(0);
+    let frame = 0;
+    child.stdout.on("data", (chunk: Buffer) => {
+      pending = Buffer.concat([pending, chunk]);
+      while (pending.length >= W * H) {
+        const cut = detect(pending.subarray(0, W * H), frame / fps);
+        if (cut !== null) cuts.push(cut);
+        pending = pending.subarray(W * H);
+        frame++;
+      }
+    });
+    child.on("error", reject);
+    child.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code} finding cuts`))));
+  });
+  return { cuts, duration };
+}
+
+// Every video gets a preview straight away, from the pieces the cutter would
+// suggest, so something shows on the site before anyone makes one by hand (the
+// owner, 2 Nov). Pieces saved by hand are never replaced: the site's door
+// refuses the automatic plan then.
+async function autoPreview(entry: QueueEntry, src: string, compressed: string, dir: string) {
+  const { cuts, duration } = await findCuts(compressed);
+  const pieces = suggestPieces(cuts, duration);
+  if (!pieces.length) return;
+  const response = await call(
+    "PUT",
+    "/api/pipeline/plan",
+    JSON.stringify({ project: entry.project, item: entry.item, cuts, pieces }),
+    "application/json"
+  );
+  if (((await response.json()) as { skipped: boolean }).skipped) {
+    console.log("  preview made by hand already: no automatic one");
+    return;
+  }
+  await makePreview(entry, src, pieces, dir, true);
 }
 
 async function processImage(entry: QueueEntry, dir: string) {

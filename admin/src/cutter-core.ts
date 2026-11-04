@@ -3,7 +3,8 @@
  * (v2, 2 Nov) into the admin: one video at a time, streamed from storage.
  *
  * It finds the video's cuts by comparing small frames, suggests two pieces
- * that start on cuts, and lets them be moved and trimmed on a filmstrip
+ * that start on cuts (both by the rules in admin/pieces.ts, shared with the
+ * automatic previews), and lets them be moved and trimmed on a filmstrip
  * (handles snap to cuts; Alt places them freely), up to 10 seconds in all.
  * The loop plays with two video elements taking turns, so each join lands on
  * the next piece's first frame. Saving hands the pieces back; the preview
@@ -14,16 +15,13 @@
  */
 
 import { ALL_FORMATS, CanvasSink, Input, type InputVideoTrack, UrlSource } from "mediabunny";
+import { cutDetector, shots as shotsOf, suggestPieces } from "../pieces.ts";
 import { PIECE_MIN, PREVIEW_MAX, type Piece } from "../shared.ts";
 
 const NEW_PIECE = 2; // length of a piece added with "Add piece", s
 const SNAP_PX = 10; // a handle this close to a cut lands on it
 const HANDLE = 10; // handle width, px (matches .piece border)
 const MIN_VIEW = 2; // closest zoom: this many seconds across the strip
-const CUT_MIN = 0.1; // a cut: frame difference above this...
-const CUT_RATIO = 3; // ...and this many times the recent median
-const SUGGEST_AT = [0.25, 0.6]; // where the suggested pieces sit, as a share of the video
-const SUGGEST_LEN = 4; // longest suggested piece, s
 
 export type CutterElements = {
   root: HTMLElement;
@@ -138,54 +136,17 @@ export function mountCutter(o: CutterOptions) {
     cur.scanned = true;
     const n = cur.cuts.length;
     setStatus(n ? `${n} ${n === 1 ? "cut" : "cuts"} in this video` : "No cuts in this video");
-    cur.pieces = o.pieces?.length ? o.pieces.map((p) => ({ ...p })) : n ? cutPieces() : freePieces(cur.duration);
+    cur.pieces = o.pieces?.length ? o.pieces.map((p) => ({ ...p })) : suggestPieces(cur.cuts, cur.duration);
     el.playButton.disabled = false;
     el.saveButton.disabled = false;
     render();
     showFrame(cur.pieces[0]?.s ?? 0);
   }
 
-  // The shots long enough to hold a piece: each from a cut (or the start) to the next (or the end).
-  function shots() {
-    if (!cur) return [];
-    const b = [0, ...cur.cuts, cur.duration];
-    const out: Piece[] = [];
-    for (let i = 0; i < b.length - 1; i++) if (b[i + 1] - b[i] >= PIECE_MIN) out.push({ s: b[i], e: b[i + 1] });
-    return out;
-  }
+  // The shots long enough to hold a piece (the rules are shared with the
+  // automatic previews: admin/pieces.ts).
+  const shots = () => (cur ? shotsOf(cur.cuts, cur.duration) : []);
   const strict = () => (cur?.cuts.length ?? 0) > 0;
-
-  // With cuts: two shots spread through the video, each piece starting on its shot's first frame.
-  function cutPieces(): Piece[] {
-    if (!cur) return [];
-    let pool = shots().filter((sh) => sh.e - sh.s >= 1);
-    if (pool.length < SUGGEST_AT.length) pool = shots();
-    const picks: Piece[] = [];
-    for (const f of SUGGEST_AT) {
-      const target = f * cur.duration;
-      const pick = pool.filter((sh) => !picks.includes(sh)).sort((a, b) => Math.abs(a.s - target) - Math.abs(b.s - target))[0];
-      if (pick) picks.push(pick);
-    }
-    picks.sort((a, b) => a.s - b.s);
-    let room = PREVIEW_MAX;
-    return picks
-      .map((sh) => {
-        const len = Math.min(SUGGEST_LEN, sh.e - sh.s, room);
-        room -= len;
-        return { s: sh.s, e: sh.s + len };
-      })
-      .filter((p) => p.e - p.s >= PIECE_MIN);
-  }
-
-  // No cuts: two pieces spread through the video.
-  function freePieces(d: number): Piece[] {
-    const len = Math.min(SUGGEST_LEN, d / 4);
-    if (len < PIECE_MIN) return [{ s: 0, e: Math.min(d, PREVIEW_MAX) }];
-    return SUGGEST_AT.map((f) => {
-      const s = clamp(f * d, 0, d - len);
-      return { s, e: s + len };
-    });
-  }
 
   /* ---------- Filmstrip ---------- */
 
@@ -255,9 +216,7 @@ export function mountCutter(o: CutterOptions) {
     small.height = H;
     const sctx = small.getContext("2d", { willReadFrequently: true });
     if (!sctx) return;
-    let prev: Float32Array | null = null;
-    const recent: number[] = [];
-    let last = -1;
+    const detect = cutDetector(video.fps);
     let frame = 0;
     for await (const wc of sink.canvases()) {
       if (!alive) return;
@@ -265,21 +224,11 @@ export function mountCutter(o: CutterOptions) {
       const d = sctx.getImageData(0, 0, W, H).data;
       const y = new Float32Array(W * H);
       for (let i = 0; i < y.length; i++) y[i] = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
-      if (prev) {
-        let sum = 0;
-        for (let i = 0; i < y.length; i++) sum += Math.abs(y[i] - prev[i]);
-        const diff = sum / (y.length * 255);
-        // The median of the last few frames, so one cut doesn't hide the next one a few frames later.
-        const base = recent.length ? [...recent].sort((a, b) => a - b)[recent.length >> 1] : 0;
-        if (diff > CUT_MIN && diff > base * CUT_RATIO + 0.02 && wc.timestamp - last > 0.5 / video.fps) {
-          video.cuts.push(wc.timestamp);
-          last = wc.timestamp;
-          renderTicks();
-        }
-        recent.push(diff);
-        if (recent.length > 8) recent.shift();
+      const cut = detect(y, wc.timestamp);
+      if (cut !== null) {
+        video.cuts.push(cut);
+        renderTicks();
       }
-      prev = y;
       if (++frame % 15 === 0) setStatus(`Finding cuts ${Math.round((wc.timestamp / video.duration) * 100)}%`);
     }
     if (!alive) return;

@@ -15,7 +15,16 @@
  */
 
 import { createRemoteJWKSet, jwtVerify } from "jose";
-import { type ItemStatus, keys, PROCESS_PREFIX, previewStatusId, type QueueEntry, type Status } from "../admin/shared.ts";
+import {
+  type ItemStatus,
+  keys,
+  type Piece,
+  type PreviewPlan,
+  PROCESS_PREFIX,
+  previewStatusId,
+  type QueueEntry,
+  type Status,
+} from "../admin/shared.ts";
 import { publishSite, SITE_KEY, type SiteData } from "../admin/site-data.ts";
 
 interface Env {
@@ -95,6 +104,20 @@ async function pipeline(request: Request, env: Env, url: URL) {
       await upload.complete(parts);
       return json({ ok: true });
     }
+  }
+
+  // A video's automatic preview plan: the cuts found and the suggested pieces.
+  // Refused (skipped) when pieces were saved by hand in the cutter, which an
+  // automatic preview never replaces.
+  if (url.pathname === "/api/pipeline/plan" && request.method === "PUT") {
+    const body = (await request.json()) as { project: string; item: string; cuts: number[]; pieces: Piece[] };
+    if (!/^[\w-]+$/.test(body.project) || !/^[\w-]+$/.test(body.item)) return json({ error: "Bad item." }, 400);
+    const planKey = keys.plan(body.project, body.item);
+    const existing = ((await (await env.MEDIA.get(planKey))?.json()) as PreviewPlan | null) ?? {};
+    if (existing.pieces?.length && !existing.auto) return json({ skipped: true });
+    const plan: PreviewPlan = { cuts: body.cuts, pieces: body.pieces, auto: true, saved: new Date().toISOString() };
+    await env.MEDIA.put(planKey, JSON.stringify(plan), { httpMetadata: { contentType: "application/json" } });
+    return json({ skipped: false });
   }
 
   // How an item went. Once it's done (or failed) it leaves the queue. The

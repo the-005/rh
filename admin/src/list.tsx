@@ -177,7 +177,8 @@ export function List() {
                   {[p.kind, p.year].filter(Boolean).join(" · ") || "No kind or year yet"}
                 </span>
               </span>
-              <span className="meta md-typescale-body-medium">
+              <span className="meta md-typescale-body-medium counts">
+                {!p.shown && <span className="hidden-chip md-typescale-label-medium">Not on the site</span>}
                 {p.images} image{p.images === 1 ? "" : "s"}
                 {p.videos ? `, ${p.videos} video${p.videos === 1 ? "" : "s"}` : ""}
               </span>
