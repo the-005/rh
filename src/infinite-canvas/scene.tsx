@@ -33,10 +33,17 @@ import {
   VELOCITY_LERP,
 } from "./constants";
 import styles from "./style.module.css";
+import { decidePreviews, previewTexture, wantPreview } from "./previews";
 import { getTexture } from "./texture-manager";
 import type { ChunkData, InfiniteCanvasProps, MediaItem, PlaneData } from "./types";
 import { tuning } from "./tuning";
-import { clearPlaneCache, generateChunkPlanesCached, getChunkCyclePositions, getChunkUpdateThrottleMs, shouldThrottleUpdate } from "./utils";
+import {
+  clearPlaneCache,
+  generateChunkPlanesCached,
+  getChunkCyclePositions,
+  getChunkUpdateThrottleMs,
+  shouldThrottleUpdate,
+} from "./utils";
 import { galleryScale, galleryShown } from "./view-shrink";
 
 const PLANE_GEOMETRY = new THREE.PlaneGeometry(1, 1);
@@ -59,7 +66,7 @@ function getMeshScreenRect(mesh: THREE.Mesh, camera: THREE.Camera) {
   const h = window.innerHeight;
   const toScreen = (x: number, y: number, z: number) => {
     const v = new THREE.Vector3(x, y, z).project(camera);
-    return { x: (v.x + 1) / 2 * w, y: (1 - v.y) / 2 * h };
+    return { x: ((v.x + 1) / 2) * w, y: ((1 - v.y) / 2) * h };
   };
   const tl = toScreen(pos.x - hw, pos.y + hh, pos.z);
   const br = toScreen(pos.x + hw, pos.y - hh, pos.z);
@@ -160,7 +167,12 @@ function MediaPlane({
     return new THREE.CanvasTexture(canvas);
   }, [showLabel, chunkCx, chunkCy, chunkIndex]);
 
-  React.useEffect(() => () => { labelTexture?.dispose(); }, [labelTexture]);
+  React.useEffect(
+    () => () => {
+      labelTexture?.dispose();
+    },
+    [labelTexture]
+  );
   const initPos = getChunkCyclePositions(chunkCx, chunkCy, chunkCz, 0)[chunkIndex];
   const isInitRight = initPos.x >= cameraGridRef.current.camX;
   const initialAbsoluteZ = depthPhase + cameraGridRef.current.cumulativeScroll * (isInitRight ? 1 : -1);
@@ -169,7 +181,9 @@ function MediaPlane({
   const regKey = `${chunkCx},${chunkCy},${chunkCz},${chunkIndex}`;
   React.useEffect(() => {
     const registry = registryRef.current;
-    return () => { registry.delete(regKey); };
+    return () => {
+      registry.delete(regKey);
+    };
   }, [regKey, registryRef]);
 
   const localState = React.useRef({
@@ -187,8 +201,7 @@ function MediaPlane({
   // A project closed on a different image than it opened on leaves that image
   // on this plane until the plane's next depth cycle.
   const [override, setOverride] = React.useState(() => getMediaOverride(regKey, initialCycle));
-  const media =
-    override ?? mediaPool[((mediaIndex + cycleIndex) % mediaPool.length + mediaPool.length) % mediaPool.length];
+  const media = override ?? mediaPool[(((mediaIndex + cycleIndex) % mediaPool.length) + mediaPool.length) % mediaPool.length];
 
   const [texture, setTexture] = React.useState<THREE.Texture | null>(null);
   const [isReady, setIsReady] = React.useState(false);
@@ -264,6 +277,8 @@ function MediaPlane({
         };
       }
 
+      // Flying to or from the project page: the still, which the page shows.
+      if (texture && material.map !== texture) material.map = texture;
       const p = Math.min(1, (now - run.start) / heroTw.durationMs);
       const e = p === 1 ? 1 : 1 - Math.pow(2, -10 * p);
       const group = groupRef.current;
@@ -288,11 +303,7 @@ function MediaPlane({
       mesh.renderOrder = 1000;
 
       const hidden = isPlaneHidden(regKey);
-      state.opacity = hidden
-        ? 0
-        : run.mode === "out"
-          ? lerp(1, run.to.o, e)
-          : lerp(run.from.o, 1, Math.min(1, p * 2.5));
+      state.opacity = hidden ? 0 : run.mode === "out" ? lerp(1, run.to.o, e) : lerp(run.from.o, 1, Math.min(1, p * 2.5));
       material.opacity = state.opacity;
       mesh.visible = !hidden;
       if (labelRef.current) labelRef.current.visible = false;
@@ -373,13 +384,32 @@ function MediaPlane({
     if (hidden) state.opacity = 0;
 
     const hovered = hoveredImage !== null && hoveredImage === mesh;
-    const target = hidden || isDimmedPlane(regKey) ? 0 : hovered ? naturalTarget + (1 - naturalTarget) * HOVER_GAIN : naturalTarget;
+    const target =
+      hidden || isDimmedPlane(regKey) ? 0 : hovered ? naturalTarget + (1 - naturalTarget) * HOVER_GAIN : naturalTarget;
     state.opacity = target < INVIS_THRESHOLD && state.opacity < INVIS_THRESHOLD ? 0 : lerp(state.opacity, target, 0.1);
 
     material.opacity = state.opacity;
     const isVisible = state.opacity > INVIS_THRESHOLD;
     mesh.visible = isVisible;
     if (labelRef.current) labelRef.current.visible = isVisible;
+
+    // A video with a preview plays it (previews.ts): the nearest, most visible
+    // few do; a closed project's image (an override) keeps the still, which the
+    // swap home waits for.
+    if (media.preview && texture) {
+      // Only on screen: a plane off it (but still in the scene) doesn't play.
+      const at = mesh.matrixWorld.elements;
+      SCREEN_PROBE.set(at[12], at[13], at[14]).project(_state.camera);
+      const onScreen = SCREEN_PROBE.z < 1 && Math.abs(SCREEN_PROBE.x) < 1.1 && Math.abs(SCREEN_PROBE.y) < 1.1;
+      const allowed = isVisible && onScreen && !wanted && galleryShown();
+      if (allowed) {
+        const cam = _state.camera.position;
+        const distance = Math.max(1, Math.hypot(at[12] - cam.x, at[13] - cam.y, at[14] - cam.z));
+        wantPreview(media.preview, (state.opacity * displayScale.y) / distance);
+      }
+      const shown = (allowed && previewTexture(media.preview)) || texture;
+      if (material.map !== shown) material.map = shown;
+    }
 
     // Shrinking away as the index opens, or growing back (view-shrink.ts).
     const viewScale = galleryScale(regKey, zOffset);
@@ -516,11 +546,10 @@ function SplashPlane({
 
   // Compute the zOffset at which the plane fills the viewport (matching object-fit: cover)
   const fov = (camera as THREE.PerspectiveCamera).fov ?? 60;
-  const tanHalfFov = Math.tan((fov * Math.PI / 180) / 2);
+  const tanHalfFov = Math.tan((fov * Math.PI) / 180 / 2);
   const viewportAspect = size.width / size.height;
-  const startZOffset = aspect >= viewportAspect
-    ? SPLASH_HEIGHT / (2 * tanHalfFov)
-    : (SPLASH_HEIGHT * aspect) / (2 * tanHalfFov * viewportAspect);
+  const startZOffset =
+    aspect >= viewportAspect ? SPLASH_HEIGHT / (2 * tanHalfFov) : (SPLASH_HEIGHT * aspect) / (2 * tanHalfFov * viewportAspect);
 
   const initialAbsoluteZ = startZOffset + cameraGridRef.current.cumulativeScroll;
   const localState = React.useRef({
@@ -602,10 +631,7 @@ function SplashPlane({
     // The splash frame dims with everything else during a project transition —
     // it isn't a MediaPlane, so it doesn't go through the dim system.
     const target = isCanvasDimmed() ? 0 : depthFade * depthFade;
-    state.opacity =
-      target < INVIS_THRESHOLD && state.opacity < INVIS_THRESHOLD
-        ? 0
-        : lerp(state.opacity, target, 0.1);
+    state.opacity = target < INVIS_THRESHOLD && state.opacity < INVIS_THRESHOLD ? 0 : lerp(state.opacity, target, 0.1);
 
     material.opacity = state.opacity;
     mesh.visible = state.opacity > INVIS_THRESHOLD;
@@ -619,13 +645,7 @@ function SplashPlane({
       visible={false}
       geometry={PLANE_GEOMETRY}
     >
-      <meshBasicMaterial
-        ref={materialRef}
-        transparent
-        opacity={0}
-        side={THREE.DoubleSide}
-        depthTest={false}
-      />
+      <meshBasicMaterial ref={materialRef} transparent opacity={0} side={THREE.DoubleSide} depthTest={false} />
     </mesh>
   );
 }
@@ -670,7 +690,12 @@ function ChunkLabel({ cx, cy }: { cx: number; cy: number }) {
     return new THREE.CanvasTexture(canvas);
   }, [cx, cy]);
 
-  React.useEffect(() => () => { texture?.dispose(); }, [texture]);
+  React.useEffect(
+    () => () => {
+      texture?.dispose();
+    },
+    [texture]
+  );
 
   if (!texture) return null;
 
@@ -830,7 +855,27 @@ const createInitialState = (camZ: number): ControllerState => ({
   pendingChunk: null,
 });
 
-function SceneController({ media, onMediaClick, debugElRef, tuningGenVersion, showGuides, splashSrc, splashAspect, onSplashReady, onSplashGone }: { media: MediaItem[]; onMediaClick?: (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => void; debugElRef?: React.RefObject<HTMLDivElement | null>; tuningGenVersion?: number; showGuides?: boolean; splashSrc?: string; splashAspect?: number; onSplashReady?: () => void; onSplashGone?: () => void }) {
+function SceneController({
+  media,
+  onMediaClick,
+  debugElRef,
+  tuningGenVersion,
+  showGuides,
+  splashSrc,
+  splashAspect,
+  onSplashReady,
+  onSplashGone,
+}: {
+  media: MediaItem[];
+  onMediaClick?: (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => void;
+  debugElRef?: React.RefObject<HTMLDivElement | null>;
+  tuningGenVersion?: number;
+  showGuides?: boolean;
+  splashSrc?: string;
+  splashAspect?: number;
+  onSplashReady?: () => void;
+  onSplashGone?: () => void;
+}) {
   const { camera, gl, scene } = useThree();
   const isTouchDevice = useIsTouchDevice();
   const [, getKeys] = useKeyboardControls<keyof KeyboardKeys>();
@@ -956,6 +1001,8 @@ function SceneController({ media, onMediaClick, debugElRef, tuningGenVersion, sh
     const s = state.current;
     const now = performance.now();
     const frozen = isCanvasFrozen();
+    // Which video previews play, from what the planes asked for last frame.
+    decidePreviews(now);
 
     // The cursor says what a click does: the pointing hand over an image you
     // could open, the grab hand (pan) anywhere else, grabbing while dragging.
@@ -1093,7 +1140,7 @@ function SceneController({ media, onMediaClick, debugElRef, tuningGenVersion, sh
           cx: ucx + o.dx,
           cy: ucy + o.dy,
           cz: ucz + o.dz,
-        })),
+        }))
       );
     }
   });
@@ -1108,7 +1155,7 @@ function SceneController({ media, onMediaClick, debugElRef, tuningGenVersion, sh
         cx: o.dx,
         cy: o.dy,
         cz: o.dz,
-      })),
+      }))
     );
   }, [camera]);
 
@@ -1121,16 +1168,34 @@ function SceneController({ media, onMediaClick, debugElRef, tuningGenVersion, sh
         cx: cx + o.dx,
         cy: cy + o.dy,
         cz: cz + o.dz,
-      })),
+      }))
     );
   }, [tuningGenVersion]);
 
   return (
     <>
       {chunks.map((chunk) => (
-        <Chunk key={chunk.key} cx={chunk.cx} cy={chunk.cy} cz={chunk.cz} media={media} cameraGridRef={cameraGridRef} registryRef={planeRegistryRef} onMediaClick={onMediaClick} showLabel={!!debugElRef && (showGuides ?? true)} />
+        <Chunk
+          key={chunk.key}
+          cx={chunk.cx}
+          cy={chunk.cy}
+          cz={chunk.cz}
+          media={media}
+          cameraGridRef={cameraGridRef}
+          registryRef={planeRegistryRef}
+          onMediaClick={onMediaClick}
+          showLabel={!!debugElRef && (showGuides ?? true)}
+        />
       ))}
-      {splashSrc && onSplashReady && <SplashPlane src={splashSrc} aspect={splashAspect ?? 16 / 9} cameraGridRef={cameraGridRef} onReady={onSplashReady} onGone={onSplashGone} />}
+      {splashSrc && onSplashReady && (
+        <SplashPlane
+          src={splashSrc}
+          aspect={splashAspect ?? 16 / 9}
+          cameraGridRef={cameraGridRef}
+          onReady={onSplashReady}
+          onGone={onSplashGone}
+        />
+      )}
     </>
   );
 }
@@ -1225,7 +1290,17 @@ export function InfiniteCanvasScene({
           <fog attach="fog" args={[fogColor, fogNear, fogFar]} />
           <SceneColours />
           <AdaptiveFov baseFov={cameraFov} />
-          <SceneController media={media} onMediaClick={onMediaClick} debugElRef={showDebug ? debugElRef : undefined} tuningGenVersion={tuningGenVersion} showGuides={showGuides} splashSrc={splashSrc} splashAspect={splashAspect} onSplashReady={onSplashReady} onSplashGone={onSplashGone} />
+          <SceneController
+            media={media}
+            onMediaClick={onMediaClick}
+            debugElRef={showDebug ? debugElRef : undefined}
+            tuningGenVersion={tuningGenVersion}
+            showGuides={showGuides}
+            splashSrc={splashSrc}
+            splashAspect={splashAspect}
+            onSplashReady={onSplashReady}
+            onSplashGone={onSplashGone}
+          />
           {showFps && <Stats className={styles.stats} />}
         </Canvas>
 
@@ -1247,8 +1322,8 @@ export function InfiniteCanvasScene({
           <div className={styles.tuningPanel}>
             <div className={styles.tuningPanelHeader}>
               <span>Tuning</span>
-              <button type="button" className={styles.tuningToggle} onClick={() => setPanelOpen(o => !o)}>
-                {panelOpen ? '−' : '+'}
+              <button type="button" className={styles.tuningToggle} onClick={() => setPanelOpen((o) => !o)}>
+                {panelOpen ? "−" : "+"}
               </button>
             </div>
             {panelOpen && (
@@ -1256,61 +1331,165 @@ export function InfiniteCanvasScene({
                 <label>
                   <span className={styles.labelRow}>
                     Density {tv.itemsPerChunk}
-                    <span className={styles.info} data-tip="Images per chunk cell. Higher = denser canvas.">ⓘ</span>
+                    <span className={styles.info} data-tip="Images per chunk cell. Higher = denser canvas.">
+                      ⓘ
+                    </span>
                   </span>
-                  <input type="range" min={1} max={4} step={1} value={tv.itemsPerChunk}
-                    onChange={e => { const v = +e.target.value; tuning.itemsPerChunk = v; setTv(t => ({...t, itemsPerChunk: v})); bumpGen(); }} />
+                  <input
+                    type="range"
+                    min={1}
+                    max={4}
+                    step={1}
+                    value={tv.itemsPerChunk}
+                    onChange={(e) => {
+                      const v = +e.target.value;
+                      tuning.itemsPerChunk = v;
+                      setTv((t) => ({ ...t, itemsPerChunk: v }));
+                      bumpGen();
+                    }}
+                  />
                 </label>
                 <label>
                   <span className={styles.labelRow}>
                     Min size {tv.minSize}
-                    <span className={styles.info} data-tip="Smallest image size in world units.">ⓘ</span>
+                    <span className={styles.info} data-tip="Smallest image size in world units.">
+                      ⓘ
+                    </span>
                   </span>
-                  <input type="range" min={10} max={50} value={tv.minSize}
-                    onChange={e => { const v = +e.target.value; tuning.minSize = v; setTv(t => ({...t, minSize: v})); bumpGen(); }} />
+                  <input
+                    type="range"
+                    min={10}
+                    max={50}
+                    value={tv.minSize}
+                    onChange={(e) => {
+                      const v = +e.target.value;
+                      tuning.minSize = v;
+                      setTv((t) => ({ ...t, minSize: v }));
+                      bumpGen();
+                    }}
+                  />
                 </label>
                 <label>
                   <span className={styles.labelRow}>
                     Max size {tv.maxSize}
-                    <span className={styles.info} data-tip="Largest image size in world units.">ⓘ</span>
+                    <span className={styles.info} data-tip="Largest image size in world units.">
+                      ⓘ
+                    </span>
                   </span>
-                  <input type="range" min={15} max={70} value={tv.maxSize}
-                    onChange={e => { const v = +e.target.value; tuning.maxSize = v; setTv(t => ({...t, maxSize: v})); bumpGen(); }} />
+                  <input
+                    type="range"
+                    min={15}
+                    max={70}
+                    value={tv.maxSize}
+                    onChange={(e) => {
+                      const v = +e.target.value;
+                      tuning.maxSize = v;
+                      setTv((t) => ({ ...t, maxSize: v }));
+                      bumpGen();
+                    }}
+                  />
                 </label>
                 <label>
                   <span className={styles.labelRow}>
                     Fade in end {tv.depthFadeNear}
-                    <span className={styles.info} data-tip="Depth at which images reach full opacity after entering. Lower = faster fade-in.">ⓘ</span>
+                    <span
+                      className={styles.info}
+                      data-tip="Depth at which images reach full opacity after entering. Lower = faster fade-in."
+                    >
+                      ⓘ
+                    </span>
                   </span>
-                  <input type="range" min={5} max={150} step={5} value={tv.depthFadeNear}
-                    onChange={e => { const v = +e.target.value; tuning.depthFadeNear = v; setTv(t => ({...t, depthFadeNear: v})); }} />
+                  <input
+                    type="range"
+                    min={5}
+                    max={150}
+                    step={5}
+                    value={tv.depthFadeNear}
+                    onChange={(e) => {
+                      const v = +e.target.value;
+                      tuning.depthFadeNear = v;
+                      setTv((t) => ({ ...t, depthFadeNear: v }));
+                    }}
+                  />
                 </label>
                 <label>
                   <span className={styles.labelRow}>
                     Fade out start {tv.depthFadeStart}
-                    <span className={styles.info} data-tip="Depth at which images begin fading out. Higher = images stay fully visible longer.">ⓘ</span>
+                    <span
+                      className={styles.info}
+                      data-tip="Depth at which images begin fading out. Higher = images stay fully visible longer."
+                    >
+                      ⓘ
+                    </span>
                   </span>
-                  <input type="range" min={50} max={950} step={10} value={tv.depthFadeStart}
-                    onChange={e => { const v = +e.target.value; tuning.depthFadeStart = v; setTv(t => ({...t, depthFadeStart: v})); }} />
+                  <input
+                    type="range"
+                    min={50}
+                    max={950}
+                    step={10}
+                    value={tv.depthFadeStart}
+                    onChange={(e) => {
+                      const v = +e.target.value;
+                      tuning.depthFadeStart = v;
+                      setTv((t) => ({ ...t, depthFadeStart: v }));
+                    }}
+                  />
                 </label>
                 <label>
                   <span className={styles.labelRow}>
                     Cycle length {tv.depthFadeEnd}
-                    <span className={styles.info} data-tip="Full depth cycle before an image wraps back. Higher = longer between repeat appearances.">ⓘ</span>
+                    <span
+                      className={styles.info}
+                      data-tip="Full depth cycle before an image wraps back. Higher = longer between repeat appearances."
+                    >
+                      ⓘ
+                    </span>
                   </span>
-                  <input type="range" min={300} max={2000} step={10} value={tv.depthFadeEnd}
-                    onChange={e => { const v = +e.target.value; tuning.depthFadeEnd = v; setTv(t => ({...t, depthFadeEnd: v})); bumpGen(); }} />
+                  <input
+                    type="range"
+                    min={300}
+                    max={2000}
+                    step={10}
+                    value={tv.depthFadeEnd}
+                    onChange={(e) => {
+                      const v = +e.target.value;
+                      tuning.depthFadeEnd = v;
+                      setTv((t) => ({ ...t, depthFadeEnd: v }));
+                      bumpGen();
+                    }}
+                  />
                 </label>
                 <label>
                   <span className={styles.labelRow}>
                     Z spacing {tv.zSpread}
-                    <span className={styles.info} data-tip="How spread out images are across the depth cycle. High = images at very different depths (more Z gap). Low = images clustered at similar depths.">ⓘ</span>
+                    <span
+                      className={styles.info}
+                      data-tip="How spread out images are across the depth cycle. High = images at very different depths (more Z gap). Low = images clustered at similar depths."
+                    >
+                      ⓘ
+                    </span>
                   </span>
-                  <input type="range" min={50} max={tv.depthFadeEnd} step={10} value={Math.min(tv.zSpread, tv.depthFadeEnd)}
-                    onChange={e => { const v = +e.target.value; tuning.zSpread = v; setTv(t => ({...t, zSpread: v})); bumpGen(); }} />
+                  <input
+                    type="range"
+                    min={50}
+                    max={tv.depthFadeEnd}
+                    step={10}
+                    value={Math.min(tv.zSpread, tv.depthFadeEnd)}
+                    onChange={(e) => {
+                      const v = +e.target.value;
+                      tuning.zSpread = v;
+                      setTv((t) => ({ ...t, zSpread: v }));
+                      bumpGen();
+                    }}
+                  />
                 </label>
                 {showDebug && (
-                  <button type="button" className={styles.tuningToggle} style={{ alignSelf: "flex-start", marginTop: 4 }} onClick={() => setShowGuides(g => !g)}>
+                  <button
+                    type="button"
+                    className={styles.tuningToggle}
+                    style={{ alignSelf: "flex-start", marginTop: 4 }}
+                    onClick={() => setShowGuides((g) => !g)}
+                  >
                     {showGuides ? "Hide guides" : "Show guides"}
                   </button>
                 )}

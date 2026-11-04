@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ASPECTS, type Credit, MID_COPIES, PROJECTS, type ProjectEntry } from "~/src/projects";
+import { ASPECTS, type Credit, MID_COPIES, PREVIEWS, PROJECTS, type ProjectEntry } from "~/src/projects";
 import styles from "./style.module.css";
 
 /**
@@ -871,7 +871,7 @@ function Credits({ credits, open }: { credits: Credit[]; open: boolean }) {
 function Crossfade({ src, playing }: { src: string | null; playing: boolean }) {
   const [layers, setLayers] = React.useState<{ id: number; src: string; leaving: boolean }[]>([]);
   const nextId = React.useRef(0);
-  const elsRef = React.useRef(new Map<number, HTMLImageElement>());
+  const elsRef = React.useRef(new Map<number, HTMLElement>());
 
   React.useEffect(() => {
     setLayers((prev) => {
@@ -911,23 +911,27 @@ function Crossfade({ src, playing }: { src: string | null; playing: boolean }) {
     }
   }, [playing, layers]);
 
-  return layers.map((layer) => (
-    <img
-      key={layer.id}
-      ref={(el) => {
+  return layers.map((layer) => {
+    const props = {
+      ref: (el: HTMLElement | null) => {
         if (el) elsRef.current.set(layer.id, el);
         else elsRef.current.delete(layer.id);
-      }}
-      src={fileFor(layer.src)}
-      alt=""
-      decoding="async"
-      className={`${styles.previewImg} ${layer.leaving ? styles.previewLeaving : ""}`}
-      style={{ "--r": ASPECTS.get(layer.src) ?? 0.8 } as React.CSSProperties}
-      onTransitionEnd={(e) => {
+      },
+      className: `${styles.previewImg} ${layer.leaving ? styles.previewLeaving : ""}`,
+      style: { "--r": ASPECTS.get(layer.src) ?? 0.8 } as React.CSSProperties,
+      onTransitionEnd: (e: React.TransitionEvent) => {
         if (layer.leaving && e.propertyName === "opacity") {
           setLayers((prev) => prev.filter((l) => l.id !== layer.id));
         }
-      }}
-    />
-  ));
+      },
+    };
+    // A video plays its looping preview where its still would show, the still
+    // standing in until the preview's first frame arrives.
+    const preview = PREVIEWS.get(layer.src);
+    return preview ? (
+      <video key={layer.id} {...props} src={`/${preview}`} poster={fileFor(layer.src)} autoPlay muted loop playsInline />
+    ) : (
+      <img key={layer.id} {...props} src={fileFor(layer.src)} alt="" decoding="async" />
+    );
+  });
 }
