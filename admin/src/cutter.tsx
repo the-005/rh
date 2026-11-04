@@ -102,6 +102,8 @@ export function CutterView({ project, item }: { project: string; item: string })
         if (!live) return;
         const here = rows.find((r) => r.project === project && r.item === item) ?? null;
         if (!here) setError("No such video.");
+        // Nothing to open until it's compressed (the stage says so).
+        if (here && !here.compressed) setStatus("");
         setRow(here);
         // After saving, the next video in the same project still without a preview.
         setNext(rows.find((r) => r.project === project && r.todo && r.item !== item) ?? null);
@@ -114,8 +116,8 @@ export function CutterView({ project, item }: { project: string; item: string })
     };
   }, [project, item]);
 
-  // The compressed version streams well and plays everywhere; until it exists, the original.
-  const source = row?.compressed ?? row?.original ?? null;
+  // The compressed version, which the preview is cut from.
+  const source = row?.compressed ?? null;
 
   React.useEffect(() => {
     if (!source || !plan) return;
@@ -170,7 +172,7 @@ export function CutterView({ project, item }: { project: string; item: string })
       <div className="cutter-stage" ref={refs.stage}>
         <video ref={refs.videoA} className="on" muted playsInline preload="auto" />
         <video ref={refs.videoB} muted playsInline preload="auto" />
-        {row && !source && <p className="cutter-empty">This video isn't in storage yet.</p>}
+        {row && !source && <p className="cutter-empty">This video is still being compressed.</p>}
       </div>
 
       <footer className="cutter-bar">

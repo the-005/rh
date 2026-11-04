@@ -26,7 +26,6 @@ export type CutterRow = {
   todo: boolean;
   preview: "processing" | "done" | "failed" | null;
   compressed: string | null;
-  original: string | null;
 };
 
 export class ApiError extends Error {

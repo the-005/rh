@@ -14,6 +14,9 @@
     "run_worker_first": true
   },
   "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "rh-media" }],
+  // Every day at 03:00 UTC: delete the originals that are no longer needed
+  // (admin/originals.ts).
+  "triggers": { "crons": ["0 3 * * *"] },
   // The public site, to copy today's web images from.
   "services": [{ "binding": "SITE", "service": "rh" }],
   "vars": {

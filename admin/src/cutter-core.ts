@@ -8,7 +8,7 @@
  * (handles snap to cuts; Alt places them freely), up to 10 seconds in all.
  * The loop plays with two video elements taking turns, so each join lands on
  * the next piece's first frame. Saving hands the pieces back; the preview
- * itself is made in the cloud from the original (scripts/process-media.ts).
+ * itself is made in the cloud from the compressed video (scripts/process-media.ts).
  *
  * Imperative on purpose, as the artifact was: the strip, the pieces and the
  * playhead redraw on every pointer move, outside React.

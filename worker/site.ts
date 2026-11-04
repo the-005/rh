@@ -10,8 +10,9 @@
  * (scripts/process-media.ts, run by .github/workflows/process-media.yml). It
  * holds no password: each call carries a token GitHub signs for that workflow
  * run, and only a run of that workflow, from this repository's main branch,
- * gets in. Through it the processing reads what's queued, reads an original,
- * writes the web copies (or a compressed video) and records how each item went.
+ * gets in. Through it the processing reads what's queued, reads what it works
+ * from (an original, or for a preview the compressed video), writes the web
+ * copies (or a compressed video) and records how each item went.
  */
 
 import { createRemoteJWKSet, jwtVerify } from "jose";
@@ -69,8 +70,9 @@ async function pipeline(request: Request, env: Env, url: URL) {
     return json(entries.filter((e) => e !== null));
   }
 
-  if (url.pathname === "/api/pipeline/original" && request.method === "GET") {
-    if (!/^projects\/[\w-]+\/originals\/[\w.-]+$/.test(key)) return json({ error: "Bad key." }, 400);
+  // What an item is made from: its original, or for a preview the compressed video.
+  if (url.pathname === "/api/pipeline/source" && request.method === "GET") {
+    if (!/^projects\/[\w-]+\/(originals\/[\w.-]+|web\/video\/[\w-]+\.mp4)$/.test(key)) return json({ error: "Bad key." }, 400);
     const object = await env.MEDIA.get(key);
     if (!object) return json({ error: "Not found." }, 404);
     return new Response(object.body, { headers: { "content-length": String(object.size) } });

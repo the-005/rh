@@ -12,9 +12,13 @@
  * project.json and queues what's new for the processing on GitHub (see
  * scripts/process-media.ts): images for their web copies, videos to be
  * compressed with HandBrake. Videos also go to the Preview Cutter's queue.
+ *
+ * Once a day it deletes the originals that are no longer needed
+ * (admin/originals.ts).
  */
 
 import { createRemoteJWKSet, jwtVerify } from "jose";
+import { deleteOldOriginals } from "./originals.ts";
 import { publishSite } from "./site-data.ts";
 import {
   CUTTER_PREFIX,
@@ -267,10 +271,14 @@ async function saveProject(request: Request, env: Env, ctx: ExecutionContext, id
     })
   );
   // Videos compressed before they got a still (their first frame, which the
-  // site shows) go round again.
-  const stillless = project.items.filter(
-    (i) => i.type === "video" && i.original && status[i.id]?.state === "done" && !status[i.id]?.copies
-  );
+  // site shows) go round again, while their original is still in storage.
+  const stillless = (
+    await Promise.all(
+      project.items
+        .filter((i) => i.type === "video" && i.original && status[i.id]?.state === "done" && !status[i.id]?.copies)
+        .map(async (i) => ((await env.MEDIA.head(i.original as string)) ? i : null))
+    )
+  ).filter((i) => i !== null);
   await Promise.all(
     stillless.map((item) =>
       writeJson(env, keys.process(id, item.id), {
@@ -422,7 +430,6 @@ async function cutterList(env: Env) {
             todo: waiting.has(`${id}__${item.id}`),
             preview: preview?.state ?? null,
             compressed: status?.[item.id]?.state === "done" ? (status?.[item.id]?.video ?? null) : null,
-            original: item.original ?? null,
           };
         });
     })
@@ -447,8 +454,9 @@ function cleanPieces(raw: unknown): Piece[] | string {
   return pieces;
 }
 
-// A video's cuts and pieces. Saving pieces queues the preview to be made and
-// takes the video off the cutter's to-do list; cuts alone are only kept.
+// A video's cuts and pieces. Saving pieces queues the preview to be made (cut
+// from the compressed video) and takes the video off the cutter's to-do list;
+// cuts alone are only kept.
 async function previews(request: Request, env: Env, ctx: ExecutionContext, id: string, itemId: string) {
   const planKey = keys.plan(id, itemId);
   if (request.method === "GET") return json((await readJson<PreviewPlan>(env, planKey)) ?? {});
@@ -462,12 +470,12 @@ async function previews(request: Request, env: Env, ctx: ExecutionContext, id: s
   if (body.pieces !== undefined) {
     const pieces = cleanPieces(body.pieces);
     if (typeof pieces === "string") return fail(pieces);
-    if (!item.original) return fail("This video has no original in storage to cut from.");
+    if (!(await env.MEDIA.head(keys.video(id, itemId)))) return fail("The video is still being compressed.");
     plan.pieces = pieces;
     plan.saved = new Date().toISOString();
     // Saved by hand: no longer the automatic suggestion.
     delete plan.auto;
-    const entry: QueueEntry = { project: id, item: itemId, type: "preview", original: item.original, file: item.file, pieces };
+    const entry: QueueEntry = { project: id, item: itemId, type: "preview", file: item.file, pieces };
     await writeJson(env, keys.processPreview(id, itemId), entry);
     await env.MEDIA.delete(keys.cutter(id, itemId));
     startProcessing(env, ctx);
@@ -540,5 +548,9 @@ export default {
     } catch (error) {
       return fail(error instanceof Error ? error.message : String(error), 500);
     }
+  },
+
+  async scheduled(controller, env) {
+    await deleteOldOriginals(env.MEDIA, controller.scheduledTime);
   },
 } satisfies ExportedHandler<Env>;

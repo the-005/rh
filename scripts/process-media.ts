@@ -4,9 +4,10 @@
  * - images: three web copies, made exactly as `npm run work:images` makes them
  *   (the same `encode` from media.ts: MozJPEG at 85, stepping down only to keep
  *   a copy under 1 MB, 3000 / 1500 / 1000px, never enlarged);
- * - previews: the pieces picked in the preview cutter, joined and compressed
- *   the same way (processPreview); and, for every new video, an automatic
- *   preview from the pieces the cutter would suggest (autoPreview);
+ * - previews: the pieces picked in the preview cutter, cut from the
+ *   compressed video, joined and compressed the same way (processPreview);
+ *   and, for every new video, an automatic preview from the pieces the cutter
+ *   would suggest (autoPreview);
  * - videos: compressed with HandBrake the way the owner does it by hand
  *   (4 Nov): the "Fast 2160p60 4K HEVC" preset with cropping set to none,
  *   capped at 2560 × 1440 ("2K", the cap turned for portrait videos: the
@@ -19,7 +20,9 @@
  * proving who it is with a token GitHub signs for the run, so no storage key
  * or password lives anywhere. One item at a time: read the queue, fetch the
  * original, make the copies, upload them, record the result. Video previews
- * are the Preview Cutter's (a separate queue).
+ * are the Preview Cutter's (a separate queue). Originals are deleted from
+ * storage ORIGINALS_KEEP_DAYS after upload (admin/originals.ts), so nothing
+ * made after the first processing may need one.
  *
  * Locally, against `wrangler dev` with DEV_BYPASS (no GitHub token needed):
  *   PIPELINE_URL=http://localhost:8788 PIPELINE_DEV=1 node --experimental-strip-types scripts/process-media.ts
@@ -88,10 +91,12 @@ const report = (entry: QueueEntry, status: Omit<ItemStatus, "at">) =>
     "application/json"
   );
 
-// The original, streamed to disk: some run to hundreds of MB, videos to GBs.
-async function download(entry: QueueEntry, dir: string) {
-  const src = path.join(dir, path.basename(entry.original));
-  const response = await call("GET", `/api/pipeline/original?key=${encodeURIComponent(entry.original)}`);
+// A file from storage, streamed to disk: originals run to hundreds of MB,
+// videos to GBs.
+async function download(key: string | undefined, dir: string) {
+  if (!key) throw new Error("Nothing to make it from.");
+  const src = path.join(dir, path.basename(key));
+  const response = await call("GET", `/api/pipeline/source?key=${encodeURIComponent(key)}`);
   await pipeline(Readable.fromWeb(response.body as ReadableStream), fs.createWriteStream(src));
   return src;
 }
@@ -201,7 +206,7 @@ async function webCopies(entry: QueueEntry, src: string, dir: string) {
 }
 
 async function processVideo(entry: QueueEntry, dir: string) {
-  const src = await download(entry, dir);
+  const src = await download(entry.original, dir);
   const out = path.join(dir, "video.mp4");
   const started = Date.now();
   const { width, height } = await compress(src, out);
@@ -219,18 +224,17 @@ async function processVideo(entry: QueueEntry, dir: string) {
   await report(entry, { state: "done", video: key, width, height, copies });
   // The video is ready; its automatic preview follows. A failure there leaves
   // the video as it is.
-  await autoPreview(entry, src, out, dir).catch((error) =>
+  await autoPreview(entry, out, dir).catch((error) =>
     console.error(`  no automatic preview: ${error instanceof Error ? error.message : String(error)}`)
   );
 }
 
 // A preview, as the owner decided (2 Nov): the pieces picked in the Preview
-// Cutter cut from the original and joined without loss (frame-exact, so a
-// lossless intermediate rather than a stream copy, which can only cut on
-// keyframes), then one HandBrake encode with the same settings as the video.
+// Cutter cut from the compressed video (the owner, 5 Nov; it was the original
+// until then) and joined without loss (frame-exact, so a lossless
+// intermediate rather than a stream copy, which can only cut on keyframes),
+// then one HandBrake encode with the same settings as the video.
 // No sound: previews loop silently.
-// A preview from pieces of a video: cut from the original frame-exact and
-// joined without loss, then one HandBrake encode, as for the video itself.
 async function makePreview(entry: QueueEntry, src: string, pieces: Piece[], dir: string, auto: boolean) {
   const joined = path.join(dir, "joined.mkv");
   const out = path.join(dir, "preview.mp4");
@@ -270,7 +274,7 @@ async function makePreview(entry: QueueEntry, src: string, pieces: Piece[], dir:
 async function processPreview(entry: QueueEntry, dir: string) {
   const pieces = entry.pieces ?? [];
   if (!pieces.length) throw new Error("No pieces saved.");
-  const src = await download(entry, dir);
+  const src = await download(keys.video(entry.project, entry.item), dir);
   await makePreview(entry, src, pieces, dir, false);
 }
 
@@ -320,7 +324,7 @@ async function findCuts(file: string) {
 // suggest, so something shows on the site before anyone makes one by hand (the
 // owner, 2 Nov). Pieces saved by hand are never replaced: the site's door
 // refuses the automatic plan then.
-async function autoPreview(entry: QueueEntry, src: string, compressed: string, dir: string) {
+async function autoPreview(entry: QueueEntry, compressed: string, dir: string) {
   const { cuts, duration } = await findCuts(compressed);
   const pieces = suggestPieces(cuts, duration);
   if (!pieces.length) return;
@@ -334,11 +338,11 @@ async function autoPreview(entry: QueueEntry, src: string, compressed: string, d
     console.log("  preview made by hand already: no automatic one");
     return;
   }
-  await makePreview(entry, src, pieces, dir, true);
+  await makePreview(entry, compressed, pieces, dir, true);
 }
 
 async function processImage(entry: QueueEntry, dir: string) {
-  const src = await download(entry, dir);
+  const src = await download(entry.original, dir);
 
   const copies = {} as Copies;
   let size = { width: 0, height: 0 };

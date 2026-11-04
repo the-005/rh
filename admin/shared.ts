@@ -7,7 +7,8 @@
  *
  *   projects/<id>/project.json            what the admin saves: info + items in order
  *   projects/<id>/status.json             what the processing writes, per item
- *   projects/<id>/originals/<item>-<file> files as uploaded
+ *   projects/<id>/originals/<item>-<file> files as uploaded, deleted after
+ *                                         ORIGINALS_KEEP_DAYS (admin/originals.ts)
  *   projects/<id>/web/full/<item>.jpg     3000px copy   } the three copies the
  *   projects/<id>/web/mid/<item>.jpg      1500px copy   } site uses today
  *   projects/<id>/web/canvas/<item>.jpg   1000px copy   } (see CLAUDE.md, Media)
@@ -67,7 +68,8 @@ export type Item = {
   // the site, the name of its web copy).
   file: string;
   // Storage key of the file as uploaded. The 11 projects brought in from the
-  // site have no originals in storage, only their web copies.
+  // site have no originals in storage, only their web copies. The key stays
+  // here after the file itself is deleted (ORIGINALS_KEEP_DAYS).
   original?: string;
   size?: number;
   // Web copies an item came with (the projects brought in from the site).
@@ -119,10 +121,19 @@ export type QueueEntry = {
   project: string;
   item: string;
   type: Item["type"] | "preview";
-  original: string;
+  // What images and videos are made from. A preview is cut from the
+  // compressed video instead (keys.video).
+  original?: string;
   file: string;
   pieces?: Piece[];
 };
+
+// How long an original stays in storage after it's uploaded (the owner,
+// 5 Nov, to keep storage small): everything is made from it within minutes,
+// and previews are cut from the compressed video, so after this it's only
+// needed to redo an item with new settings, which then means uploading it
+// again. Originals still waiting, processing or failed are kept until done.
+export const ORIGINALS_KEEP_DAYS = 21;
 
 // A stretch of a video, in seconds. A preview is up to PREVIEW_MAX seconds of
 // pieces joined with straight cuts, looping.
