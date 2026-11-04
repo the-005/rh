@@ -348,6 +348,37 @@ async function importCopies(request: Request, env: Env) {
   return json({ copied: copied.filter(Boolean).length });
 }
 
+// Deleting a project: every file in its folder (originals, copies, videos,
+// previews, its cuts and pieces), its places in the queues and in the order;
+// then the site forgets it. The site's own public/work files (the 11 projects
+// brought in from it) stay in the code, unlisted.
+async function deleteProject(env: Env, id: string) {
+  if (!(await readJson<Project>(env, keys.project(id)))) return fail("No such project.", 404);
+  for (const prefix of [`projects/${id}/`, `${PROCESS_PREFIX}${id}__`, `${CUTTER_PREFIX}${id}__`]) {
+    let cursor: string | undefined;
+    do {
+      const listed = await env.MEDIA.list({ prefix, cursor, limit: 1000 });
+      if (listed.objects.length) await env.MEDIA.delete(listed.objects.map((o) => o.key));
+      cursor = listed.truncated ? listed.cursor : undefined;
+    } while (cursor);
+  }
+  await writeJson(env, keys.index, { order: (await order(env)).filter((p) => p !== id) });
+  await publishSite(env.MEDIA);
+  return json({ deleted: id });
+}
+
+// An option off its list (kinds of work, or roles). Projects that use it keep
+// it; saving one of them puts it back on the list.
+async function removeOption(request: Request, env: Env) {
+  const body = (await request.json()) as { list?: string; value?: string };
+  if (body.list !== "kinds" && body.list !== "roles") return fail("Bad list.");
+  const current = await options(env);
+  const value = String(body.value ?? "").toLowerCase();
+  const next = { ...current, [body.list]: current[body.list].filter((o) => o.toLowerCase() !== value) };
+  await writeJson(env, keys.options, next);
+  return json(next);
+}
+
 // The projects' order, as dragged on the admin's list: the same projects, in a
 // new order (the site follows it, through site.json).
 async function saveOrder(request: Request, env: Env) {
@@ -475,6 +506,7 @@ export default {
       if (path === "/api/me") return json({ email });
       if (path === "/api/projects" && method === "GET") return json(await listProjects(env));
       if (path === "/api/options" && method === "GET") return json(await options(env));
+      if (path === "/api/options/remove" && method === "POST") return await removeOption(request, env);
       if (path === "/api/cutter" && method === "GET") return json(await cutterList(env));
       if (path === "/api/order" && method === "PUT") return await saveOrder(request, env);
       const previewMatch = path.match(/^\/api\/previews\/([^/]+)\/([^/]+)$/);
@@ -492,6 +524,7 @@ export default {
           return found ? json(found) : fail("No such project.", 404);
         }
         if (method === "PUT") return await saveProject(request, env, ctx, id, url.searchParams.has("create"));
+        if (method === "DELETE") return await deleteProject(env, id);
         return fail("Method not allowed.", 405);
       }
       if (path === "/api/uploads") return await uploads(request, env, url);

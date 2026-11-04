@@ -87,6 +87,8 @@ export function Editor({ id }: { id: string | null }) {
   const [notice, setNotice] = React.useState("");
   const [saving, setSaving] = React.useState("");
   const [dirty, setDirty] = React.useState(false);
+  // Deleting asks once more, on the page.
+  const [confirming, setConfirming] = React.useState(false);
   const [dragging, setDragging] = React.useState<string | null>(null);
   const [over, setOver] = React.useState(false);
   const listRef = React.useRef<HTMLOListElement>(null);
@@ -348,7 +350,13 @@ export function Editor({ id }: { id: string | null }) {
             value={draft.name}
             onInput={(e: React.FormEvent<HTMLElement>) => edit({ name: fieldValue(e) })}
           />
-          <Combo label="Kind of work" value={draft.kind} options={kinds} onChange={(kind) => edit({ kind })} />
+          <Combo
+            label="Kind of work"
+            value={draft.kind}
+            options={kinds}
+            onChange={(kind) => edit({ kind })}
+            onRemove={(kind) => api.removeOption("kinds", kind).then(setOptions, () => {})}
+          />
           <md-outlined-text-field
             label="Year"
             value={draft.year}
@@ -364,7 +372,13 @@ export function Editor({ id }: { id: string | null }) {
           {credits.map((credit, i) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: rows have no identity beyond their place
             <li key={i}>
-              <Combo label="Role" value={credit.role} options={roles} onChange={(role) => setCredit(i, { role })} />
+              <Combo
+                label="Role"
+                value={credit.role}
+                options={roles}
+                onChange={(role) => setCredit(i, { role })}
+                onRemove={(role) => api.removeOption("roles", role).then(setOptions, () => {})}
+              />
               <md-outlined-text-field
                 label="Name"
                 value={credit.name}
@@ -495,6 +509,41 @@ export function Editor({ id }: { id: string | null }) {
           ))}
         </ol>
       </section>
+
+      {loaded && (
+        <section className="card danger">
+          <h2 className="md-typescale-title-medium">Delete project</h2>
+          {confirming ? (
+            <div className="confirm">
+              <span className="md-typescale-body-medium">
+                This deletes {draft.name || "the project"} and all its files, from the admin and from the site. It can't be
+                undone.
+              </span>
+              <md-text-button onClick={() => setConfirming(false)}>Cancel</md-text-button>
+              <md-filled-button
+                className="delete"
+                onClick={async () => {
+                  try {
+                    await api.deleteProject(loaded.project.id);
+                    setDirty(false);
+                    navigate("/");
+                  } catch (e) {
+                    setConfirming(false);
+                    setNotice(e instanceof Error ? e.message : String(e));
+                  }
+                }}
+              >
+                Delete
+              </md-filled-button>
+            </div>
+          ) : (
+            <md-text-button className="delete-start" onClick={() => setConfirming(true)}>
+              <md-icon slot="icon">delete</md-icon>
+              Delete this project
+            </md-text-button>
+          )}
+        </section>
+      )}
 
       <footer className="save">
         <span className="notice md-typescale-body-medium">{notice || (dirty && !saving ? "Unsaved changes." : "")}</span>

@@ -14,12 +14,15 @@ export function Combo({
   value,
   options,
   onChange,
+  onRemove,
   disabled,
 }: {
   label: string;
   value: string;
   options: string[];
   onChange: (value: string) => void;
+  // Takes an option off the shared list (the × on its row).
+  onRemove?: (value: string) => void;
   disabled?: boolean;
 }) {
   const [open, setOpen] = React.useState(false);
@@ -92,16 +95,17 @@ export function Combo({
         <div className="combo-menu" id={menuId} role="listbox">
           <p className="combo-hint md-typescale-label-medium">Select an option or create one</p>
           {choices.map((choice, i) => (
-            <button
-              type="button"
+            <div
               key={`${choice.create}-${choice.value}`}
               role="option"
+              tabIndex={-1}
               aria-selected={choice.value === value}
               className={i === active ? "combo-option active" : "combo-option"}
               // Keep the focus in the field, so picking isn't a blur.
               onMouseDown={(e) => e.preventDefault()}
               onMouseEnter={() => setActive(i)}
               onClick={() => choose(choice.value)}
+              onKeyDown={(e) => e.key === "Enter" && choose(choice.value)}
             >
               <md-ripple />
               {choice.create ? (
@@ -115,9 +119,24 @@ export function Combo({
                 <>
                   <span className="option-chip">{choice.value}</span>
                   {choice.value === value && <md-icon className="check">check</md-icon>}
+                  {onRemove && (
+                    <button
+                      type="button"
+                      className="option-remove"
+                      aria-label={`Remove ${choice.value} from the list`}
+                      title="Remove from the list"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRemove(choice.value);
+                      }}
+                    >
+                      <md-icon>close</md-icon>
+                    </button>
+                  )}
                 </>
               )}
-            </button>
+            </div>
           ))}
           {choices.length === 0 && <p className="combo-hint md-typescale-body-medium">Type to add the first one.</p>}
         </div>

@@ -835,3 +835,56 @@ main.wide {
   text-align: right;
   color: var(--md-sys-color-on-surface-variant);
 }
+
+/* Taking an option off its list: a small × at the end of its row. */
+.option-remove {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--md-sys-color-on-surface-variant);
+  cursor: pointer;
+  --md-icon-size: 18px;
+}
+
+.combo-option .check + .option-remove {
+  margin-left: 0;
+}
+
+.option-remove:hover {
+  background: color-mix(in srgb, var(--md-sys-color-on-surface) 12%, transparent);
+  color: var(--md-sys-color-on-surface);
+}
+
+/* Deleting a project. */
+.danger h2 {
+  margin-bottom: 8px;
+}
+
+.delete-start {
+  --md-text-button-label-text-color: var(--md-sys-color-error);
+  --md-text-button-icon-color: var(--md-sys-color-error);
+  margin-left: -12px;
+}
+
+.confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.confirm span {
+  flex: 1 1 320px;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.confirm .delete {
+  --md-filled-button-container-color: var(--md-sys-color-error);
+  --md-filled-button-label-text-color: var(--md-sys-color-on-error);
+}
