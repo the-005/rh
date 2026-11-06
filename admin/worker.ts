@@ -304,8 +304,7 @@ async function saveProject(request: Request, env: Env, ctx: ExecutionContext, id
   return json(await getProject(env, id));
 }
 
-const isOriginal = (key: string | null): key is string =>
-  !!key && /^(projects\/[\w-]+|splash)\/originals\/[\w.-]+$/.test(key);
+const isOriginal = (key: string | null): key is string => !!key && /^(projects\/[\w-]+|splash)\/originals\/[\w.-]+$/.test(key);
 
 async function uploads(request: Request, env: Env, url: URL) {
   if (request.method === "POST") {
@@ -418,7 +417,14 @@ async function saveSplash(request: Request, env: Env, ctx: ExecutionContext) {
   if (splash.next && splash.next.item !== item)
     await env.MEDIA.delete([splash.next.original, keys.process(SPLASH_PROJECT, splash.next.item)]);
   const at = new Date().toISOString();
-  splash.next = { item, file, original: body.original, ...(typeof body.size === "number" ? { size: body.size } : {}), state: "waiting", at };
+  splash.next = {
+    item,
+    file,
+    original: body.original,
+    ...(typeof body.size === "number" ? { size: body.size } : {}),
+    state: "waiting",
+    at,
+  };
   const entry: QueueEntry = { project: SPLASH_PROJECT, item, type: "splash", original: body.original, file };
   await writeJson(env, keys.process(SPLASH_PROJECT, item), entry);
   await writeJson(env, keys.splash, splash);

@@ -220,8 +220,8 @@ input.input:focus-visible {
   align-items: center;
   gap: 12px;
   min-height: 60px;
-  padding: max(8px, env(safe-area-inset-top)) max(var(--margin), env(safe-area-inset-right), calc((100% - 720px) / 2))
-    8px max(var(--margin), env(safe-area-inset-left), calc((100% - 720px) / 2));
+  padding: max(8px, env(safe-area-inset-top)) max(var(--margin), env(safe-area-inset-right), calc((100% - 720px) / 2)) 8px
+    max(var(--margin), env(safe-area-inset-left), calc((100% - 720px) / 2));
 }
 
 /* A wide page's bar spans the window, and its edge doesn't fall on the video. */

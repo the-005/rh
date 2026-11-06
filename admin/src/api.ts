@@ -61,8 +61,7 @@ export const api = {
   savePlan: (project: string, item: string, body: { cuts?: number[]; pieces?: Piece[] }) =>
     call<PreviewPlan>("PUT", `/api/previews/${encodeURIComponent(project)}/${encodeURIComponent(item)}`, body),
   splash: () => call<Splash>("GET", "/api/splash"),
-  saveSplash: (body: { item: string; file: string; original: string; size: number }) =>
-    call<Splash>("PUT", "/api/splash", body),
+  saveSplash: (body: { item: string; file: string; original: string; size: number }) => call<Splash>("PUT", "/api/splash", body),
   save: (project: Project, create: boolean) =>
     call<Loaded>("PUT", `/api/projects/${encodeURIComponent(project.id)}${create ? "?create" : ""}`, project),
 };

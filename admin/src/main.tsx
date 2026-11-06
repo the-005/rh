@@ -30,11 +30,11 @@ function App() {
   return (
     <>
       {isCutting && cut ? (
-          <CutterView
-            key={`${cut.project}/${cut.item}`}
-            project={decodeURIComponent(cut.project)}
-            item={decodeURIComponent(cut.item)}
-          />
+        <CutterView
+          key={`${cut.project}/${cut.item}`}
+          project={decodeURIComponent(cut.project)}
+          item={decodeURIComponent(cut.item)}
+        />
       ) : isCutterList ? (
         <CutterList />
       ) : isNew || projectId ? (

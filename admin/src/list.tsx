@@ -126,7 +126,13 @@ export function List({ email }: { email: string }) {
         )
       }
       trailing={
-        <button type="button" className="glass round" aria-label="New Project" title="New Project" onClick={() => navigate("/new")}>
+        <button
+          type="button"
+          className="glass round"
+          aria-label="New Project"
+          title="New Project"
+          onClick={() => navigate("/new")}
+        >
           <Icon name="add" />
         </button>
       }
@@ -147,13 +153,7 @@ export function List({ email }: { email: string }) {
       )}
       {!projects && !error && <p className="notice">Loading…</p>}
       {projects && projects.length > 0 && (
-        <Group
-          footer={
-            editing ? (
-              <output>{orderNote || "Drag to set the order the site shows them in."}</output>
-            ) : undefined
-          }
-        >
+        <Group footer={editing ? <output>{orderNote || "Drag to set the order the site shows them in."}</output> : undefined}>
           <ul ref={listRef} onPointerMove={onDragMove}>
             {projects.map((p, index) => {
               const content = (

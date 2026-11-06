@@ -404,7 +404,9 @@ const queue = (await (await call("GET", "/api/pipeline/queue")).json()) as Queue
 console.log(`${queue.length} queued`);
 
 for (const entry of queue) {
-  console.log(`${entry.type === "splash" ? "splash" : entry.project} / ${entry.file}${entry.type === "preview" ? " (preview)" : ""}`);
+  console.log(
+    `${entry.type === "splash" ? "splash" : entry.project} / ${entry.file}${entry.type === "preview" ? " (preview)" : ""}`
+  );
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rh-"));
   try {
     await report(entry, { state: "processing" });

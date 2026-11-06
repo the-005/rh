@@ -104,16 +104,7 @@ export function SplashVideo({ visible, videoSrc, onDismiss, onSkip }: Props) {
       style={{ "--fade": `${FADE_MS}ms` } as React.CSSProperties}
       onWheel={handleWheel}
     >
-      <video
-        ref={videoRef}
-        src={videoSrc}
-        autoPlay
-        muted
-        loop
-        playsInline
-        className={styles.video}
-        onPlaying={handlePlaying}
-      />
+      <video ref={videoRef} src={videoSrc} autoPlay muted loop playsInline className={styles.video} onPlaying={handlePlaying} />
     </div>
   );
 }

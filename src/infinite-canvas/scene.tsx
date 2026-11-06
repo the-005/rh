@@ -30,6 +30,10 @@ import {
   MAX_VELOCITY,
   PARALLAX_AMOUNT,
   RENDER_DISTANCE,
+  TOUCH_AXIS_LOCK_PX,
+  TOUCH_PAN_SPEED,
+  TOUCH_PINCH_DEPTH,
+  TOUCH_SWIPE_DEPTH,
   VELOCITY_DECAY,
   VELOCITY_LERP,
 } from "./constants";
@@ -92,6 +96,12 @@ type KeyboardKeys = {
   down: boolean;
 };
 
+// Which images come toward you on scroll-up: those right of the screen's
+// middle, or above it when the window is taller than it's wide (the owner,
+// 7 Nov, for phones). The others go away.
+const comesCloser = (pos: { x: number; y: number }, cam: CameraGridState) =>
+  cam.portrait ? pos.y >= cam.camY : pos.x >= cam.camX;
+
 const getTouchDistance = (touches: Touch[]) => {
   if (touches.length < 2) return 0;
   const [t1, t2] = touches;
@@ -106,6 +116,9 @@ type CameraGridState = {
   cz: number;
   camZ: number;
   camX: number;
+  camY: number;
+  /** The window is taller than it's wide: the gallery splits top/bottom, not left/right. */
+  portrait: boolean;
   /** Per-frame Z velocity applied to image depth offsets (not camera). */
   scrollDelta: number;
   /** Running sum of all scrollDelta values since session start. Used to sync
@@ -175,8 +188,8 @@ function MediaPlane({
     [labelTexture]
   );
   const initPos = getChunkCyclePositions(chunkCx, chunkCy, chunkCz, 0)[chunkIndex];
-  const isInitRight = initPos.x >= cameraGridRef.current.camX;
-  const initialAbsoluteZ = depthPhase + cameraGridRef.current.cumulativeScroll * (isInitRight ? 1 : -1);
+  const initialAbsoluteZ =
+    depthPhase + cameraGridRef.current.cumulativeScroll * (comesCloser(initPos, cameraGridRef.current) ? 1 : -1);
   const initialCycle = Math.floor(initialAbsoluteZ / tuning.depthFadeEnd);
 
   const regKey = `${chunkCx},${chunkCy},${chunkCz},${chunkIndex}`;
@@ -320,13 +333,13 @@ function MediaPlane({
     if (mesh.renderOrder !== 0) mesh.renderOrder = 0;
 
     // zOffset is the image's depth from the camera within [0, DEPTH_FADE_END).
-    // Right images zoom in on scroll-up, left images zoom out — direction is
+    // The gallery splits through the middle of the screen: on scroll-up the
+    // images on one side zoom in and the others zoom out (comesCloser) —
     // re-evaluated against the camera every frame (intentional feature: planes
-    // flip direction when the camera pans past them).
-    const { scrollDelta, camX } = cameraGridRef.current;
+    // flip direction when the camera pans past them, or the window turns).
+    const { scrollDelta } = cameraGridRef.current;
     if (Math.abs(scrollDelta) > 0.00001) {
-      const isRight = state.cycleX >= camX;
-      state.absoluteZOffset += scrollDelta * (isRight ? 1 : -1);
+      state.absoluteZOffset += scrollDelta * (comesCloser({ x: state.cycleX, y: state.cycleY }, cameraGridRef.current) ? 1 : -1);
     }
 
     const { depthFadeEnd, depthFadeStart, depthFadeNear } = tuning;
@@ -838,6 +851,9 @@ type ControllerState = {
   isDragging: boolean;
   lastTouches: Touch[];
   lastTouchDist: number;
+  /** Where the one finger on the screen came down, and what its swipe turned out to be. */
+  touchStart: { x: number; y: number } | null;
+  touchAxis: "depth" | "pan" | null;
   lastChunkKey: string;
   lastChunkUpdate: number;
   pendingChunk: { cx: number; cy: number; cz: number } | null;
@@ -855,6 +871,8 @@ const createInitialState = (camZ: number): ControllerState => ({
   isDragging: false,
   lastTouches: [],
   lastTouchDist: 0,
+  touchStart: null,
+  touchAxis: null,
   lastChunkKey: "",
   lastChunkUpdate: 0,
   pendingChunk: null,
@@ -892,6 +910,8 @@ function SceneController({
     cz: 0,
     camZ: INITIAL_CAMERA_Z,
     camX: 0,
+    camY: 0,
+    portrait: false,
     scrollDelta: 0,
     cumulativeScroll: 0,
   });
@@ -948,27 +968,56 @@ function SceneController({
       s.scrollAccum += e.deltaY * 0.012;
     };
 
+    // Touch (constants.ts): one finger swipes through depth (up and down) or
+    // pans (sideways), decided once it has moved a little; two fingers pan
+    // and pinch. Whenever the number of fingers changes, the gesture starts
+    // over from where they are, so lifting one finger of two doesn't jump.
+    const restartTouch = (touches: Touch[]) => {
+      s.lastTouches = touches;
+      s.lastTouchDist = getTouchDistance(touches);
+      s.touchStart = touches.length === 1 ? { x: touches[0].clientX, y: touches[0].clientY } : null;
+      s.touchAxis = null;
+    };
+
     const onTouchStart = (e: TouchEvent) => {
       e.preventDefault();
-      s.lastTouches = Array.from(e.touches) as Touch[];
-      s.lastTouchDist = getTouchDistance(s.lastTouches);
+      restartTouch(Array.from(e.touches) as Touch[]);
       setCursor("grabbing");
     };
 
     const onTouchMove = (e: TouchEvent) => {
       e.preventDefault();
       const touches = Array.from(e.touches) as Touch[];
+      if (touches.length !== s.lastTouches.length) {
+        restartTouch(touches);
+        return;
+      }
 
-      if (touches.length === 1 && s.lastTouches.length >= 1) {
+      if (touches.length === 1) {
         const [touch] = touches;
         const [last] = s.lastTouches;
-        if (touch && last) {
-          s.targetVel.x -= (touch.clientX - last.clientX) * 0.02;
-          s.targetVel.y += (touch.clientY - last.clientY) * 0.02;
+        const start = s.touchStart;
+        if (!s.touchAxis && start) {
+          const dx = touch.clientX - start.x;
+          const dy = touch.clientY - start.y;
+          if (Math.max(Math.abs(dx), Math.abs(dy)) >= TOUCH_AXIS_LOCK_PX)
+            s.touchAxis = Math.abs(dy) > Math.abs(dx) ? "depth" : "pan";
         }
-      } else if (touches.length === 2 && s.lastTouchDist > 0) {
+        // Up is a scroll down, as on a trackpad: the same way through depth as the wheel.
+        if (s.touchAxis === "depth") s.scrollAccum -= (touch.clientY - last.clientY) * TOUCH_SWIPE_DEPTH;
+        if (s.touchAxis === "pan") {
+          s.targetVel.x -= (touch.clientX - last.clientX) * TOUCH_PAN_SPEED;
+          s.targetVel.y += (touch.clientY - last.clientY) * TOUCH_PAN_SPEED;
+        }
+      } else if (touches.length === 2) {
+        // The two fingers' midpoint pans; the distance between them is depth.
+        const mid = (t: Touch[]) => ({ x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 });
+        const now = mid(touches);
+        const before = mid(s.lastTouches);
+        s.targetVel.x -= (now.x - before.x) * TOUCH_PAN_SPEED;
+        s.targetVel.y += (now.y - before.y) * TOUCH_PAN_SPEED;
         const dist = getTouchDistance(touches);
-        s.scrollAccum += (s.lastTouchDist - dist) * 0.006;
+        if (s.lastTouchDist > 0) s.scrollAccum += (s.lastTouchDist - dist) * TOUCH_PINCH_DEPTH;
         s.lastTouchDist = dist;
       }
 
@@ -976,8 +1025,7 @@ function SceneController({
     };
 
     const onTouchEnd = (e: TouchEvent) => {
-      s.lastTouches = Array.from(e.touches) as Touch[];
-      s.lastTouchDist = getTouchDistance(s.lastTouches);
+      restartTouch(Array.from(e.touches) as Touch[]);
       setCursor("grab");
     };
 
@@ -1002,7 +1050,7 @@ function SceneController({
     };
   }, [gl]);
 
-  useFrame(() => {
+  useFrame((frame) => {
     const s = state.current;
     const now = performance.now();
     const frozen = isCanvasFrozen();
@@ -1113,6 +1161,9 @@ function SceneController({
       cz,
       camZ: INITIAL_CAMERA_Z,
       camX: s.basePos.x,
+      camY: s.basePos.y,
+      // Read every frame, so turning a phone or resizing the window switches the split at once.
+      portrait: frame.size.height > frame.size.width,
       scrollDelta: s.velocity.z,
       cumulativeScroll: newCumScroll,
     };

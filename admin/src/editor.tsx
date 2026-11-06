@@ -367,21 +367,12 @@ export function Editor({ id }: { id: string | null }) {
           Save
         </button>
       }
-      toolbar={
-        status && (
-          <output className={noticeIsError ? "error" : undefined}>{status}</output>
-        )
-      }
+      toolbar={status && <output className={noticeIsError ? "error" : undefined}>{status}</output>}
     >
       <Group>
         <label className="row field">
           <span className="field-label">Name</span>
-          <input
-            className="input"
-            placeholder="Required"
-            value={draft.name}
-            onChange={(e) => edit({ name: e.target.value })}
-          />
+          <input className="input" placeholder="Required" value={draft.name} onChange={(e) => edit({ name: e.target.value })} />
         </label>
         <div className="row field">
           <span className="field-label">Kind of Work</span>
@@ -505,9 +496,7 @@ export function Editor({ id }: { id: string | null }) {
                       type="button"
                       className="plain"
                       aria-label={`${hasPreview(item, loaded) ? "Edit" : "Create"} video preview for ${item.file}`}
-                      onClick={() =>
-                        navigate(`/cutter/${encodeURIComponent(loaded.project.id)}/${encodeURIComponent(item.id)}`)
-                      }
+                      onClick={() => navigate(`/cutter/${encodeURIComponent(loaded.project.id)}/${encodeURIComponent(item.id)}`)}
                     >
                       <Icon name={hasPreview(item, loaded) ? "edit" : "content_cut"} />
                       <span className="label">{hasPreview(item, loaded) ? "Edit Preview" : "Create Preview"}</span>
