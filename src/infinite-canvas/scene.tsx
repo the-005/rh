@@ -31,6 +31,7 @@ import {
   PARALLAX_AMOUNT,
   RENDER_DISTANCE,
   TOUCH_AXIS_LOCK_PX,
+  TOUCH_DEPTH_MAX,
   TOUCH_DEPTH_PER_PX,
   TOUCH_FLING_STALE_MS,
   TOUCH_FLING_WINDOW_MS,
@@ -39,12 +40,13 @@ import {
   TOUCH_GLIDE_PER_MS,
   TOUCH_PAN_PER_PX,
   TOUCH_PINCH_PER_PX,
+  TOUCH_SMOOTH_MS,
   VELOCITY_DECAY,
   VELOCITY_LERP,
 } from "./constants";
 import styles from "./style.module.css";
 import { decidePreviews, previewTexture, wantPreview } from "./previews";
-import { getTexture } from "./texture-manager";
+import { getTexture, uploadTextures } from "./texture-manager";
 import type { ChunkData, InfiniteCanvasProps, MediaItem, PlaneData } from "./types";
 import { tuning } from "./tuning";
 import {
@@ -1133,6 +1135,8 @@ function SceneController({
     const frozen = isCanvasFrozen();
     // Which video previews play, from what the planes asked for last frame.
     decidePreviews(now);
+    // Images that have arrived go to the GPU a few per frame (texture-manager.ts).
+    uploadTextures(gl);
 
     // The cursor says what a click does: the pointing hand over an image you
     // could open, the grab hand (pan) anywhere else, grabbing while dragging.
@@ -1218,20 +1222,30 @@ function SceneController({
     s.velocity.y = lerp(s.velocity.y, s.targetVel.y, VELOCITY_LERP);
     s.velocity.z = lerp(s.velocity.z, s.targetVel.z, VELOCITY_LERP);
 
-    // Touch steers directly (constants.ts): while fingers are down the gallery
-    // moves exactly what they moved since the last frame, and once they lift it
-    // glides on at their speed, slowing as an iPhone list does. None of the
-    // wheel's smoothing above applies, so it never lags behind the finger.
-    if (!frozen && (s.touchSteering || s.glide)) {
-      if (s.touchSteering) {
-        s.velocity.x = s.touchMove.x;
-        s.velocity.y = s.touchMove.y;
-        s.velocity.z = s.touchMove.z;
-        s.touchMove = { x: 0, y: 0, z: 0 };
-      } else if (s.glide) {
-        s.velocity.x = s.glide.x * dt;
-        s.velocity.y = s.glide.y * dt;
-        s.velocity.z = s.glide.z * dt;
+    // Touch steers directly (constants.ts): the fingers' moves reach the
+    // gallery over a couple of frames (TOUCH_SMOOTH_MS, so uneven touch events
+    // don't jerk it), and once they lift it glides on at their speed, slowing
+    // as an iPhone list does. None of the wheel's lag above applies. Through
+    // depth it never goes faster than the wheel's top speed; what a fast swipe
+    // asks for beyond that arrives over the next frames.
+    const m = s.touchMove;
+    if (!frozen && (s.touchSteering || s.glide || Math.abs(m.x) + Math.abs(m.y) + Math.abs(m.z) > 0.001)) {
+      const share = 1 - Math.exp(-dt / TOUCH_SMOOTH_MS);
+      const gliding = !s.touchSteering && s.glide;
+      // Through depth, the fingers' part comes first and the glide gets what's
+      // left under the cap; together they never pass the wheel's top speed.
+      const capZ = TOUCH_DEPTH_MAX * dt;
+      const take = { x: m.x * share, y: m.y * share, z: clamp(m.z * share, -capZ, capZ) };
+      m.x -= take.x;
+      m.y -= take.y;
+      m.z -= take.z;
+      s.velocity.x = take.x;
+      s.velocity.y = take.y;
+      s.velocity.z = take.z;
+      if (gliding && s.glide) {
+        s.velocity.x += s.glide.x * dt;
+        s.velocity.y += s.glide.y * dt;
+        s.velocity.z += clamp(s.glide.z * dt, -capZ - take.z, capZ - take.z);
         const slow = TOUCH_GLIDE_PER_MS ** dt;
         s.glide = { x: s.glide.x * slow, y: s.glide.y * slow, z: s.glide.z * slow };
         if (Math.hypot(s.glide.x, s.glide.y, s.glide.z) < TOUCH_GLIDE_END) s.glide = null;
