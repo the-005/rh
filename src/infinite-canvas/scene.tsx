@@ -979,8 +979,11 @@ function SceneController({
       s.touchAxis = null;
     };
 
+    // No preventDefault here: cancelling the start of a touch also cancels the
+    // click a tap turns into, and the click is what opens an image (R3F's
+    // onClick). The canvas's touch-action: none already keeps the browser
+    // from scrolling or zooming the page.
     const onTouchStart = (e: TouchEvent) => {
-      e.preventDefault();
       restartTouch(Array.from(e.touches) as Touch[]);
       setCursor("grabbing");
     };
