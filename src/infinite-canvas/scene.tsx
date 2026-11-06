@@ -31,9 +31,14 @@ import {
   PARALLAX_AMOUNT,
   RENDER_DISTANCE,
   TOUCH_AXIS_LOCK_PX,
-  TOUCH_PAN_SPEED,
-  TOUCH_PINCH_DEPTH,
-  TOUCH_SWIPE_DEPTH,
+  TOUCH_DEPTH_PER_PX,
+  TOUCH_FLING_STALE_MS,
+  TOUCH_FLING_WINDOW_MS,
+  TOUCH_GLIDE_END,
+  TOUCH_GLIDE_MAX,
+  TOUCH_GLIDE_PER_MS,
+  TOUCH_PAN_PER_PX,
+  TOUCH_PINCH_PER_PX,
   VELOCITY_DECAY,
   VELOCITY_LERP,
 } from "./constants";
@@ -838,6 +843,8 @@ function imageUnder(scene: THREE.Scene, camera: THREE.Camera, ndc: { x: number; 
   return hits.find(({ o }) => o >= most - 0.05)?.object ?? null;
 }
 
+type Vec3 = { x: number; y: number; z: number };
+
 type ControllerState = {
   /** The pointer is over the canvas itself (not the frame, a page or a panel). */
   pointerOnCanvas: boolean;
@@ -854,6 +861,16 @@ type ControllerState = {
   /** Where the one finger on the screen came down, and what its swipe turned out to be. */
   touchStart: { x: number; y: number } | null;
   touchAxis: "depth" | "pan" | null;
+  /** Fingers are on the screen, steering the gallery directly. */
+  touchSteering: boolean;
+  /** What the fingers moved since the last frame, in gallery units (x, y pan; z depth). */
+  touchMove: Vec3;
+  /** Their recent moves, each with the time it took, for the glide's speed. */
+  touchSamples: (Vec3 & { t: number; dt: number })[];
+  lastTouchAt: number;
+  /** The glide after the fingers lift, in gallery units per millisecond; null when still. */
+  glide: Vec3 | null;
+  lastFrameAt: number;
   lastChunkKey: string;
   lastChunkUpdate: number;
   pendingChunk: { cx: number; cy: number; cz: number } | null;
@@ -873,6 +890,12 @@ const createInitialState = (camZ: number): ControllerState => ({
   lastTouchDist: 0,
   touchStart: null,
   touchAxis: null,
+  touchSteering: false,
+  touchMove: { x: 0, y: 0, z: 0 },
+  touchSamples: [],
+  lastTouchAt: 0,
+  glide: null,
+  lastFrameAt: 0,
   lastChunkKey: "",
   lastChunkUpdate: 0,
   pendingChunk: null,
@@ -977,6 +1000,35 @@ function SceneController({
       s.lastTouchDist = getTouchDistance(touches);
       s.touchStart = touches.length === 1 ? { x: touches[0].clientX, y: touches[0].clientY } : null;
       s.touchAxis = null;
+      s.touchSamples = [];
+      s.lastTouchAt = performance.now();
+    };
+
+    // A finger movement, in gallery units: the next frame moves the gallery by
+    // exactly this (see the frame loop), and it's kept for the glide's speed.
+    const steer = (x: number, y: number, z: number) => {
+      const t = performance.now();
+      s.touchMove.x += x;
+      s.touchMove.y += y;
+      s.touchMove.z += z;
+      // A move's time is capped at two frames, so a finger that rested before
+      // moving doesn't read as a slow one.
+      s.touchSamples.push({ x, y, z, t, dt: clamp(t - s.lastTouchAt, 1, 34) });
+      if (s.touchSamples.length > 16) s.touchSamples.shift();
+      s.lastTouchAt = t;
+    };
+
+    // The glide when the last finger lifts: the fingers' speed over their last
+    // moments, or none if they had stopped.
+    const releaseGlide = (): Vec3 | null => {
+      const now = performance.now();
+      const recent = s.touchSamples.filter((p) => now - p.t <= TOUCH_FLING_WINDOW_MS);
+      const last = recent[recent.length - 1];
+      if (!last || now - last.t > TOUCH_FLING_STALE_MS) return null;
+      const time = recent.reduce((sum, p) => sum + p.dt, 0);
+      const speed = (axis: keyof Vec3) =>
+        clamp(recent.reduce((sum, p) => sum + p[axis], 0) / time, -TOUCH_GLIDE_MAX, TOUCH_GLIDE_MAX);
+      return { x: speed("x"), y: speed("y"), z: speed("z") };
     };
 
     // No preventDefault here: cancelling the start of a touch also cancels the
@@ -985,6 +1037,9 @@ function SceneController({
     // from scrolling or zooming the page.
     const onTouchStart = (e: TouchEvent) => {
       restartTouch(Array.from(e.touches) as Touch[]);
+      // A touch catches the gallery mid-glide, as it catches an iPhone list.
+      s.touchSteering = true;
+      s.glide = null;
       setCursor("grabbing");
     };
 
@@ -1007,20 +1062,20 @@ function SceneController({
             s.touchAxis = Math.abs(dy) > Math.abs(dx) ? "depth" : "pan";
         }
         // Up is a scroll down, as on a trackpad: the same way through depth as the wheel.
-        if (s.touchAxis === "depth") s.scrollAccum -= (touch.clientY - last.clientY) * TOUCH_SWIPE_DEPTH;
-        if (s.touchAxis === "pan") {
-          s.targetVel.x -= (touch.clientX - last.clientX) * TOUCH_PAN_SPEED;
-          s.targetVel.y += (touch.clientY - last.clientY) * TOUCH_PAN_SPEED;
-        }
+        if (s.touchAxis === "depth") steer(0, 0, -(touch.clientY - last.clientY) * TOUCH_DEPTH_PER_PX);
+        if (s.touchAxis === "pan")
+          steer(-(touch.clientX - last.clientX) * TOUCH_PAN_PER_PX, (touch.clientY - last.clientY) * TOUCH_PAN_PER_PX, 0);
       } else if (touches.length === 2) {
         // The two fingers' midpoint pans; the distance between them is depth.
         const mid = (t: Touch[]) => ({ x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 });
         const now = mid(touches);
         const before = mid(s.lastTouches);
-        s.targetVel.x -= (now.x - before.x) * TOUCH_PAN_SPEED;
-        s.targetVel.y += (now.y - before.y) * TOUCH_PAN_SPEED;
         const dist = getTouchDistance(touches);
-        if (s.lastTouchDist > 0) s.scrollAccum += (s.lastTouchDist - dist) * TOUCH_PINCH_DEPTH;
+        steer(
+          -(now.x - before.x) * TOUCH_PAN_PER_PX,
+          (now.y - before.y) * TOUCH_PAN_PER_PX,
+          s.lastTouchDist > 0 ? (s.lastTouchDist - dist) * TOUCH_PINCH_PER_PX : 0
+        );
         s.lastTouchDist = dist;
       }
 
@@ -1028,7 +1083,21 @@ function SceneController({
     };
 
     const onTouchEnd = (e: TouchEvent) => {
-      restartTouch(Array.from(e.touches) as Touch[]);
+      const touches = Array.from(e.touches) as Touch[];
+      if (touches.length === 0) {
+        s.glide = releaseGlide();
+        s.touchSteering = false;
+      }
+      restartTouch(touches);
+      setCursor("grab");
+    };
+
+    // The system took the touch (a notification pulled down, a call): stop, no glide.
+    const onTouchCancel = () => {
+      s.touchSteering = false;
+      s.glide = null;
+      s.touchMove = { x: 0, y: 0, z: 0 };
+      restartTouch([]);
       setCursor("grab");
     };
 
@@ -1040,6 +1109,7 @@ function SceneController({
     canvas.addEventListener("touchstart", onTouchStart, { passive: false });
     canvas.addEventListener("touchmove", onTouchMove, { passive: false });
     canvas.addEventListener("touchend", onTouchEnd, { passive: false });
+    canvas.addEventListener("touchcancel", onTouchCancel);
 
     return () => {
       canvas.removeEventListener("mousedown", onMouseDown);
@@ -1050,12 +1120,16 @@ function SceneController({
       canvas.removeEventListener("touchstart", onTouchStart);
       canvas.removeEventListener("touchmove", onTouchMove);
       canvas.removeEventListener("touchend", onTouchEnd);
+      canvas.removeEventListener("touchcancel", onTouchCancel);
     };
   }, [gl]);
 
   useFrame((frame) => {
     const s = state.current;
     const now = performance.now();
+    // Time since the last frame, for the touch glide (capped, as after a pause).
+    const dt = s.lastFrameAt ? clamp(now - s.lastFrameAt, 0, 50) : 16.7;
+    s.lastFrameAt = now;
     const frozen = isCanvasFrozen();
     // Which video previews play, from what the planes asked for last frame.
     decidePreviews(now);
@@ -1085,6 +1159,8 @@ function SceneController({
       s.velocity.y = 0;
       s.velocity.z = 0;
       s.scrollAccum = 0;
+      s.touchMove = { x: 0, y: 0, z: 0 };
+      s.glide = null;
 
       const goal = getCameraGoal();
       if (goal) {
@@ -1141,6 +1217,30 @@ function SceneController({
     s.velocity.x = lerp(s.velocity.x, s.targetVel.x, VELOCITY_LERP);
     s.velocity.y = lerp(s.velocity.y, s.targetVel.y, VELOCITY_LERP);
     s.velocity.z = lerp(s.velocity.z, s.targetVel.z, VELOCITY_LERP);
+
+    // Touch steers directly (constants.ts): while fingers are down the gallery
+    // moves exactly what they moved since the last frame, and once they lift it
+    // glides on at their speed, slowing as an iPhone list does. None of the
+    // wheel's smoothing above applies, so it never lags behind the finger.
+    if (!frozen && (s.touchSteering || s.glide)) {
+      if (s.touchSteering) {
+        s.velocity.x = s.touchMove.x;
+        s.velocity.y = s.touchMove.y;
+        s.velocity.z = s.touchMove.z;
+        s.touchMove = { x: 0, y: 0, z: 0 };
+      } else if (s.glide) {
+        s.velocity.x = s.glide.x * dt;
+        s.velocity.y = s.glide.y * dt;
+        s.velocity.z = s.glide.z * dt;
+        const slow = TOUCH_GLIDE_PER_MS ** dt;
+        s.glide = { x: s.glide.x * slow, y: s.glide.y * slow, z: s.glide.z * slow };
+        if (Math.hypot(s.glide.x, s.glide.y, s.glide.z) < TOUCH_GLIDE_END) s.glide = null;
+      }
+      s.targetVel.x = 0;
+      s.targetVel.y = 0;
+      s.targetVel.z = 0;
+      s.scrollAccum = 0;
+    }
 
     s.basePos.x += s.velocity.x;
     s.basePos.y += s.velocity.y;
