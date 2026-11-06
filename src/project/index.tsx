@@ -20,10 +20,11 @@ const ALL_MEDIA: MediaItem[] = MEDIA;
 
 const MARGIN = 32;
 const GAP = 4;
-/** Row height never exceeds this fraction of the viewport (small projects). */
+/** The arrival row is never thicker than this fraction of the window across
+ *  it (its height; a column's width) (small projects). */
 const MAX_ROW_HEIGHT_FRAC = 0.5;
-/** After arrival the whole row scales up to this fraction of viewport height
- *  and becomes a strip you scroll through. */
+/** After arrival the whole row scales up to fill this fraction of the window
+ *  across it (its height; a column's width) and becomes a strip you scroll through. */
 const STRIP_HEIGHT_FRAC = 1;
 const FLIGHT_MS = 1000;
 const ENTRY_EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
@@ -59,7 +60,7 @@ const FLING_MS = 250;
 const FLING_STALE_MS = 80;
 /** Within this of either end, the strip counts as at that end. */
 const END_SLOP_PX = 1;
-/** Arrow keys move the strip by this share of the viewport width. */
+/** Arrow keys move the strip by this share of the window along it. */
 const KEY_STEP_FRAC = 0.5;
 /** Beat between the arrival settling and the zoom. */
 const FUSE_PAUSE_MS = 260;
@@ -81,6 +82,8 @@ const ROW_LOAD_MAX_MS = 8000;
  * arrive  — flat row, manifest rotated so the clicked image leads (part 1).
  * strip   — the whole row scaled up to STRIP_HEIGHT_FRAC, the clicked image at
  *           the left edge, scrolled sideways (part 2).
+ * In a window taller than it's wide, all of it turns on its side: a column,
+ * the clicked image at the top, scrolled down.
  * leaving — the image you're on flies home as a canvas plane, and the strip
  *           shrinks with it.
  */
@@ -160,13 +163,23 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     []
   );
 
-  // One row, all images at equal height, scaled down until the row fits the screen
+  // A window taller than it's wide gets the strip on its side (the owner,
+  // 7 Nov, for phones): a column that arrives centred, zooms to the window's
+  // full width with the clicked image at the top, and scrolls down. Everything
+  // below is worked out along the strip (x in a row, y in a column) and across
+  // it, so the row and the column are the same strip.
+  const vertical = viewport.h > viewport.w;
+  const mainLen = vertical ? viewport.h : viewport.w;
+  const crossLen = vertical ? viewport.w : viewport.h;
+
+  // One row (or column), all images equally thick, scaled down until it fits the window
   const count = images.length;
-  const aspects = images.map((img) => img.width / img.height);
-  const sumAspect = aspects.reduce((sum, a) => sum + a, 0);
-  const availW = viewport.w - MARGIN * 2 - GAP * (count - 1);
-  const rowH = Math.min(viewport.h * MAX_ROW_HEIGHT_FRAC, availW / Math.max(sumAspect, 0.0001));
-  const stripH = viewport.h * STRIP_HEIGHT_FRAC;
+  // Each image's length along the strip for each unit of its thickness.
+  const along = images.map((img) => (vertical ? img.height / img.width : img.width / img.height));
+  const sumAlong = along.reduce((sum, a) => sum + a, 0);
+  const availMain = mainLen - MARGIN * 2 - GAP * (count - 1);
+  const rowSize = Math.min(crossLen * MAX_ROW_HEIGHT_FRAC, availMain / Math.max(sumAlong, 0.0001));
+  const stripSize = crossLen * STRIP_HEIGHT_FRAC;
 
   // The strip is laid out at its final size from the start, as on
   // wakawaka.world's intro: at arrival each image is shrunk into the row by its
@@ -175,26 +188,28 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   // re-lays out at the end, the flicker and snap the owner saw). The gaps stay
   // GAP throughout, since each image moves and scales on its own.
   const inStrip = phase !== "arrive";
-  const shrink = rowH / stripH;
-  const widths = aspects.map((a) => a * stripH);
-  // Each image's left edge along the strip (xs) and in the arrival row (rowXs).
-  const xs: number[] = [];
-  const rowXs: number[] = [];
-  for (let k = 0, x = 0, rx = MARGIN; k < count; k++) {
-    xs.push(x);
-    rowXs.push(rx);
-    x += widths[k] + GAP;
-    rx += aspects[k] * rowH + GAP;
+  const shrink = rowSize / stripSize;
+  const lengths = along.map((a) => a * stripSize);
+  // Where each image starts along the strip (starts) and in the arrival row (rowStarts).
+  const starts: number[] = [];
+  const rowStarts: number[] = [];
+  for (let k = 0, at = 0, rowAt = MARGIN; k < count; k++) {
+    starts.push(at);
+    rowStarts.push(rowAt);
+    at += lengths[k] + GAP;
+    rowAt += along[k] * rowSize + GAP;
   }
-  const stripW = count ? xs[count - 1] + widths[count - 1] : 0;
-  // The strip ends when its last image reaches the right edge.
-  const maxScroll = inStrip ? Math.max(0, stripW - viewport.w) : 0;
+  const stripLen = count ? starts[count - 1] + lengths[count - 1] : 0;
+  // The strip ends when its last image reaches the far edge.
+  const maxScroll = inStrip ? Math.max(0, stripLen - mainLen) : 0;
+  // A position along the strip as a transform.
+  const along2d = (at: number) => (vertical ? `translate(0, ${at}px)` : `translate(${at}px, 0)`);
 
-  // How tall each image gets on screen during the zoom, as a share of the
-  // strip: full size if it ends on screen, otherwise its size as it leaves the
-  // window.
-  const peaks = xs.map((x, k) => {
-    const e = x < viewport.w ? 1 : Math.min(1, (viewport.w - rowXs[k]) / (x - rowXs[k]));
+  // How big each image gets on screen during the zoom, as a share of the
+  // strip's thickness: full size if it ends on screen, otherwise its size as it
+  // leaves the window.
+  const peaks = starts.map((at, k) => {
+    const e = at < mainLen ? 1 : Math.min(1, (mainLen - rowStarts[k]) / (at - rowStarts[k]));
     return shrink + (1 - shrink) * e;
   });
   // Left to the zoom, the browser decodes the big ones mid-zoom, larger each
@@ -202,16 +217,20 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   // a second visit was smooth because they were cached. So the ones that get
   // big are decoded before the zoom instead.
   const growsLarge = peaks.map((p) => p > PREDECODE_ABOVE);
-  // Only the images that get bigger in the zoom than their 1000px canvas copy
-  // can show sharply (on this screen, at this pixel density) start at full
-  // size: 2–4 per project. The rest start as the copy, often already cached
-  // from the canvas, and are upgraded after the zoom. Opening PR-01 went from
-  // about 31MB of downloads to about 5MB.
+  // Only the images that get bigger across the strip in the zoom than their
+  // 1500px copy can show sharply (on this screen, at this pixel density) start
+  // at full size: 2–4 per project on a laptop. The rest start as the copy and
+  // are upgraded after the zoom, and only if the strip shows them bigger than
+  // the copy at rest. Opening PR-01 went from about 31MB of downloads to about
+  // 5MB. A phone held upright shows each image about 1170 pixels across, which
+  // the copy covers: it never loads the 3000px files (45MB each once decoded),
+  // which the full-height strip made it load and redraw through the zoom.
   const dpr = window.devicePixelRatio || 1;
-  const startsFull = images.map((img, k) => {
-    const copyH = img.height * Math.min(1, START_COPY_PX / Math.max(img.width, img.height));
-    return peaks[k] * stripH * dpr > copyH;
-  });
+  const copyAcross = images.map(
+    (img) => (vertical ? img.width : img.height) * Math.min(1, START_COPY_PX / Math.max(img.width, img.height))
+  );
+  const startsFull = images.map((_, k) => peaks[k] * stripSize * dpr > copyAcross[k]);
+  const needsFull = images.map((_, k) => stripSize * dpr > copyAcross[k]);
 
   // The image you clicked is 01, the strip's own order.
   const digits = Math.max(2, String(count).length);
@@ -224,10 +243,10 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   // ---- scrolling ------------------------------------------------------------
 
   // The scroll loop runs outside React, so it reads the layout from here.
-  const layoutRef = React.useRef({ xs, widths, maxScroll, vw: viewport.w });
+  const layoutRef = React.useRef({ starts, lengths, maxScroll, mainLen, vertical });
   const currentRef = React.useRef(0);
   React.useLayoutEffect(() => {
-    layoutRef.current = { xs, widths, maxScroll, vw: viewport.w };
+    layoutRef.current = { starts, lengths, maxScroll, mainLen, vertical };
   });
 
   /** The image taking up most of the screen; when two are about even, the one
@@ -237,13 +256,13 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   const imageAt = (pos: number) => {
     const L = layoutRef.current;
     if (pos <= END_SLOP_PX) return 0;
-    if (L.maxScroll > 0 && pos >= L.maxScroll - END_SLOP_PX) return L.xs.length - 1;
-    const centre = pos + L.vw / 2;
+    if (L.maxScroll > 0 && pos >= L.maxScroll - END_SLOP_PX) return L.starts.length - 1;
+    const centre = pos + L.mainLen / 2;
     let best = 0;
     let bestW = -1;
-    for (let k = 0; k < L.xs.length; k++) {
-      const shown = Math.min(L.xs[k] + L.widths[k], pos + L.vw) - Math.max(L.xs[k], pos);
-      const overCentre = L.xs[k] <= centre && centre <= L.xs[k] + L.widths[k];
+    for (let k = 0; k < L.starts.length; k++) {
+      const shown = Math.min(L.starts[k] + L.lengths[k], pos + L.mainLen) - Math.max(L.starts[k], pos);
+      const overCentre = L.starts[k] <= centre && centre <= L.starts[k] + L.lengths[k];
       if (shown > bestW + 1 || (shown > bestW - 1 && overCentre)) {
         best = k;
         bestW = shown;
@@ -254,7 +273,10 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
 
   const applyScroll = (pos: number, arrived = false) => {
     scrollRef.current.pos = pos;
-    if (rowRef.current) rowRef.current.style.transform = `translate3d(${-pos}px, 0, 0)`;
+    if (rowRef.current)
+      rowRef.current.style.transform = layoutRef.current.vertical
+        ? `translate3d(0, ${-pos}px, 0)`
+        : `translate3d(${-pos}px, 0, 0)`;
     const k = imageAt(pos);
     if (k !== currentRef.current) {
       currentRef.current = k;
@@ -300,21 +322,35 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     active: phase === "strip" && !busy,
     centre: (k) => {
       const L = layoutRef.current;
-      const target = clamp(L.xs[k] + L.widths[k] / 2 - L.vw / 2, 0, L.maxScroll);
+      const target = clamp(L.starts[k] + L.lengths[k] / 2 - L.mainLen / 2, 0, L.maxScroll);
       scrollTo(target);
       return target;
     },
   });
   // Where a press began, to tell a click on a video from a drag.
-  const pressRef = React.useRef<{ k: number; x: number } | null>(null);
+  const pressRef = React.useRef<{ k: number; x: number; y: number } | null>(null);
 
-  // A resize can shorten the strip; keep the scroll inside it.
+  // A resize can shorten the strip; keep the scroll inside it. Turning the
+  // screen mid-strip lays it out the other way round: it carries on from the
+  // image you were on, centred in the window, so it stays the current one
+  // (at the start of a wide window the next image would count as current).
+  const wasVertical = React.useRef(vertical);
   React.useEffect(() => {
+    const turned = wasVertical.current !== vertical;
+    wasVertical.current = vertical;
     if (phase !== "strip") return;
     const s = scrollRef.current;
+    if (turned) {
+      stopScroll();
+      const k = currentRef.current;
+      const at = clamp((starts[k] ?? 0) + (lengths[k] ?? 0) / 2 - mainLen / 2, 0, maxScroll);
+      s.target = at;
+      applyScroll(at);
+      return;
+    }
     s.target = Math.min(s.target, maxScroll);
     applyScroll(Math.min(s.pos, maxScroll));
-  }, [maxScroll, phase]);
+  }, [maxScroll, phase, vertical]);
 
   // Entry: the WebGL plane itself flies to the hero slot (measured below) while
   // the other slots stagger-fade in. The DOM hero image is revealed only after
@@ -327,13 +363,15 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     if (!overlay) return;
 
     const closeBtn = overlay.querySelector<HTMLElement>(`.${styles.close}`);
-    // Images that rise into the row wait below it, hidden, with the × hidden too.
-    // The slots are shrunk into the row, so the rise is in their own units.
+    // Images that rise into the row wait below it, hidden, with the × hidden
+    // too; in a column they wait to its left and slide in, the row's rise
+    // turned with it. The slots are shrunk into the row, so the rise is in
+    // their own units.
     const holdBelow = (els: HTMLElement[]) => {
       for (const el of els) {
         el.style.transition = "none";
         el.style.opacity = "0";
-        el.style.transform = `translateY(${RISE_PX / shrink}px)`;
+        el.style.transform = vertical ? `translateX(${-RISE_PX / shrink}px)` : `translateY(${RISE_PX / shrink}px)`;
       }
       if (closeBtn) {
         closeBtn.style.transition = "none";
@@ -506,7 +544,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
         const e = zoomEase(p);
         const scale = shrink + (1 - shrink) * e;
         slots.forEach((el, k) => {
-          el.style.transform = `translate(${rowXs[k] + (xs[k] - rowXs[k]) * e}px, 0) scale(${scale})`;
+          el.style.transform = `${along2d(rowStarts[k] + (starts[k] - rowStarts[k]) * e)} scale(${scale})`;
         });
         if (p < 1) rafRef.current = requestAnimationFrame(frame);
         else {
@@ -544,13 +582,14 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     }
   }, []);
 
-  // After the zoom, the images that started as their canvas copy are upgraded
-  // to full size in strip order, a couple at a time. Each is swapped in only
-  // once it's loaded and decoded, so it just turns sharper: same size, no flash.
+  // After the zoom, the images that started as their 1500px copy, and that the
+  // strip shows bigger than it, are upgraded to full size in strip order, a
+  // couple at a time. Each is swapped in only once it's loaded and decoded, so
+  // it just turns sharper: same size, no flash.
   React.useEffect(() => {
     if (!settled) return;
     let canceled = false;
-    const queue = images.map((_, k) => k).filter((k) => !startsFull[k]);
+    const queue = images.map((_, k) => k).filter((k) => !startsFull[k] && needsFull[k]);
     const work = async () => {
       for (let k = queue.shift(); k !== undefined && !canceled; k = queue.shift()) {
         const full = new Image();
@@ -666,8 +705,11 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       // exit needs a settled strip to work from, so interrupt with a plain fade.
       if (e.key === "Escape") (busy ? fadeClose : runExit)();
       if (phase !== "strip" || busy) return;
-      if (e.key === "ArrowRight") scrollTo(scrollRef.current.target + viewport.w * KEY_STEP_FRAC);
-      if (e.key === "ArrowLeft") scrollTo(scrollRef.current.target - viewport.w * KEY_STEP_FRAC);
+      const step = mainLen * KEY_STEP_FRAC;
+      const forward = e.key === "ArrowRight" || (vertical && e.key === "ArrowDown");
+      const back = e.key === "ArrowLeft" || (vertical && e.key === "ArrowUp");
+      if (forward) scrollTo(scrollRef.current.target + step);
+      if (back) scrollTo(scrollRef.current.target - step);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -681,7 +723,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       if (phase !== "strip" || busy) return;
       // Either axis moves the strip, so a mouse wheel works as well as a trackpad.
       const raw = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
-      const px = e.deltaMode === 1 ? raw * 16 : e.deltaMode === 2 ? raw * window.innerWidth : raw;
+      const px = e.deltaMode === 1 ? raw * 16 : e.deltaMode === 2 ? raw * mainLen : raw;
       scrollTo(scrollRef.current.target + px);
     };
     window.addEventListener("wheel", onWheel, { passive: false });
@@ -689,27 +731,31 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   });
 
   // Click and drag (mouse, pen or finger): the strip follows the pointer, then
-  // carries on at the speed it was let go.
+  // carries on at the speed it was let go. Along the strip: sideways in a row,
+  // up and down in a column.
+  const alongPointer = (e: React.PointerEvent) => (vertical ? e.clientY : e.clientX);
   const onPointerDown = (e: React.PointerEvent) => {
     if (phase !== "strip" || busy || (e.pointerType === "mouse" && e.button !== 0)) return;
     if ((e.target as HTMLElement).closest("button, [data-vui]")) return;
     const slot = (e.target as HTMLElement).closest<HTMLElement>("[data-slot]");
-    pressRef.current = { k: slot ? Number(slot.dataset.slot) : -1, x: e.clientX };
+    pressRef.current = { k: slot ? Number(slot.dataset.slot) : -1, x: e.clientX, y: e.clientY };
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
     stopScroll();
     const pos = scrollRef.current.pos;
-    dragRef.current = { id: e.pointerId, x: e.clientX, from: pos, lastX: e.clientX, lastT: e.timeStamp, v: 0 };
+    const at = alongPointer(e);
+    dragRef.current = { id: e.pointerId, x: at, from: pos, lastX: at, lastT: e.timeStamp, v: 0 };
     setDragging(true);
   };
   const onPointerMove = (e: React.PointerEvent) => {
     const d = dragRef.current;
     if (!d || d.id !== e.pointerId) return;
+    const at = alongPointer(e);
     const dt = Math.max(1, e.timeStamp - d.lastT);
-    d.v = 0.8 * ((d.lastX - e.clientX) / dt) + 0.2 * d.v;
-    d.lastX = e.clientX;
+    d.v = 0.8 * ((d.lastX - at) / dt) + 0.2 * d.v;
+    d.lastX = at;
     d.lastT = e.timeStamp;
-    const pos = clamp(d.from - (e.clientX - d.x), 0, layoutRef.current.maxScroll);
+    const pos = clamp(d.from - (at - d.x), 0, layoutRef.current.maxScroll);
     scrollRef.current.target = pos;
     applyScroll(pos);
   };
@@ -722,7 +768,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     const press = pressRef.current;
     pressRef.current = null;
     // A press that didn't move is a click: on a video, it centres and plays it.
-    if (press && press.k >= 0 && Math.abs(e.clientX - press.x) < 5) {
+    if (press && press.k >= 0 && Math.hypot(e.clientX - press.x, e.clientY - press.y) < 5) {
       videos.click(press.k);
       return;
     }
@@ -733,7 +779,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
 
   return (
     <div
-      className={`${styles.overlay} ${dragging ? styles.dragging : ""}`}
+      className={`${styles.overlay} ${vertical ? styles.vertical : ""} ${dragging ? styles.dragging : ""}`}
       ref={overlayRef}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -760,11 +806,12 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
             data-slot={k}
             className={`${styles.slot} ${videos.fitted === k ? styles.fitted : ""}`}
             style={{
-              width: widths[k],
-              height: stripH,
-              marginTop: -stripH / 2,
+              // Thick across the strip, long along it; centred across the window.
+              ...(vertical
+                ? { width: stripSize, height: lengths[k], marginLeft: -stripSize / 2 }
+                : { width: lengths[k], height: stripSize, marginTop: -stripSize / 2 }),
               // The zoom runs from script and only hands back here once it's done.
-              transform: settled ? `translate(${xs[k]}px, 0) scale(1)` : `translate(${rowXs[k]}px, 0) scale(${shrink})`,
+              transform: settled ? `${along2d(starts[k])} scale(1)` : `${along2d(rowStarts[k])} scale(${shrink})`,
             }}
           >
             <img
@@ -785,10 +832,8 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
                 playsInline
                 preload="none"
                 poster={`/${img.midUrl}`}
-                // Fitted: wider than the screen, it scales down to fit it.
-                style={
-                  videos.fitted === k && widths[k] > viewport.w ? { transform: `scale(${viewport.w / widths[k]})` } : undefined
-                }
+                // Fitted: longer than the window along the strip, it scales down to fit it.
+                style={videos.fitted === k && lengths[k] > mainLen ? { transform: `scale(${mainLen / lengths[k]})` } : undefined}
                 onPlaying={(e) => e.currentTarget.classList.add(styles.videoOn)}
               />
             )}

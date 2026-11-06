@@ -93,6 +93,14 @@
   overflow: hidden;
 }
 
+/* A window taller than it's wide: the strip on its side, a column centred
+   across the window, each slot placed down it from the top. */
+.vertical .slot {
+  left: 50%;
+  top: 0;
+  transform-origin: 50% 0;
+}
+
 .image {
   display: block;
   width: 100%;
