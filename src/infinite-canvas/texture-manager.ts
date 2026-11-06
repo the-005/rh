@@ -1,9 +1,10 @@
 import * as THREE from "three";
+import { whenImagesMayLoad } from "~/src/splash/hold";
 import type { MediaItem } from "./types";
 
 const textureCache = new Map<string, THREE.Texture>();
 const loadCallbacks = new Map<string, Set<(tex: THREE.Texture) => void>>();
-const loader = new THREE.TextureLoader();
+const loader = new THREE.ImageLoader();
 
 const isTextureLoaded = (tex: THREE.Texture): boolean => {
   const img = tex.image as HTMLImageElement | undefined;
@@ -33,27 +34,33 @@ export const getTexture = (item: MediaItem, onLoad?: (texture: THREE.Texture) =>
   // route, or every texture 404s when the app is entered via /project/x.
   const src = key.startsWith("/") || key.includes("://") ? key : `/${key}`;
 
-  const texture = loader.load(
-    src,
-    (tex) => {
-      tex.minFilter = THREE.LinearMipmapLinearFilter;
-      tex.magFilter = THREE.LinearFilter;
-      tex.generateMipmaps = true;
-      tex.anisotropy = 4;
-      tex.colorSpace = THREE.SRGBColorSpace;
-      tex.needsUpdate = true;
+  // The texture exists at once; its image arrives later, as with TextureLoader.
+  // Under the intro splash the download waits for the video (src/splash/hold.ts).
+  const texture = new THREE.Texture();
+  whenImagesMayLoad(() =>
+    loader.load(
+      src,
+      (image) => {
+        texture.image = image;
+        texture.minFilter = THREE.LinearMipmapLinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        texture.generateMipmaps = true;
+        texture.anisotropy = 4;
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.needsUpdate = true;
 
-      loadCallbacks.get(key)?.forEach((cb) => {
-        try {
-          cb(tex);
-        } catch (err) {
-          console.error(`Callback failed: ${JSON.stringify(err)}`);
-        }
-      });
-      loadCallbacks.delete(key);
-    },
-    undefined,
-    (err) => console.error("Texture load failed:", key, err)
+        loadCallbacks.get(key)?.forEach((cb) => {
+          try {
+            cb(texture);
+          } catch (err) {
+            console.error(`Callback failed: ${JSON.stringify(err)}`);
+          }
+        });
+        loadCallbacks.delete(key);
+      },
+      undefined,
+      (err) => console.error("Texture load failed:", key, err)
+    )
   );
 
   textureCache.set(key, texture);

@@ -11,6 +11,7 @@ import { setPendingTransition } from "~/src/project/transition-origin";
 import { ResearchPage } from "~/src/research";
 import { SettingsPanel } from "~/src/settings";
 import { SplashVideo } from "~/src/splash";
+import { releaseAll } from "~/src/splash/hold";
 import { MEDIA } from "~/src/work/data";
 
 // What the site shows, loaded before the app (src/work/data).
@@ -79,6 +80,13 @@ export function App() {
     else if (view === "index") hideGallery();
   }, [view, projectId]);
 
+  // The splash is out of the way (its frame is in the gallery, or it gave up):
+  // the gallery's held-back loading may all go (src/splash/hold.ts).
+  const dismissSplash = () => {
+    releaseAll();
+    setSplashDismissed(true);
+  };
+
   const handleMediaClick = (item: MediaItem, rect: { x: number; y: number; width: number; height: number }) => {
     if (item.project) {
       const projectImages = ALL_MEDIA.filter((m) => m.project === item.project);
@@ -100,6 +108,7 @@ export function App() {
           setSplashFrame(frame);
           setSplashAspect(aspect);
         }}
+        onSkip={dismissSplash}
       />
       <Frame view={pendingView ?? view} onViewChange={goTo} showNav={!projectId} />
       <InfiniteCanvas
@@ -108,7 +117,7 @@ export function App() {
         cameraFov={48}
         splashSrc={splashFrame ?? undefined}
         splashAspect={splashAspect}
-        onSplashReady={() => setSplashDismissed(true)}
+        onSplashReady={dismissSplash}
         // Out of sight is gone for the visit: drop the frame and its texture.
         onSplashGone={() => setSplashFrame(null)}
       />

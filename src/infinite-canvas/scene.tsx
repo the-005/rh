@@ -17,6 +17,7 @@ import {
   takeSwapWaiter,
 } from "~/src/project/transition-origin";
 import { backgroundOf, getSettings, subscribeSettings } from "~/src/settings/store";
+import { previewsMayPlay } from "~/src/splash/hold";
 import { useIsTouchDevice } from "~/src/use-is-touch-device";
 import { clamp, lerp } from "~/src/utils";
 import {
@@ -401,7 +402,7 @@ function MediaPlane({
       const at = mesh.matrixWorld.elements;
       SCREEN_PROBE.set(at[12], at[13], at[14]).project(_state.camera);
       const onScreen = SCREEN_PROBE.z < 1 && Math.abs(SCREEN_PROBE.x) < 1.1 && Math.abs(SCREEN_PROBE.y) < 1.1;
-      const allowed = isVisible && onScreen && !wanted && galleryShown();
+      const allowed = isVisible && onScreen && !wanted && galleryShown() && previewsMayPlay();
       if (allowed) {
         const cam = _state.camera.position;
         const distance = Math.max(1, Math.hypot(at[12] - cam.x, at[13] - cam.y, at[14] - cam.z));
@@ -635,6 +636,10 @@ function SplashPlane({
 
     material.opacity = state.opacity;
     mesh.visible = state.opacity > INVIS_THRESHOLD;
+
+    // Shrinks away and grows back with the gallery's images (view-shrink.ts).
+    const viewScale = galleryScale("splash", zOffset);
+    mesh.scale.set(displayScale.x * viewScale, displayScale.y * viewScale, 1);
   });
 
   return (

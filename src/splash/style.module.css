@@ -1,7 +1,16 @@
+/* Black until the video's first frame, so the gallery behind never shows first. */
 .overlay {
   position: fixed;
   inset: 0;
   z-index: 10001;
+  background: #000;
+}
+
+/* Giving up: fade to the gallery, letting the wheel through to it at once. */
+.leaving {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--fade) ease;
 }
 
 .video {
