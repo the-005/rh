@@ -21,6 +21,14 @@
  *                                         video waiting to be compressed
  *   queue/process/<id>__<item>__preview.json  a preview waiting to be made
  *   queue/cutter/<id>__<item>.json        a video waiting for its preview
+ *
+ * The splash (the intro video on a first visit to the gallery) has its own:
+ *
+ *   splash/splash.json                    the one on the site, and a new one
+ *                                         while it's being made
+ *   splash/originals/<item>-<file>        a splash video as uploaded
+ *   splash/web/<item>.mp4                 a splash video as the site plays it
+ *   queue/process/_splash__<item>.json    a new splash video waiting to be made
  */
 
 // Where the site is, for the admin's links to each project on it. Changes when
@@ -41,6 +49,16 @@ export const KINDS = ["Editorial", "Campaign", "Commission", "Personal"];
 export const HANDBRAKE_PRESET = "Fast 2160p60 4K HEVC";
 export const VIDEO_LONG_SIDE = 2560;
 export const VIDEO_SHORT_SIDE = 1440;
+
+// The splash as the site plays it: at 2K like the other videos (the owner,
+// 7 Nov: VIDEO_LONG_SIDE × VIDEO_SHORT_SIDE, turned for portrait, never
+// enlarged), but H.264 at CRF 28 rather than HEVC, as the one made by hand
+// (CLAUDE.md, Hosting), so every browser plays it at once; no sound; its index
+// at the front, so it starts playing before the whole file has arrived.
+export const SPLASH_CRF = 28;
+// What a splash is called in the processing queue, where every entry names a
+// project. No project id starts with "_" (see `slug`), so it can't clash.
+export const SPLASH_PROJECT = "_splash";
 
 export const ROLES = [
   "Photography",
@@ -115,12 +133,13 @@ export type ItemStatus = {
 
 export type Status = Record<string, ItemStatus>;
 
-// A job for the processing: an image's copies, a video's compression, or a
-// video's preview made from the pieces picked in the Preview Cutter.
+// A job for the processing: an image's copies, a video's compression, a
+// video's preview made from the pieces picked in the Preview Cutter, or a new
+// splash video (project SPLASH_PROJECT).
 export type QueueEntry = {
   project: string;
   item: string;
-  type: Item["type"] | "preview";
+  type: Item["type"] | "preview" | "splash";
   // What images and videos are made from. A preview is cut from the
   // compressed video instead (keys.video).
   original?: string;
@@ -147,6 +166,26 @@ export const PIECE_MIN = 0.3;
 // which a save in the cutter replaces; pieces saved by hand are never touched.
 export type PreviewPlan = { cuts?: number[]; pieces?: Piece[]; saved?: string; auto?: boolean };
 
+// A splash video: as uploaded, and once made, as the site plays it.
+export type SplashVideo = {
+  item: string;
+  file: string;
+  original: string;
+  size?: number;
+  video?: string;
+  width?: number;
+  height?: number;
+  at: string;
+};
+
+// The splash in storage. With no `current` the site plays its own
+// (public/splash.mp4).
+export type Splash = {
+  current?: SplashVideo;
+  // Uploaded and being made: it replaces `current` once it's done.
+  next?: SplashVideo & { state: "waiting" | "processing" | "failed"; message?: string };
+};
+
 // Status entries for previews sit beside the video's own, under this id.
 export const previewStatusId = (item: string) => `${item}__preview`;
 
@@ -163,6 +202,9 @@ export const keys = {
   processPreview: (id: string, item: string) => `queue/process/${id}__${item}__preview.json`,
   process: (id: string, item: string) => `queue/process/${id}__${item}.json`,
   cutter: (id: string, item: string) => `queue/cutter/${id}__${item}.json`,
+  splash: "splash/splash.json",
+  splashOriginal: (item: string, file: string) => `splash/originals/${item}-${safeName(file)}`,
+  splashVideo: (item: string) => `splash/web/${item}.mp4`,
 };
 
 export const PROCESS_PREFIX = "queue/process/";

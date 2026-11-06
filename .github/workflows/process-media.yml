@@ -1,5 +1,5 @@
 # Web copies of the images uploaded through the admin, the videos compressed
-# with HandBrake, and their previews (scripts/process-media.ts).
+# with HandBrake, their previews, and a new splash video (scripts/process-media.ts).
 #
 # Every five minutes it asks the site whether anything is queued, and only sets
 # up when something is. It proves who it is with a token GitHub signs for each
@@ -35,7 +35,7 @@ jobs:
             "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=rh-pipeline" | jq -r .value)
           queue=$(curl -sSf -H "Authorization: Bearer $token" https://rh.rh-3b6.workers.dev/api/pipeline/queue)
           count=$(echo "$queue" | jq length)
-          videos=$(echo "$queue" | jq '[.[] | select(.type == "video" or .type == "preview")] | length')
+          videos=$(echo "$queue" | jq '[.[] | select(.type == "video" or .type == "preview" or .type == "splash")] | length')
           echo "Queued: $count ($videos videos)"
           echo "count=$count" >> "$GITHUB_OUTPUT"
           echo "videos=$videos" >> "$GITHUB_OUTPUT"

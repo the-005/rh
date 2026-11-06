@@ -12,7 +12,7 @@ import { ResearchPage } from "~/src/research";
 import { SettingsPanel } from "~/src/settings";
 import { SplashVideo } from "~/src/splash";
 import { releaseAll } from "~/src/splash/hold";
-import { MEDIA } from "~/src/work/data";
+import { MEDIA, SPLASH } from "~/src/work/data";
 
 // What the site shows, loaded before the app (src/work/data).
 const ALL_MEDIA: MediaItem[] = MEDIA;
@@ -103,7 +103,7 @@ export function App() {
     <>
       <SplashVideo
         visible={!splashDismissed}
-        videoSrc="/splash.mp4"
+        videoSrc={SPLASH}
         onDismiss={(frame, aspect) => {
           setSplashFrame(frame);
           setSplashAspect(aspect);

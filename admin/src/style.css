@@ -470,17 +470,76 @@ md-outlined-select {
   text-overflow: ellipsis;
 }
 
-.file .state.busy,
-.file .state.wait {
+:is(.file, .splash-row) .state.busy,
+:is(.file, .splash-row) .state.wait {
   color: var(--md-sys-color-primary);
 }
 
-.file .state.busy md-icon {
+:is(.file, .splash-row) .state.busy md-icon {
   animation: spin 1.4s linear infinite;
 }
 
-.file .state.error {
+:is(.file, .splash-row) .state.error {
   color: var(--md-sys-color-error);
+}
+
+/* The splash video, under the projects: the one on the site, and Replace (a
+   video dropped on the row does the same). */
+.splash {
+  margin-top: 40px;
+}
+
+.splash h2 {
+  margin: 0 0 16px;
+}
+
+.splash-row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px 12px 12px;
+  border-radius: 16px;
+  background: var(--md-sys-color-surface-container-low);
+}
+
+.splash-row.over {
+  outline: 1px dashed var(--md-sys-color-primary);
+  background: var(--md-sys-color-primary-container);
+}
+
+.splash-row video {
+  display: block;
+  width: 96px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 8px;
+  background: #000;
+}
+
+.splash-row .meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.splash-row .state {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.splash-row .state md-icon {
+  --md-icon-size: 16px;
+}
+
+.splash-row md-linear-progress {
+  display: block;
+  max-width: 240px;
+  margin-top: 6px;
 }
 
 @keyframes spin {
@@ -570,9 +629,27 @@ md-outlined-select {
     display: none;
   }
 
-  /* The preview button keeps only its icon. */
-  .action .label {
+  /* The preview button keeps only its icon, and so does Replace. */
+  .action .label,
+  .splash-row .label {
     display: none;
+  }
+
+  .splash-row {
+    grid-template-columns: 72px minmax(0, 1fr) auto;
+    gap: 12px;
+  }
+
+  /* With its label gone, as much room right of the icon as left (the icon's
+     8px gap plus this). */
+  .splash-row md-outlined-button {
+    --md-outlined-button-with-leading-icon-trailing-space: 8px;
+  }
+
+  .splash-row video,
+  .splash-row .cover.empty {
+    width: 72px;
+    height: 48px;
   }
 
   .under-drop .hint {

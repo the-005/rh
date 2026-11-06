@@ -17,6 +17,8 @@ import builtInMedia from "./manifest.json";
 
 export let MEDIA: MediaItem[] = builtInMedia as MediaItem[];
 export let INFO: Record<string, ProjectInfo> = builtInInfo;
+// The splash video set in the admin; the site's own (public/splash.mp4) otherwise.
+export let SPLASH = "/splash.mp4";
 
 // Long enough for storage on the far side of the world; short enough that the
 // site still opens if the Worker is down.
@@ -28,7 +30,8 @@ export async function loadSiteData() {
   try {
     const response = await fetch("/api/site", { signal: abort.signal });
     if (!response.ok) return;
-    const data = (await response.json()) as { media?: MediaItem[]; info?: Record<string, ProjectInfo> };
+    const data = (await response.json()) as { media?: MediaItem[]; info?: Record<string, ProjectInfo>; splash?: string };
+    if (typeof data.splash === "string" && data.splash) SPLASH = `/${data.splash}`;
     if (Array.isArray(data.media) && data.media.length) {
       MEDIA = data.media;
       INFO = data.info ?? {};

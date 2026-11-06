@@ -24,6 +24,8 @@ import {
   PROCESS_PREFIX,
   previewStatusId,
   type QueueEntry,
+  SPLASH_PROJECT,
+  type Splash,
   type Status,
 } from "../admin/shared.ts";
 import { publishSite, SITE_KEY, type SiteData } from "../admin/site-data.ts";
@@ -72,7 +74,8 @@ async function pipeline(request: Request, env: Env, url: URL) {
 
   // What an item is made from: its original, or for a preview the compressed video.
   if (url.pathname === "/api/pipeline/source" && request.method === "GET") {
-    if (!/^projects\/[\w-]+\/(originals\/[\w.-]+|web\/video\/[\w-]+\.mp4)$/.test(key)) return json({ error: "Bad key." }, 400);
+    if (!/^(projects\/[\w-]+\/(originals\/[\w.-]+|web\/video\/[\w-]+\.mp4)|splash\/originals\/[\w.-]+)$/.test(key))
+      return json({ error: "Bad key." }, 400);
     const object = await env.MEDIA.get(key);
     if (!object) return json({ error: "Not found." }, 404);
     return new Response(object.body, { headers: { "content-length": String(object.size) } });
@@ -88,7 +91,7 @@ async function pipeline(request: Request, env: Env, url: URL) {
   // A compressed video, which can run to hundreds of MB: uploaded in pieces
   // (R2 multipart), each under the Worker's request size limit.
   if (url.pathname.startsWith("/api/pipeline/upload")) {
-    if (!/^projects\/[\w-]+\/web\/(video|preview)\/[\w-]+\.mp4$/.test(key)) return json({ error: "Bad key." }, 400);
+    if (!/^(projects\/[\w-]+\/web\/(video|preview)|splash\/web)\/[\w-]+\.mp4$/.test(key)) return json({ error: "Bad key." }, 400);
     if (url.pathname === "/api/pipeline/upload" && request.method === "POST") {
       const upload = await env.MEDIA.createMultipartUpload(key, { httpMetadata: { contentType: "video/mp4" } });
       return json({ uploadId: upload.uploadId });
@@ -127,6 +130,7 @@ async function pipeline(request: Request, env: Env, url: URL) {
   if (url.pathname === "/api/pipeline/status" && request.method === "POST") {
     const body = (await request.json()) as { project: string; item: string; preview?: boolean; status: ItemStatus };
     if (!/^[\w-]+$/.test(body.project) || !/^[\w-]+$/.test(body.item)) return json({ error: "Bad item." }, 400);
+    if (body.project === SPLASH_PROJECT) return splashStatus(env, body.item, body.status);
     const statusKey = keys.status(body.project);
     const status = ((await (await env.MEDIA.get(statusKey))?.json()) as Status | null) ?? {};
     // A preview's status sits beside its video's, under its own id.
@@ -143,6 +147,37 @@ async function pipeline(request: Request, env: Env, url: URL) {
   return json({ error: "Not found." }, 404);
 }
 
+// How a new splash video went. Once it's made it goes on the site in place of
+// the last one, whose file goes. One replaced by a newer upload in the
+// meantime is only taken off the queue.
+async function splashStatus(env: Env, item: string, status: ItemStatus) {
+  const splash = ((await (await env.MEDIA.get(keys.splash))?.json()) as Splash | null) ?? {};
+  const next = splash.next?.item === item ? splash.next : null;
+  if (next && status.state === "processing") next.state = "processing";
+  if (next && status.state === "failed") Object.assign(next, { state: "failed", message: status.message });
+  if (next && status.state === "done" && status.video) {
+    const before = splash.current;
+    splash.current = {
+      item,
+      file: next.file,
+      original: next.original,
+      size: next.size,
+      video: status.video,
+      width: status.width,
+      height: status.height,
+      at: new Date().toISOString(),
+    };
+    delete splash.next;
+    if (before?.video) await env.MEDIA.delete(before.video);
+  }
+  if (next) await env.MEDIA.put(keys.splash, JSON.stringify(splash), { httpMetadata: { contentType: "application/json" } });
+  if (status.state !== "processing") {
+    await env.MEDIA.delete(keys.process(SPLASH_PROJECT, item));
+    await publishSite(env.MEDIA);
+  }
+  return json({ ok: true });
+}
+
 // What the site shows (site.json, see admin/site-data.ts): read when the site
 // loads. Built here if it's never been written.
 async function site(env: Env): Promise<SiteData> {
@@ -150,22 +185,28 @@ async function site(env: Env): Promise<SiteData> {
   return stored ?? publishSite(env.MEDIA);
 }
 
-// The projects whose files the site may serve, kept for half a minute per
-// Worker instance so files don't each read site.json.
-let shown: { ids: Set<string>; at: number } | null = null;
-async function shownProjects(env: Env) {
-  if (!shown || Date.now() - shown.at > 30_000) {
+// The projects whose files the site may serve, and its splash video, kept for
+// half a minute per Worker instance so files don't each read site.json.
+let shown: { ids: Set<string>; splash?: string; at: number } | null = null;
+async function shownOnSite(env: Env, fresh = false) {
+  if (fresh || !shown || Date.now() - shown.at > 30_000) {
     const data = await site(env);
-    shown = { ids: new Set(data.media.map((m) => m.project)), at: Date.now() };
+    shown = { ids: new Set(data.media.map((m) => m.project)), splash: data.splash, at: Date.now() };
   }
-  return shown.ids;
+  return shown;
 }
 
 // A file from storage: only web copies, videos and previews (never an
-// original), and only of projects shown on the site. Ranges, so videos seek.
+// original), and only of projects shown on the site, or the splash video on
+// the site. Ranges, so videos seek.
 async function media(request: Request, env: Env, key: string) {
   const match = key.match(/^projects\/([\w-]+)\/web\/(full|mid|canvas|video|preview)\/[\w-]+\.(jpg|mp4)$/);
-  if (!match || !(await shownProjects(env)).has(match[1])) return new Response("Not found", { status: 404 });
+  const isSplash = async (fresh = false) => (await shownOnSite(env, fresh)).splash === `media/${key}`;
+  // A splash just made may be newer than what's kept: look again before refusing it.
+  const allowed = match
+    ? (await shownOnSite(env)).ids.has(match[1])
+    : (await isSplash()) || (key.startsWith("splash/web/") && (await isSplash(true)));
+  if (!allowed) return new Response("Not found", { status: 404 });
   const object = await env.MEDIA.get(key, { range: request.headers, onlyIf: request.headers });
   if (!object) return new Response("Not found", { status: 404 });
   const headers = new Headers();

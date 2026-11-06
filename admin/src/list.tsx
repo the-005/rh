@@ -2,6 +2,7 @@ import * as React from "react";
 import { Link, useLocation } from "wouter";
 import { api, mediaUrl, type Summary } from "./api.ts";
 import { importSite } from "./import.ts";
+import { SplashSetting } from "./splash.tsx";
 import "./material.ts";
 
 // Every project, in the site's order, and the way to a new one. The first time
@@ -197,6 +198,7 @@ export function List() {
           </li>
         ))}
       </ul>
+      {projects && <SplashSetting />}
     </div>
   );
 }

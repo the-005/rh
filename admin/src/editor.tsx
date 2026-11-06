@@ -74,7 +74,7 @@ const stem = (name: string) => name.replace(/\.[^.]+$/, "").toLowerCase();
 
 const byName = (a: File, b: File) => a.name.localeCompare(b.name, undefined, { numeric: true });
 
-const size = (bytes = 0) =>
+export const size = (bytes = 0) =>
   bytes > 1e9
     ? `${(bytes / 1e9).toFixed(1)} GB`
     : bytes > 1e6
@@ -595,8 +595,8 @@ function hasPreview(item: Row, loaded: Loaded | null) {
   return !!loaded?.status[id] || !!loaded?.processing.includes(id);
 }
 
-type Tone = "plain" | "busy" | "wait" | "error";
-const ICONS: Record<Tone, string | null> = { plain: null, busy: "progress_activity", wait: "schedule", error: "error" };
+export type Tone = "plain" | "busy" | "wait" | "error";
+export const ICONS: Record<Tone, string | null> = { plain: null, busy: "progress_activity", wait: "schedule", error: "error" };
 
 // Where an item stands, in a word or two, or nothing for an image that's
 // ready: the row only speaks up when something is still to happen or went

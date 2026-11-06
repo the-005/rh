@@ -1,4 +1,4 @@
-import type { Options, Piece, PreviewPlan, Project, Status } from "../shared.ts";
+import type { Options, Piece, PreviewPlan, Project, Splash, Status } from "../shared.ts";
 
 export type Summary = {
   id: string;
@@ -60,6 +60,9 @@ export const api = {
     call<PreviewPlan>("GET", `/api/previews/${encodeURIComponent(project)}/${encodeURIComponent(item)}`),
   savePlan: (project: string, item: string, body: { cuts?: number[]; pieces?: Piece[] }) =>
     call<PreviewPlan>("PUT", `/api/previews/${encodeURIComponent(project)}/${encodeURIComponent(item)}`, body),
+  splash: () => call<Splash>("GET", "/api/splash"),
+  saveSplash: (body: { item: string; file: string; original: string; size: number }) =>
+    call<Splash>("PUT", "/api/splash", body),
   save: (project: Project, create: boolean) =>
     call<Loaded>("PUT", `/api/projects/${encodeURIComponent(project.id)}${create ? "?create" : ""}`, project),
 };

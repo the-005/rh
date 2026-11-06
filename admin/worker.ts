@@ -36,6 +36,8 @@ import {
   previewStatusId,
   type QueueEntry,
   ROLES,
+  SPLASH_PROJECT,
+  type Splash,
   type Status,
   shownOnSite,
 } from "./shared.ts";
@@ -302,7 +304,8 @@ async function saveProject(request: Request, env: Env, ctx: ExecutionContext, id
   return json(await getProject(env, id));
 }
 
-const isOriginal = (key: string | null): key is string => !!key && /^projects\/[\w-]+\/originals\/[\w.-]+$/.test(key);
+const isOriginal = (key: string | null): key is string =>
+  !!key && /^(projects\/[\w-]+|splash)\/originals\/[\w.-]+$/.test(key);
 
 async function uploads(request: Request, env: Env, url: URL) {
   if (request.method === "POST") {
@@ -402,6 +405,27 @@ async function saveOrder(request: Request, env: Env) {
   return json({ order: next });
 }
 
+// The splash video: a new one, once uploaded, waits to be made (H.264, for
+// every browser; scripts/process-media.ts) and replaces the one on the site
+// when it's done. A newer upload replaces one still waiting.
+async function saveSplash(request: Request, env: Env, ctx: ExecutionContext) {
+  const body = (await request.json()) as { item?: string; file?: string; original?: string; size?: number };
+  const item = str(body.item, 40);
+  const file = str(body.file, 300);
+  if (!/^[\w-]+$/.test(item) || !file || body.original !== keys.splashOriginal(item, file)) return fail("Bad video.");
+  if (!(await env.MEDIA.head(body.original))) return fail("The upload isn't there.");
+  const splash = (await readJson<Splash>(env, keys.splash)) ?? {};
+  if (splash.next && splash.next.item !== item)
+    await env.MEDIA.delete([splash.next.original, keys.process(SPLASH_PROJECT, splash.next.item)]);
+  const at = new Date().toISOString();
+  splash.next = { item, file, original: body.original, ...(typeof body.size === "number" ? { size: body.size } : {}), state: "waiting", at };
+  const entry: QueueEntry = { project: SPLASH_PROJECT, item, type: "splash", original: body.original, file };
+  await writeJson(env, keys.process(SPLASH_PROJECT, item), entry);
+  await writeJson(env, keys.splash, splash);
+  startProcessing(env, ctx);
+  return json(splash);
+}
+
 // The Preview Cutter's list: every video in every project, whether its preview
 // is still to do (in the cutter queue), being made, or made.
 async function cutterList(env: Env) {
@@ -486,7 +510,7 @@ async function previews(request: Request, env: Env, ctx: ExecutionContext, id: s
 
 // A file from storage, with ranges so a video can play and seek.
 async function media(request: Request, env: Env, key: string) {
-  if (!/^projects\/[\w-]+\//.test(key)) return fail("Not found.", 404);
+  if (!/^(projects\/[\w-]+|splash)\//.test(key)) return fail("Not found.", 404);
   const object = await env.MEDIA.get(key, { range: request.headers, onlyIf: request.headers });
   if (!object) return fail("Not found.", 404);
   const headers = new Headers();
@@ -521,6 +545,8 @@ export default {
       if (path === "/api/options/remove" && method === "POST") return await removeOption(request, env);
       if (path === "/api/cutter" && method === "GET") return json(await cutterList(env));
       if (path === "/api/order" && method === "PUT") return await saveOrder(request, env);
+      if (path === "/api/splash" && method === "GET") return json((await readJson<Splash>(env, keys.splash)) ?? {});
+      if (path === "/api/splash" && method === "PUT") return await saveSplash(request, env, ctx);
       const previewMatch = path.match(/^\/api\/previews\/([^/]+)\/([^/]+)$/);
       if (previewMatch) {
         const [id, itemId] = [decodeURIComponent(previewMatch[1]), decodeURIComponent(previewMatch[2])];

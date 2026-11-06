@@ -13,7 +13,9 @@
  *   capped at 2560 × 1440 ("2K", the cap turned for portrait videos: the
  *   preset alone squeezes a portrait 4K video into 2160 × 2160 with stretched
  *   pixels), plus "web optimized" so playback can start before the whole file
- *   has arrived (it only moves the file's index to the front).
+ *   has arrived (it only moves the file's index to the front);
+ * - the splash (the intro video): at 2K like the videos, but H.264 at CRF 28,
+ *   no sound, as it was made by hand (processSplash).
  *
  * Run by .github/workflows/process-media.yml every few minutes. It talks to
  * storage through the site's Worker (/api/pipeline/*, see worker/site.ts),
@@ -45,6 +47,7 @@ import {
   keys,
   type Piece,
   type QueueEntry,
+  SPLASH_CRF,
   VIDEO_LONG_SIDE,
   VIDEO_SHORT_SIDE,
 } from "../admin/shared.ts";
@@ -341,6 +344,45 @@ async function autoPreview(entry: QueueEntry, compressed: string, dir: string) {
   await makePreview(entry, compressed, pieces, dir, true);
 }
 
+// A new splash video (see SPLASH_CRF in admin/shared.ts): fitted inside 2K,
+// turned to suit it (2560 × 1440, or 1440 × 2560 for portrait), never
+// enlarged, sides kept even; H.264 so every browser plays it, slow preset; its
+// index moved to the front so it starts before it has all arrived.
+async function processSplash(entry: QueueEntry, dir: string) {
+  const src = await download(entry.original, dir);
+  const out = path.join(dir, "splash.mp4");
+  const [L, S] = [VIDEO_LONG_SIDE, VIDEO_SHORT_SIDE];
+  const started = Date.now();
+  await run("ffmpeg", [
+    "-y",
+    "-v",
+    "error",
+    "-i",
+    src,
+    "-vf",
+    `scale='if(gte(iw,ih),min(${L},iw),min(${S},iw))':'if(gte(iw,ih),min(${S},ih),min(${L},ih))':force_original_aspect_ratio=decrease:force_divisible_by=2`,
+    "-c:v",
+    "libx264",
+    "-preset",
+    "slow",
+    "-crf",
+    String(SPLASH_CRF),
+    "-pix_fmt",
+    "yuv420p",
+    "-an",
+    "-movflags",
+    "+faststart",
+    out,
+  ]);
+  const { width, height } = await shownSize(out);
+  console.log(
+    `  splash ${width}×${height} ${mb(fs.statSync(src).size)} → ${mb(fs.statSync(out).size)} in ${Math.round((Date.now() - started) / 1000)}s`
+  );
+  const key = keys.splashVideo(entry.item);
+  await uploadVideo(out, key);
+  await report(entry, { state: "done", video: key, width, height });
+}
+
 async function processImage(entry: QueueEntry, dir: string) {
   const src = await download(entry.original, dir);
 
@@ -362,17 +404,19 @@ const queue = (await (await call("GET", "/api/pipeline/queue")).json()) as Queue
 console.log(`${queue.length} queued`);
 
 for (const entry of queue) {
-  console.log(`${entry.project} / ${entry.file}${entry.type === "preview" ? " (preview)" : ""}`);
+  console.log(`${entry.type === "splash" ? "splash" : entry.project} / ${entry.file}${entry.type === "preview" ? " (preview)" : ""}`);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rh-"));
   try {
     await report(entry, { state: "processing" });
     // Entries from before videos were processed carry no type.
     const type = entry.type ?? (isVideo(entry.file) ? "video" : "image");
-    await (type === "preview"
-      ? processPreview(entry, dir)
-      : type === "video"
-        ? processVideo(entry, dir)
-        : processImage(entry, dir));
+    await (type === "splash"
+      ? processSplash(entry, dir)
+      : type === "preview"
+        ? processPreview(entry, dir)
+        : type === "video"
+          ? processVideo(entry, dir)
+          : processImage(entry, dir));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`  failed: ${message}`);

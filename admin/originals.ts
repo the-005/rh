@@ -9,7 +9,7 @@
  * it can still be made. The item keeps the original's key in project.json.
  */
 
-import { keys, ORIGINALS_KEEP_DAYS, PROCESS_PREFIX, type Project, type Status } from "./shared.ts";
+import { keys, ORIGINALS_KEEP_DAYS, PROCESS_PREFIX, type Project, type Splash, type Status } from "./shared.ts";
 
 const DAY_MS = 86_400_000;
 
@@ -70,6 +70,15 @@ export async function deleteOldOriginals(bucket: R2Bucket, now: number) {
     ]);
     gone.push(...expired(id, objects, project, status ?? {}, queued, now));
   }
+  // Splash videos as uploaded: the same, except one still being made.
+  const splash = await readJson<Splash>(bucket, keys.splash);
+  const making = splash?.next && splash.next.state !== "failed" ? splash.next.original : null;
+  const { objects: splashOriginals } = await listAll(bucket, { prefix: "splash/originals/" });
+  gone.push(
+    ...splashOriginals
+      .filter((o) => o.key !== making && now - o.uploaded.getTime() >= ORIGINALS_KEEP_DAYS * DAY_MS)
+      .map((o) => o.key)
+  );
   for (let i = 0; i < gone.length; i += 1000) await bucket.delete(gone.slice(i, i + 1000));
   console.log(`${gone.length} originals deleted`, gone);
   return gone;

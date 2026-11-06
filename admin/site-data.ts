@@ -13,7 +13,7 @@
  * from storage, through the site's /media/ route.
  */
 
-import { type Copies, keys, previewStatusId, type Project, type Status, shownOnSite } from "./shared.ts";
+import { type Copies, keys, previewStatusId, type Project, type Splash, type Status, shownOnSite } from "./shared.ts";
 
 // One picture on the site: the shape src/infinite-canvas/types.ts calls a
 // MediaItem. A video is its first frame as a picture (for the gallery, the
@@ -33,7 +33,8 @@ export type SiteMedia = {
 
 export type SiteInfo = { name?: string; kind?: string; year?: string; credits?: { role: string; name: string }[] };
 
-export type SiteData = { media: SiteMedia[]; info: Record<string, SiteInfo>; built: string };
+// `splash` is the splash video set in the admin; without one the site plays its own.
+export type SiteData = { media: SiteMedia[]; info: Record<string, SiteInfo>; splash?: string; built: string };
 
 export const SITE_KEY = "site.json";
 
@@ -46,6 +47,7 @@ async function read<T>(bucket: R2Bucket, key: string): Promise<T | null> {
 
 export async function buildSite(bucket: R2Bucket): Promise<SiteData> {
   const order = (await read<{ order: string[] }>(bucket, keys.index))?.order ?? [];
+  const splash = (await read<Splash>(bucket, keys.splash))?.current?.video;
   const loaded = await Promise.all(
     order.map(async (id) => {
       const [project, status] = await Promise.all([
@@ -106,7 +108,7 @@ export async function buildSite(bucket: R2Bucket): Promise<SiteData> {
     const real = project.name !== id || project.kind || project.year || project.credits.length;
     if (real) info[id] = { name: project.name, kind: project.kind, year: project.year, credits: project.credits };
   }
-  return { media: out, info, built: new Date().toISOString() };
+  return { media: out, info, ...(splash ? { splash: media(splash) } : {}), built: new Date().toISOString() };
 }
 
 export async function publishSite(bucket: R2Bucket) {
