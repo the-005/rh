@@ -18,7 +18,7 @@ import {
 import { api, type Loaded, mediaUrl } from "./api.ts";
 import { Combo } from "./combo.tsx";
 import { filesFromDrop } from "./folders.ts";
-import { fieldValue } from "./material.ts";
+import { Alert, Group, Icon, Page, State, Switch, type Tone } from "./ui.tsx";
 import { upload } from "./upload.ts";
 
 /**
@@ -26,10 +26,11 @@ import { upload } from "./upload.ts";
  * videos in order of appearance. Files upload as soon as they're added, as
  * they are; saving waits for them, then queues what's new (images for their web
  * copies, videos to be compressed with HandBrake). Each saved video has a
- * button that opens it in the preview cutter: "Create video preview", or
- * "Edit video preview" once it has one (the owner, 5 Nov). The order is
- * dragged by the handle at each row's left (or moved with the arrow keys on a
- * focused handle).
+ * button that opens it in the preview cutter: Create Preview, or Edit
+ * Preview once it has one (the owner, 5 Nov). The order is dragged by the
+ * reorder control at each row's end (or moved with the arrow keys on it).
+ * Laid out as a Settings page (ui.tsx): Save in the navigation bar, how the
+ * save stands in the toolbar, an alert before deleting.
  */
 
 // A file added in this session: its upload, and a preview from the file itself.
@@ -74,7 +75,7 @@ const stem = (name: string) => name.replace(/\.[^.]+$/, "").toLowerCase();
 
 const byName = (a: File, b: File) => a.name.localeCompare(b.name, undefined, { numeric: true });
 
-export const size = (bytes = 0) =>
+const size = (bytes = 0) =>
   bytes > 1e9
     ? `${(bytes / 1e9).toFixed(1)} GB`
     : bytes > 1e6
@@ -87,6 +88,7 @@ export function Editor({ id }: { id: string | null }) {
   const [options, setOptions] = React.useState<Options>({ kinds: KINDS, roles: ROLES });
   const [loaded, setLoaded] = React.useState<Loaded | null>(null);
   const [notice, setNotice] = React.useState("");
+  const [noticeIsError, setNoticeIsError] = React.useState(false);
   const [saving, setSaving] = React.useState("");
   const [dirty, setDirty] = React.useState(false);
   // Deleting asks once more, on the page.
@@ -118,7 +120,7 @@ export function Editor({ id }: { id: string | null }) {
           published: shownOnSite(project),
         });
       },
-      (error) => live && setNotice(error.message)
+      (error) => live && say(error.message, true)
     );
     return () => {
       live = false;
@@ -156,6 +158,12 @@ export function Editor({ id }: { id: string | null }) {
     return () => window.removeEventListener("beforeunload", warn);
   }, [uploading, dirty]);
 
+  // A line in the toolbar: what just happened, or what went wrong and what to do.
+  const say = (text: string, error = false) => {
+    setNotice(text);
+    setNoticeIsError(error);
+  };
+
   const edit = (patch: Partial<Draft>) => {
     setDraft((d) => ({ ...d, ...patch }));
     setDirty(true);
@@ -173,7 +181,7 @@ export function Editor({ id }: { id: string | null }) {
   async function ensureId() {
     if (draft.id) return draft.id;
     if (!draft.name.trim()) {
-      setNotice("Give the project a name first.");
+      say("Give the project a name first.", true);
       return null;
     }
     const taken = new Set((await api.projects()).map((p) => p.id));
@@ -185,7 +193,7 @@ export function Editor({ id }: { id: string | null }) {
   }
 
   async function add(files: File[]) {
-    setNotice("");
+    say("");
     const projectId = await ensureId();
     if (!projectId) return;
     const media = files.filter((f) => isImage(f.name, f.type) || isVideo(f.name, f.type));
@@ -200,7 +208,7 @@ export function Editor({ id }: { id: string | null }) {
     if (media.length > accepted.length) notes.push(`${media.length - accepted.length} already here, skipped.`);
     const other = files.filter((f) => !media.includes(f)).length;
     if (other) notes.push(`${other} not ${other === 1 ? "an image or video" : "images or videos"}, skipped.`);
-    setNotice(notes.join(" "));
+    say(notes.join(" "));
     const rows: Row[] = accepted.map((file) => {
       const itemId = crypto.randomUUID().slice(0, 8);
       const original = keys.original(projectId, itemId, file.name);
@@ -229,7 +237,7 @@ export function Editor({ id }: { id: string | null }) {
   }
 
   async function save() {
-    setNotice("");
+    say("");
     const projectId = await ensureId();
     if (!projectId) return;
     const pending = draft.items.filter((i) => i.local?.state === "uploading");
@@ -237,7 +245,7 @@ export function Editor({ id }: { id: string | null }) {
     const results = await Promise.all(draft.items.map((i) => i.local?.finished ?? true));
     if (results.includes(false)) {
       setSaving("");
-      setNotice("Some uploads failed. Remove them and add them again.");
+      say("Some uploads failed. Remove them and add them again.", true);
       return;
     }
     setSaving("Saving…");
@@ -262,14 +270,14 @@ export function Editor({ id }: { id: string | null }) {
         return { ...d, items: saved.project.items.map((i) => ({ ...i, local: locals.get(i.id) })) };
       });
       setDirty(false);
-      setNotice("Saved.");
+      say("Saved.");
       holding.current = projectId;
       if (!id) {
         createdHere.add(projectId);
         navigate(`/p/${encodeURIComponent(projectId)}`, { replace: true });
       }
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : String(error));
+      say(error instanceof Error ? error.message : String(error), true);
     } finally {
       setSaving("");
     }
@@ -331,240 +339,263 @@ export function Editor({ id }: { id: string | null }) {
     credits.map((c) => c.role)
   );
 
-  if (id && !loaded) return <p className="notice md-typescale-body-large">{notice || "Loading…"}</p>;
+  const back = { label: "Projects", onClick: () => navigate("/") };
+
+  if (id && !loaded)
+    return (
+      <Page title="Project" back={back}>
+        <p className={notice ? "notice error" : "notice"}>{notice || "Loading…"}</p>
+      </Page>
+    );
+
+  // The toolbar speaks only when there's something to say: a disabled Save
+  // already says everything is saved.
+  const status = notice || saving || (dirty ? "Unsaved changes" : "");
+  const name = loaded ? draft.name || "Untitled" : "New Project";
 
   return (
-    <div className="editor">
-      <md-text-button onClick={() => navigate("/")}>
-        <md-icon slot="icon">arrow_back</md-icon>
-        All projects
-      </md-text-button>
-      <header className="editor-head">
-        <h1 className="md-typescale-headline-medium">{loaded ? draft.name || "Untitled" : "New project"}</h1>
-        <div className="publish">
-          {/* biome-ignore lint/a11y/noLabelWithoutControl: md-switch is a form control (form-associated custom element) */}
-          <label className="md-typescale-body-large">
-            <md-switch
-              selected={draft.published}
-              onInput={(e: React.FormEvent<HTMLElement>) =>
-                edit({ published: (e.currentTarget as HTMLElement & { selected: boolean }).selected })
-              }
-            />
-            Show on the site
-          </label>
-          {loaded && shownOnSite(loaded.project) && (
-            <md-outlined-button href={`${SITE_URL}/project/${encodeURIComponent(loaded.project.id)}`} target="_blank">
-              View on the site
-              <md-icon slot="icon">open_in_new</md-icon>
-            </md-outlined-button>
-          )}
-        </div>
-      </header>
-
-      <section className="card">
-        <h2 className="md-typescale-title-medium">Details</h2>
-        <div className="fields">
-          <md-outlined-text-field
-            label="Project name"
+    <Page
+      title={name}
+      back={back}
+      trailing={
+        <button
+          type="button"
+          className="glass prominent"
+          onClick={save}
+          disabled={!!saving || (!!loaded && !dirty && !uploading)}
+        >
+          Save
+        </button>
+      }
+      toolbar={
+        status && (
+          <output className={noticeIsError ? "error" : undefined}>{status}</output>
+        )
+      }
+    >
+      <Group>
+        <label className="row field">
+          <span className="field-label">Name</span>
+          <input
+            className="input"
+            placeholder="Required"
             value={draft.name}
-            onInput={(e: React.FormEvent<HTMLElement>) => edit({ name: fieldValue(e) })}
+            onChange={(e) => edit({ name: e.target.value })}
           />
+        </label>
+        <div className="row field">
+          <span className="field-label">Kind of Work</span>
           <Combo
-            label="Kind of work"
+            label="Kind of Work"
+            placeholder="None"
             value={draft.kind}
             options={kinds}
             onChange={(kind) => edit({ kind })}
             onRemove={(kind) => api.removeOption("kinds", kind).then(setOptions, () => {})}
           />
-          <md-outlined-text-field
-            label="Year"
+        </div>
+        <label className="row field">
+          <span className="field-label">Year</span>
+          <input
+            className="input"
+            placeholder="None"
             value={draft.year}
             inputMode="numeric"
-            onInput={(e: React.FormEvent<HTMLElement>) => edit({ year: fieldValue(e).replace(/\D/g, "").slice(0, 4) })}
+            onChange={(e) => edit({ year: e.target.value.replace(/\D/g, "").slice(0, 4) })}
           />
-        </div>
-      </section>
+        </label>
+      </Group>
 
-      <section className="card">
-        <h2 className="md-typescale-title-medium">Collaborators</h2>
-        <ul className="credits">
-          {credits.map((credit, i) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: rows have no identity beyond their place
-            <li key={i}>
-              <Combo
-                label="Role"
-                value={credit.role}
-                options={roles}
-                onChange={(role) => setCredit(i, { role })}
-                onRemove={(role) => api.removeOption("roles", role).then(setOptions, () => {})}
-              />
-              <md-outlined-text-field
-                label="Name"
-                value={credit.name}
-                onInput={(e: React.FormEvent<HTMLElement>) => setCredit(i, { name: fieldValue(e) })}
-              />
-              <md-icon-button
-                aria-label="Remove collaborator"
-                onClick={() => edit({ credits: credits.filter((_, j) => j !== i) })}
-              >
-                <md-icon>close</md-icon>
-              </md-icon-button>
-            </li>
-          ))}
-        </ul>
-        <md-text-button onClick={() => edit({ credits: [...credits, { role: "", name: "" }] })}>
-          <md-icon slot="icon">add</md-icon>
-          Add collaborator
-        </md-text-button>
-      </section>
+      <Group footer={draft.published ? undefined : "Hidden from the site until this is on."}>
+        <label className="row" htmlFor="show-on-site">
+          <span className="row-text">Show on Site</span>
+          <Switch
+            id="show-on-site"
+            label="Show on Site"
+            checked={draft.published}
+            onChange={(published) => edit({ published })}
+          />
+        </label>
+        {loaded && shownOnSite(loaded.project) && (
+          <a
+            className="row link action"
+            href={`${SITE_URL}/project/${encodeURIComponent(loaded.project.id)}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <Icon name="open_in_new" />
+            View on Site
+          </a>
+        )}
+      </Group>
 
-      <section className="card">
-        <h2 className="md-typescale-title-medium">Images and videos</h2>
-        <button
-          type="button"
-          className={over ? "drop over" : "drop"}
-          disabled={!!saving}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setOver(true);
-          }}
-          onDragLeave={() => setOver(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setOver(false);
-            filesFromDrop(e.dataTransfer).then(add);
-          }}
-          onClick={() => fileRef.current?.click()}
-        >
-          <md-icon>upload</md-icon>
-          <span className="md-typescale-body-large">Drop images, videos or folders, or click to choose</span>
+      <Group header="Collaborators">
+        {credits.map((credit, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: rows have no identity beyond their place
+          <div className="row credit-row" key={i}>
+            <Combo
+              label="Role"
+              placeholder="Role"
+              value={credit.role}
+              options={roles}
+              onChange={(role) => setCredit(i, { role })}
+              onRemove={(role) => api.removeOption("roles", role).then(setOptions, () => {})}
+            />
+            <input
+              className="input"
+              aria-label="Name"
+              placeholder="Name"
+              value={credit.name}
+              onChange={(e) => setCredit(i, { name: e.target.value })}
+            />
+            <button
+              type="button"
+              className="icon-button remove"
+              aria-label={`Remove ${credit.name || "collaborator"}`}
+              onClick={() => edit({ credits: credits.filter((_, j) => j !== i) })}
+            >
+              <Icon name="do_not_disturb_on" fill />
+            </button>
+          </div>
+        ))}
+        <button type="button" className="row action" onClick={() => edit({ credits: [...credits, { role: "", name: "" }] })}>
+          <Icon name="add_circle" fill />
+          Add Collaborator
         </button>
-        <input
-          ref={fileRef}
-          type="file"
-          multiple
-          accept="image/*,video/*"
-          hidden
-          onChange={(e) => {
-            add([...(e.target.files ?? [])]);
-            e.target.value = "";
-          }}
-        />
-        <input
-          ref={folderRef}
-          type="file"
-          hidden
-          // A whole folder, subfolders included (Chrome, Safari, Firefox).
-          {...{ webkitdirectory: "" }}
-          onChange={(e) => {
-            add([...(e.target.files ?? [])].filter((f) => !f.name.startsWith(".")));
-            e.target.value = "";
-          }}
-        />
-        <div className="under-drop">
-          <md-text-button disabled={!!saving} onClick={() => folderRef.current?.click()}>
-            <md-icon slot="icon">folder_open</md-icon>
-            Choose a folder
-          </md-text-button>
-          {draft.items.length > 1 && (
-            <p className="hint md-typescale-body-medium">
-              Drag <md-icon>drag_indicator</md-icon> to reorder
-            </p>
-          )}
-        </div>
-        <ol ref={listRef} className="items" onPointerMove={onDragMove}>
-          {draft.items.map((item, index) => (
-            <li key={item.id} className={dragging === item.id ? "dragging" : undefined}>
-              <md-icon-button
-                className="handle"
-                disabled={!!saving}
-                aria-label={`Move ${item.file} (arrow keys)`}
-                onPointerDown={(e: React.PointerEvent<HTMLElement>) => {
-                  e.preventDefault();
-                  e.currentTarget.setPointerCapture(e.pointerId);
-                  setDragging(item.id);
-                }}
-                onPointerUp={() => setDragging(null)}
-                onPointerCancel={() => setDragging(null)}
-                onKeyDown={(e: React.KeyboardEvent<HTMLElement>) => {
-                  if (e.key === "ArrowUp") move(item.id, index - 1);
-                  if (e.key === "ArrowDown") move(item.id, index + 1);
-                }}
-              >
-                <md-icon>drag_indicator</md-icon>
-              </md-icon-button>
-              <span className="number md-typescale-label-large">{index + 1}</span>
-              <Thumb item={item} loaded={loaded} />
-              <span className="file">
-                <span className="name md-typescale-body-large" title={item.file}>
-                  {item.file}
-                </span>
-                <ItemMeta item={item} loaded={loaded} />
-              </span>
-              <span className="action">
-                {item.type === "video" && loaded?.project.items.some((i) => i.id === item.id) && (
-                  <md-text-button
-                    onClick={() => navigate(`/cutter/${encodeURIComponent(loaded.project.id)}/${encodeURIComponent(item.id)}`)}
+      </Group>
+
+      <Group
+        header="Images and Videos"
+        footer="Drop files or folders here to add them."
+        className={over ? "over" : undefined}
+        onDragOver={(e) => {
+          e.preventDefault();
+          if (!saving) setOver(true);
+        }}
+        onDragLeave={() => setOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setOver(false);
+          if (!saving) filesFromDrop(e.dataTransfer).then(add);
+        }}
+      >
+        <button type="button" className="row action" disabled={!!saving} onClick={() => fileRef.current?.click()}>
+          <Icon name="add_photo_alternate" />
+          Add Images or Videos…
+        </button>
+        <button type="button" className="row action" disabled={!!saving} onClick={() => folderRef.current?.click()}>
+          <Icon name="create_new_folder" />
+          Add a Folder…
+        </button>
+        {draft.items.length > 0 && (
+          <ol ref={listRef} onPointerMove={onDragMove}>
+            {draft.items.map((item, index) => (
+              <li key={item.id} className={dragging === item.id ? "dragging" : undefined}>
+                <div className="row media-row">
+                  <span className="number">{index + 1}</span>
+                  <Thumb item={item} loaded={loaded} />
+                  <span className="row-text">
+                    <span className="file-name" title={item.file}>
+                      {item.file}
+                    </span>
+                    <ItemMeta item={item} loaded={loaded} />
+                  </span>
+                  {item.type === "video" && loaded?.project.items.some((i) => i.id === item.id) && (
+                    <button
+                      type="button"
+                      className="plain"
+                      aria-label={`${hasPreview(item, loaded) ? "Edit" : "Create"} video preview for ${item.file}`}
+                      onClick={() =>
+                        navigate(`/cutter/${encodeURIComponent(loaded.project.id)}/${encodeURIComponent(item.id)}`)
+                      }
+                    >
+                      <Icon name={hasPreview(item, loaded) ? "edit" : "content_cut"} />
+                      <span className="label">{hasPreview(item, loaded) ? "Edit Preview" : "Create Preview"}</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="icon-button"
+                    disabled={!!saving}
+                    aria-label={`Remove ${item.file}`}
+                    onClick={() => edit({ items: draft.items.filter((i) => i.id !== item.id) })}
                   >
-                    <md-icon slot="icon">{hasPreview(item, loaded) ? "edit" : "content_cut"}</md-icon>
-                    <span className="label">{hasPreview(item, loaded) ? "Edit video preview" : "Create video preview"}</span>
-                  </md-text-button>
-                )}
-              </span>
-              <md-icon-button
-                disabled={!!saving}
-                aria-label={`Remove ${item.file}`}
-                onClick={() => edit({ items: draft.items.filter((i) => i.id !== item.id) })}
-              >
-                <md-icon>delete</md-icon>
-              </md-icon-button>
-            </li>
-          ))}
-        </ol>
-      </section>
+                    <Icon name="delete" />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button handle"
+                    disabled={!!saving}
+                    aria-label={`Reorder ${item.file}. Use the up and down arrow keys.`}
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.setPointerCapture(e.pointerId);
+                      setDragging(item.id);
+                    }}
+                    onPointerUp={() => setDragging(null)}
+                    onPointerCancel={() => setDragging(null)}
+                    onKeyDown={(e) => {
+                      if (e.key === "ArrowUp") move(item.id, index - 1);
+                      if (e.key === "ArrowDown") move(item.id, index + 1);
+                    }}
+                  >
+                    <Icon name="menu" />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
+      </Group>
+      <input
+        ref={fileRef}
+        type="file"
+        multiple
+        accept="image/*,video/*"
+        hidden
+        onChange={(e) => {
+          add([...(e.target.files ?? [])]);
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={folderRef}
+        type="file"
+        hidden
+        // A whole folder, subfolders included (Chrome, Safari, Firefox).
+        {...{ webkitdirectory: "" }}
+        onChange={(e) => {
+          add([...(e.target.files ?? [])].filter((f) => !f.name.startsWith(".")));
+          e.target.value = "";
+        }}
+      />
 
       {loaded && (
-        <section className="danger">
-          {confirming ? (
-            <div className="confirm">
-              <span className="md-typescale-body-medium">
-                Delete {loaded.project.name || "this project"} and all its files? This can't be undone.
-              </span>
-              <md-text-button onClick={() => setConfirming(false)}>Cancel</md-text-button>
-              <md-filled-button
-                className="delete"
-                onClick={async () => {
-                  try {
-                    await api.deleteProject(loaded.project.id);
-                    setDirty(false);
-                    navigate("/");
-                  } catch (e) {
-                    setConfirming(false);
-                    setNotice(e instanceof Error ? e.message : String(e));
-                  }
-                }}
-              >
-                Delete
-              </md-filled-button>
-            </div>
-          ) : (
-            <md-text-button className="delete-start" onClick={() => setConfirming(true)}>
-              <md-icon slot="icon">delete</md-icon>
-              Delete project
-            </md-text-button>
-          )}
-        </section>
+        <Group>
+          <button type="button" className="row destructive" onClick={() => setConfirming(true)}>
+            Delete Project
+          </button>
+        </Group>
       )}
-
-      <footer className="save">
-        <span className="notice md-typescale-body-medium">
-          {notice || (saving ? "" : dirty ? "Unsaved changes." : loaded ? "All changes saved." : "")}
-        </span>
-        <md-filled-button onClick={save} disabled={!!saving || (!!loaded && !dirty && !uploading)}>
-          {saving || (loaded ? "Save" : "Save project")}
-        </md-filled-button>
-      </footer>
-    </div>
+      {loaded && confirming && (
+        <Alert
+          title={`Delete “${loaded.project.name || "Untitled"}”?`}
+          message="Its images, videos and previews are deleted too. This can’t be undone."
+          confirm="Delete"
+          onCancel={() => setConfirming(false)}
+          onConfirm={async () => {
+            try {
+              await api.deleteProject(loaded.project.id);
+              setDirty(false);
+              navigate("/");
+            } catch (e) {
+              setConfirming(false);
+              say(e instanceof Error ? e.message : String(e), true);
+            }
+          }}
+        />
+      )}
+    </Page>
   );
 }
 
@@ -584,7 +615,7 @@ function Thumb({ item, loaded }: { item: Row; loaded: Loaded | null }) {
   return (
     <span className="thumb-wrap">
       {picture}
-      <md-icon className="badge">play_arrow</md-icon>
+      <Icon name="play_arrow" fill className="badge" />
     </span>
   );
 }
@@ -595,53 +626,44 @@ function hasPreview(item: Row, loaded: Loaded | null) {
   return !!loaded?.status[id] || !!loaded?.processing.includes(id);
 }
 
-export type Tone = "plain" | "busy" | "wait" | "error";
-export const ICONS: Record<Tone, string | null> = { plain: null, busy: "progress_activity", wait: "schedule", error: "error" };
-
 // Where an item stands, in a word or two, or nothing for an image that's
 // ready: the row only speaks up when something is still to happen or went
 // wrong. A ready video says what its preview is.
 function describe(item: Row, loaded: Loaded | null): { tone: Tone; text: string; why?: string } | null {
   const local = item.local;
   if (local?.state === "uploading") return { tone: "busy", text: `Uploading ${Math.floor(local.progress * 100)}%` };
-  if (local?.state === "failed") return { tone: "error", text: "Upload failed", why: local.error };
+  if (local?.state === "failed") return { tone: "error", text: "Upload Failed", why: local.error };
   const saved = loaded?.project.items.some((i) => i.id === item.id);
-  if (!saved) return { tone: "wait", text: "Not saved yet" };
+  if (!saved) return { tone: "wait", text: "Not Saved Yet" };
   const status = loaded?.status[item.id];
   if (item.copies || status?.state === "done") {
     if (item.type !== "video") return null;
     const preview = loaded?.status[previewStatusId(item.id)];
     if (loaded?.processing.includes(previewStatusId(item.id)) || preview?.state === "processing")
-      return { tone: "busy", text: "Making preview" };
-    if (preview?.state === "failed") return { tone: "error", text: "Preview failed", why: preview.message };
-    if (preview?.state === "done") return { tone: "plain", text: preview.auto ? "Automatic preview" : "Custom preview" };
-    return { tone: "plain", text: "No preview" };
+      return { tone: "busy", text: "Making Preview" };
+    if (preview?.state === "failed") return { tone: "error", text: "Preview Failed", why: preview.message };
+    if (preview?.state === "done") return { tone: "plain", text: preview.auto ? "Automatic Preview" : "Custom Preview" };
+    return { tone: "plain", text: "No Preview" };
   }
-  if (status?.state === "failed") return { tone: "error", text: "Couldn't process", why: status.message };
+  if (status?.state === "failed") return { tone: "error", text: "Couldn’t Process", why: status.message };
   if (status?.state === "processing") return { tone: "busy", text: item.type === "video" ? "Compressing" : "Processing" };
   if (loaded?.processing.includes(item.id)) return { tone: "wait", text: "Waiting" };
-  return { tone: "wait", text: "Not processed" };
+  return { tone: "wait", text: "Not Processed" };
 }
 
 // The line under the file name: kind, size and where it stands.
 function ItemMeta({ item, loaded }: { item: Row; loaded: Loaded | null }) {
   const state = describe(item, loaded);
-  const icon = state && ICONS[state.tone];
   return (
     <>
-      <span className="meta md-typescale-body-medium">
+      <span className="meta">
         <span>
           {item.type === "video" ? "Video" : "Image"}
           {item.size ? ` · ${size(item.size)}` : ""}
         </span>
-        {state && (
-          <span className={`state ${state.tone}`} title={state.why}>
-            {icon && <md-icon>{icon}</md-icon>}
-            <span className="state-text">{state.text}</span>
-          </span>
-        )}
+        {state && <State {...state} />}
       </span>
-      {item.local?.state === "uploading" && <md-linear-progress value={item.local.progress} />}
+      {item.local?.state === "uploading" && <progress className="progress" value={item.local.progress} />}
     </>
   );
 }

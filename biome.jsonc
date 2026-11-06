@@ -70,9 +70,8 @@
   },
   "overrides": [
     {
-      // The admin's Material 3 components (md-filled-button, md-icon-button…)
-      // are interactive custom elements; the rule only knows native ones, so it
-      // flags every click handler on them.
+      // The admin's grouped lists take files dropped on them (drag and drop
+      // handlers on a plain element), as do its splash and media groups.
       "includes": ["admin/src/**"],
       "linter": { "rules": { "a11y": { "noStaticElementInteractions": "off" } } }
     }

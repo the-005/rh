@@ -1,9 +1,11 @@
 import * as React from "react";
 import { isVideo, keys, SITE_URL, type Splash } from "../shared.ts";
 import { api, mediaUrl } from "./api.ts";
-import { ICONS, type Tone } from "./editor.tsx";
 import { upload } from "./upload.ts";
-import "./material.ts";
+import { Group, Icon, State, type Tone } from "./ui.tsx";
+
+// Moving pictures only when people haven't asked for less motion.
+const stillOnly = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // The splash: the video a first visit to the gallery opens on (the owner,
 // 7 Nov). A new one is uploaded as it is and made into the site's version in
@@ -32,7 +34,7 @@ export function SplashSetting() {
   async function replace(file: File | undefined) {
     if (!file || uploading) return;
     if (!isVideo(file.name, file.type)) {
-      setError("That isn't a video.");
+      setError("Choose a video file, such as an MP4 or MOV.");
       return;
     }
     setError("");
@@ -43,74 +45,81 @@ export function SplashSetting() {
       await upload(original, file, (progress) => setUploading({ file: file.name, progress }));
       setSplash(await api.saveSplash({ item, file: file.name, original, size: file.size }));
     } catch (e) {
-      setError(`Upload failed: ${e instanceof Error ? e.message : String(e)}`);
+      setError(`The upload stopped: ${e instanceof Error ? e.message : String(e)}. Try again.`);
     } finally {
       setUploading(null);
     }
   }
 
   const next = splash?.next;
-  const name = uploading?.file ?? next?.file ?? splash?.current?.file ?? "Built-in video";
-  const state: { tone: Tone; text: string; why?: string } | null = uploading
+  const name = uploading?.file ?? next?.file ?? splash?.current?.file ?? "Built-In Video";
+  const state: { tone: Tone; text: string; why?: string } = uploading
     ? { tone: "busy", text: `Uploading ${Math.floor(uploading.progress * 100)}%` }
     : error
-      ? { tone: "error", text: error.startsWith("Upload failed") ? "Upload failed" : error, why: error }
+      ? { tone: "error", text: "Not Replaced", why: error }
       : next?.state === "failed"
-        ? { tone: "error", text: "Couldn't process", why: next.message }
+        ? { tone: "error", text: "Couldn’t Process", why: next.message }
         : next?.state === "processing"
           ? { tone: "busy", text: "Processing" }
           : next
             ? { tone: "wait", text: "Waiting" }
-            : null;
-  const icon = state && ICONS[state.tone];
+            : { tone: "plain", text: "On the Site" };
   const playing = splash?.current?.video ? mediaUrl(splash.current.video) : `${SITE_URL}/splash.mp4`;
+  const still = stillOnly();
 
   return (
-    <section className="splash">
-      <h2 className="md-typescale-title-large">Splash video</h2>
-      <div
-        className={over ? "splash-row over" : "splash-row"}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setOver(true);
-        }}
-        onDragLeave={() => setOver(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setOver(false);
-          replace(e.dataTransfer.files[0]);
-        }}
-      >
-        {splash ? <video src={playing} muted loop autoPlay playsInline /> : <span className="cover empty" />}
+    <Group
+      header="Splash Video"
+      footer={error || "Plays when someone first opens the site."}
+      className={over ? "over" : undefined}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setOver(false);
+        replace(e.dataTransfer.files[0]);
+      }}
+    >
+      <div className="row splash-row">
+        {splash ? (
+          <video
+            className="cover"
+            src={still ? `${playing}#t=2` : playing}
+            muted
+            loop
+            autoPlay={!still}
+            playsInline
+            preload="metadata"
+            aria-label="The splash video on the site"
+          />
+        ) : (
+          <span className="cover" />
+        )}
         <span className="row-text">
-          <span className="name md-typescale-title-medium">{name}</span>
-          <span className="meta md-typescale-body-medium">
-            {state ? (
-              <span className={`state ${state.tone}`} title={state.why}>
-                {icon && <md-icon>{icon}</md-icon>}
-                <span className="state-text">{state.text}</span>
-              </span>
-            ) : (
-              "On the site"
-            )}
+          <span className="row-title file-name">{name}</span>
+          <span className="meta">
+            <State {...state} />
           </span>
-          {uploading && <md-linear-progress value={uploading.progress} />}
+          {uploading && <progress className="progress" value={uploading.progress} />}
         </span>
-        <md-outlined-button disabled={!!uploading} onClick={() => fileRef.current?.click()}>
-          <md-icon slot="icon">swap_horiz</md-icon>
-          <span className="label">Replace</span>
-        </md-outlined-button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="video/*"
-          hidden
-          onChange={(e) => {
-            replace(e.target.files?.[0]);
-            e.target.value = "";
-          }}
-        />
+        <button type="button" className="plain" disabled={!!uploading} onClick={() => fileRef.current?.click()}>
+          <Icon name="swap_horiz" />
+          <span className="label">Replace…</span>
+        </button>
       </div>
-    </section>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="video/*"
+        hidden
+        onChange={(e) => {
+          replace(e.target.files?.[0]);
+          e.target.value = "";
+        }}
+      />
+    </Group>
   );
 }

@@ -660,7 +660,7 @@ export function mountCutter(o: CutterOptions) {
   });
 
   on(window, "keydown", (e) => {
-    if ((e.target as HTMLElement | null)?.closest?.("input, md-outlined-text-field")) return;
+    if ((e.target as HTMLElement | null)?.closest?.("input")) return;
     if (!cur) return;
     if (e.key === " ") {
       e.preventDefault();

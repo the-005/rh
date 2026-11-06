@@ -5,7 +5,6 @@ import { api } from "./api.ts";
 import { CutterList, CutterView } from "./cutter.tsx";
 import { createdHere, Editor } from "./editor.tsx";
 import { List } from "./list.tsx";
-import "./material.ts";
 import "./style.css";
 
 function App() {
@@ -27,36 +26,33 @@ function App() {
   const [isCutterList] = useRoute("/cutter");
   const [isCutting, cut] = useRoute<{ project: string; item: string }>("/cutter/:project/:item");
 
+  // Each page brings its own navigation bar (ui.tsx).
   return (
     <>
-      <header className="top">
-        <Link href="/" className="brand md-typescale-title-large">
-          rh admin
-        </Link>
-        <span className="who md-typescale-body-medium">{email && `Signed in as ${email}`}</span>
-      </header>
-      <main className={isCutting ? "wide" : undefined}>
-        {isCutting && cut ? (
+      {isCutting && cut ? (
           <CutterView
             key={`${cut.project}/${cut.item}`}
             project={decodeURIComponent(cut.project)}
             item={decodeURIComponent(cut.item)}
           />
-        ) : isCutterList ? (
-          <CutterList />
-        ) : isNew || projectId ? (
-          <Editor key={editorKey} id={projectId} />
-        ) : (
-          <Switch>
-            <Route path="/" component={List} />
-            <Route>
-              <p className="notice md-typescale-body-large">
+      ) : isCutterList ? (
+        <CutterList />
+      ) : isNew || projectId ? (
+        <Editor key={editorKey} id={projectId} />
+      ) : (
+        <Switch>
+          <Route path="/">
+            <List email={email} />
+          </Route>
+          <Route>
+            <main className="page">
+              <p className="notice">
                 Nothing here. <Link href="/">All projects</Link>
               </p>
-            </Route>
-          </Switch>
-        )}
-      </main>
+            </main>
+          </Route>
+        </Switch>
+      )}
     </>
   );
 }

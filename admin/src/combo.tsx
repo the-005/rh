@@ -1,16 +1,17 @@
 import * as React from "react";
-import { fieldValue } from "./material.ts";
+import { Icon } from "./ui.tsx";
 
 /**
- * One value from a list, or a new one: after Notion's selects ("Select an
- * option or create one", the owner, 4 Nov), as an M3 text field with a menu.
- * Typing filters the list; Enter or a click picks; a text that matches nothing
- * offers Create "…". Leaving the field keeps whatever was typed, so typing a
- * role and tabbing on works too. New values join the shared list when the
- * project is saved (the Worker's `remember`).
+ * One value from a list, or a new one (the owner, 4 Nov: "add an option that
+ * doesn't exist"): a text field with a pull-down menu, as iOS shows one, the
+ * chosen option checked. Typing filters the list; Enter or a click picks; a
+ * text that matches nothing offers Create "…". Leaving the field keeps
+ * whatever was typed, so typing a role and moving on works too. New values
+ * join the shared list when the project is saved (the Worker's `remember`).
  */
 export function Combo({
   label,
+  placeholder,
   value,
   options,
   onChange,
@@ -18,6 +19,7 @@ export function Combo({
   disabled,
 }: {
   label: string;
+  placeholder?: string;
   value: string;
   options: string[];
   onChange: (value: string) => void;
@@ -59,21 +61,25 @@ export function Combo({
         close();
       }}
     >
-      <md-outlined-text-field
-        label={label}
+      <input
+        className="input"
+        aria-label={label}
+        placeholder={placeholder}
         value={typed ?? value}
         disabled={disabled}
         role="combobox"
         aria-expanded={open}
         aria-controls={menuId}
+        aria-autocomplete="list"
+        autoComplete="off"
         onFocus={() => setOpen(true)}
         onClick={() => setOpen(true)}
-        onInput={(e: React.FormEvent<HTMLElement>) => {
-          setTyped(fieldValue(e));
+        onChange={(e) => {
+          setTyped(e.target.value);
           setOpen(true);
           setActive(0);
         }}
-        onKeyDown={(e: React.KeyboardEvent<HTMLElement>) => {
+        onKeyDown={(e) => {
           if (e.key === "ArrowDown") {
             e.preventDefault();
             setOpen(true);
@@ -88,37 +94,32 @@ export function Combo({
             close();
           }
         }}
-      >
-        <md-icon slot="trailing-icon">arrow_drop_down</md-icon>
-      </md-outlined-text-field>
+      />
+      <Icon name="unfold_more" className="combo-indicator" />
       {open && !disabled && (
-        <div className="combo-menu" id={menuId} role="listbox">
-          <p className="combo-hint md-typescale-label-medium">Select an option or create one</p>
+        <div className="menu" id={menuId} role="listbox" aria-label={label}>
           {choices.map((choice, i) => (
             <div
               key={`${choice.create}-${choice.value}`}
               role="option"
               tabIndex={-1}
               aria-selected={choice.value === value}
-              className={i === active ? "combo-option active" : "combo-option"}
+              className={`menu-item${i === active ? " active" : ""}${choice.create ? " create" : ""}`}
               // Keep the focus in the field, so picking isn't a blur.
               onMouseDown={(e) => e.preventDefault()}
               onMouseEnter={() => setActive(i)}
               onClick={() => choose(choice.value)}
               onKeyDown={(e) => e.key === "Enter" && choose(choice.value)}
             >
-              <md-ripple />
               {choice.create ? (
                 <>
-                  <md-icon>add</md-icon>
-                  <span>
-                    Create <span className="option-chip">{choice.value}</span>
-                  </span>
+                  <Icon name="add" className="check" />
+                  <span className="label">Create “{choice.value}”</span>
                 </>
               ) : (
                 <>
-                  <span className="option-chip">{choice.value}</span>
-                  {choice.value === value && <md-icon className="check">check</md-icon>}
+                  <span className="check">{choice.value === value && <Icon name="check" />}</span>
+                  <span className="label">{choice.value}</span>
                   {onRemove && (
                     <button
                       type="button"
@@ -131,14 +132,14 @@ export function Combo({
                         onRemove(choice.value);
                       }}
                     >
-                      <md-icon>close</md-icon>
+                      <Icon name="close" />
                     </button>
                   )}
                 </>
               )}
             </div>
           ))}
-          {choices.length === 0 && <p className="combo-hint md-typescale-body-medium">Type to add the first one.</p>}
+          {choices.length === 0 && <p className="menu-note">Type to add one.</p>}
         </div>
       )}
     </div>

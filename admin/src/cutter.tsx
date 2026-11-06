@@ -2,16 +2,17 @@ import * as React from "react";
 import { Link, useLocation } from "wouter";
 import { api, type CutterRow, mediaUrl } from "./api.ts";
 import { mountCutter } from "./cutter-core.ts";
+import { Group, Icon, Page } from "./ui.tsx";
 
 const stateOf = (row: CutterRow) =>
   row.preview === "done"
     ? "Ready"
     : row.preview === "processing"
-      ? "Making preview"
+      ? "Making Preview"
       : row.preview === "failed"
-        ? "Preview failed"
+        ? "Preview Failed"
         : row.todo
-          ? "To do"
+          ? "To Do"
           : "Waiting";
 
 // The Preview Cutter's queue: every video in every project, to do first.
@@ -22,45 +23,42 @@ export function CutterList() {
     api.cutter().then(setRows, (e: Error) => setError(e.message));
   }, []);
 
+  const [, navigate] = useLocation();
   const todo = rows?.filter((r) => r.todo).length ?? 0;
   const projects = [...new Set(rows?.map((r) => r.project))];
   return (
-    <div className="cutter-list">
-      <header className="list-head">
-        <h1 className="md-typescale-headline-medium">Video previews</h1>
-        {rows && (
-          <span className="notice md-typescale-body-medium">
-            {todo} to do, {rows.length - todo} done
-          </span>
-        )}
-      </header>
-      {error && <p className="notice">{error}</p>}
+    <Page title="Video Previews" back={{ label: "Projects", onClick: () => navigate("/") }}>
+      {rows && rows.length > 0 && (
+        <p className="notice">
+          {todo} to do, {rows.length - todo} done
+        </p>
+      )}
+      {error && <p className="notice error">{error}</p>}
       {!rows && !error && <p className="notice">Loading…</p>}
-      {rows?.length === 0 && <p className="notice">No videos yet. Add some to a project.</p>}
+      {rows?.length === 0 && <p className="notice">No videos yet. Add some to a project first.</p>}
       {projects.map((id) => {
         const group = (rows ?? []).filter((r) => r.project === id);
         return (
-          <section key={id} className="card">
-            <h2 className="md-typescale-title-medium">{group[0].projectName}</h2>
-            <ul className="cutter-rows">
+          <Group key={id} header={group[0].projectName}>
+            <ul>
               {group.map((row) => (
                 <li key={row.item}>
-                  <Link href={`/cutter/${encodeURIComponent(row.project)}/${encodeURIComponent(row.item)}`}>
-                    <md-ripple />
-                    <md-icon>{row.preview === "done" ? "check_circle" : "content_cut"}</md-icon>
-                    <span className="md-typescale-body-large">{row.file}</span>
-                    <span className={`md-typescale-body-medium state${row.todo ? " todo" : ""}`}>
+                  <Link href={`/cutter/${encodeURIComponent(row.project)}/${encodeURIComponent(row.item)}`} className="row link">
+                    <Icon name={row.preview === "done" ? "check_circle" : "content_cut"} fill={row.preview === "done"} />
+                    <span className="row-text file-name">{row.file}</span>
+                    <span className={row.todo ? "detail state tone-wait" : "detail"}>
                       {stateOf(row)}
-                      {!row.compressed && " · not compressed"}
+                      {!row.compressed && " · Not Compressed"}
                     </span>
+                    <Icon name="chevron_right" className="chevron" />
                   </Link>
                 </li>
               ))}
             </ul>
-          </section>
+          </Group>
         );
       })}
-    </div>
+    </Page>
   );
 }
 
@@ -148,61 +146,61 @@ export function CutterView({ project, item }: { project: string; item: string })
   }, [source, plan, project, item]);
 
   return (
-    <div className="cutter" ref={refs.root}>
-      <header className="cutter-top">
-        <md-text-button onClick={() => navigate(`/p/${encodeURIComponent(project)}`)}>
-          <md-icon slot="icon">arrow_back</md-icon>
-          {row?.projectName ?? "Back"}
-        </md-text-button>
-        <div className="cutter-title md-typescale-body-large">{row ? row.file : error || "Loading…"}</div>
-        <div className="cutter-status md-typescale-body-medium">
-          {saved && next ? (
-            <md-filled-button
-              onClick={() => navigate(`/cutter/${encodeURIComponent(next.project)}/${encodeURIComponent(next.item)}`)}
-            >
-              Next video in this project
-              <md-icon slot="icon">arrow_forward</md-icon>
-            </md-filled-button>
-          ) : (
-            status
-          )}
+    <Page
+      wide
+      title={row ? row.file : error || "Loading…"}
+      back={{ label: row?.projectName ?? "Back", onClick: () => navigate(`/p/${encodeURIComponent(project)}`) }}
+      trailing={
+        saved && next ? (
+          <button
+            type="button"
+            className="glass prominent"
+            onClick={() => navigate(`/cutter/${encodeURIComponent(next.project)}/${encodeURIComponent(next.item)}`)}
+          >
+            Next Video
+            <Icon name="chevron_right" />
+          </button>
+        ) : (
+          <output className="cutter-status">{status}</output>
+        )
+      }
+    >
+      <div className="cutter" ref={refs.root}>
+        <div className="cutter-stage" ref={refs.stage}>
+          <video ref={refs.videoA} className="on" muted playsInline preload="auto" />
+          <video ref={refs.videoB} muted playsInline preload="auto" />
+          {row && !source && <p className="cutter-empty">This video is still being compressed. Check back in a few minutes.</p>}
         </div>
-      </header>
 
-      <div className="cutter-stage" ref={refs.stage}>
-        <video ref={refs.videoA} className="on" muted playsInline preload="auto" />
-        <video ref={refs.videoB} muted playsInline preload="auto" />
-        {row && !source && <p className="cutter-empty">This video is still being compressed.</p>}
+        <div className="cutter-bar">
+          <button type="button" className="play" ref={refs.playButton} aria-label="Play preview" disabled>
+            <svg viewBox="0 0 18 18" aria-hidden="true">
+              <path ref={refs.playIcon} d="M4 2.5v13l11-6.5z" />
+            </svg>
+          </button>
+          <div className="track-wrap">
+            <div className="track" ref={refs.track}>
+              <canvas ref={refs.strip} />
+              <div className="ticks" ref={refs.ticks} />
+              <div ref={refs.pieces} />
+              <div className="playhead" ref={refs.playhead} />
+            </div>
+            <div className="tip" ref={refs.tip} />
+          </div>
+          <div className="side">
+            <div className="readout" ref={refs.readout} />
+            <div className="buttons">
+              <button type="button" className="capsule gray" ref={refs.addButton} disabled>
+                Add Piece
+              </button>
+              <button type="button" className="capsule filled" ref={refs.saveButton} disabled>
+                Save Preview
+              </button>
+            </div>
+            <div className="hint" ref={refs.hint} />
+          </div>
+        </div>
       </div>
-
-      <footer className="cutter-bar">
-        <button type="button" className="play" ref={refs.playButton} aria-label="Play preview" disabled>
-          <svg viewBox="0 0 18 18" aria-hidden="true">
-            <path ref={refs.playIcon} d="M4 2.5v13l11-6.5z" />
-          </svg>
-        </button>
-        <div className="track-wrap">
-          <div className="track" ref={refs.track}>
-            <canvas ref={refs.strip} />
-            <div className="ticks" ref={refs.ticks} />
-            <div ref={refs.pieces} />
-            <div className="playhead" ref={refs.playhead} />
-          </div>
-          <div className="tip" ref={refs.tip} />
-        </div>
-        <div className="side">
-          <div className="readout md-typescale-body-medium" ref={refs.readout} />
-          <div className="buttons">
-            <button type="button" className="tonal" ref={refs.addButton} disabled>
-              Add piece
-            </button>
-            <button type="button" className="filled" ref={refs.saveButton} disabled>
-              Save preview
-            </button>
-          </div>
-          <div className="hint md-typescale-body-small" ref={refs.hint} />
-        </div>
-      </footer>
-    </div>
+    </Page>
   );
 }

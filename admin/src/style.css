@@ -1,42 +1,138 @@
-/* The admin in Material 3 (the owner, 4 Nov), in its dark scheme (asked for
-   the same day). The components are Google's (@material/web); everything
-   around them uses the same M3 tokens: the baseline dark colour scheme below,
-   Roboto, and M3's shapes. Changing the scheme is a matter of these colour
-   tokens alone (for instance, rh's black and white). */
-:root {
-  color-scheme: dark;
-  --md-sys-color-primary: #d0bcff;
-  --md-sys-color-on-primary: #381e72;
-  --md-sys-color-primary-container: #4f378b;
-  --md-sys-color-on-primary-container: #eaddff;
-  --md-sys-color-secondary: #ccc2dc;
-  --md-sys-color-on-secondary: #332d41;
-  --md-sys-color-secondary-container: #4a4458;
-  --md-sys-color-on-secondary-container: #e8def8;
-  --md-sys-color-tertiary: #efb8c8;
-  --md-sys-color-error: #f2b8b5;
-  --md-sys-color-on-error: #601410;
-  --md-sys-color-background: #141218;
-  --md-sys-color-on-background: #e6e0e9;
-  --md-sys-color-surface: #141218;
-  --md-sys-color-on-surface: #e6e0e9;
-  --md-sys-color-surface-variant: #49454f;
-  --md-sys-color-on-surface-variant: #cac4d0;
-  --md-sys-color-surface-container-lowest: #0f0d13;
-  --md-sys-color-surface-container-low: #1d1b20;
-  --md-sys-color-surface-container: #211f26;
-  --md-sys-color-surface-container-high: #2b2930;
-  --md-sys-color-surface-container-highest: #36343b;
-  --md-sys-color-outline: #938f99;
-  --md-sys-color-outline-variant: #49454f;
-  --md-sys-color-inverse-surface: #e6e0e9;
-  --md-sys-color-inverse-on-surface: #322f35;
-  --md-ref-typeface-brand: "Roboto", system-ui, sans-serif;
-  --md-ref-typeface-plain: "Roboto", system-ui, sans-serif;
+/* The admin after Apple's Human Interface Guidelines (the owner, 7 Nov:
+   "aim for the foundations", not just the look), laid out like iOS Settings,
+   light or dark with the device. What each foundation asks, and where it is
+   met here:
 
-  font-family: var(--md-ref-typeface-plain);
-  color: var(--md-sys-color-on-surface);
-  background: var(--md-sys-color-surface);
+   Colour     Apple's system colours (label, fills, separators, grouped
+              backgrounds, blue, red, green, yellow), each with its dark and
+              Increase Contrast values. Status is never colour alone: it has a
+              word and an icon too.
+   Dark Mode  The device's appearance. Alerts and menus sit on the elevated
+              dark surface.
+   Typography The system font (SF on Apple devices) in iOS's text styles, all
+              in rem: Body is 17pt at the default size, and everything grows
+              with the browser's text size, and on iPhone and iPad with
+              Dynamic Type. Layouts wrap rather than truncate as text grows.
+   Materials  Liquid Glass for the navigation and toolbar layer only, never
+              the content; opaque under Reduce Transparency.
+   Motion     Short, purposeful transitions; under Reduce Motion, nothing
+              moves (fades and colour changes only).
+   Layout     Safe areas, 16pt margins (20pt on wider screens), a readable
+              width, controls at least 44pt, grouped lists.
+   Accessibility  A visible focus ring for keyboard use, labels for every
+              icon-only control (in the markup), Increase Contrast. */
+
+:root {
+  color-scheme: light dark;
+
+  --accent: #007aff;
+  --red: #ff3b30;
+  --green: #34c759;
+  --yellow: #ffcc00;
+  --label: #000;
+  --label-2: rgb(60 60 67 / 0.6);
+  --label-3: rgb(60 60 67 / 0.3);
+  --separator: rgb(60 60 67 / 0.29);
+  --fill: rgb(120 120 128 / 0.2);
+  --fill-3: rgb(118 118 128 / 0.12);
+  --fill-4: rgb(116 116 128 / 0.08);
+  --bg: #f2f2f7;
+  --surface: #fff;
+  --elevated: #fff;
+  --highlight: #d1d1d6;
+  --glass: rgb(255 255 255 / 0.66);
+  --glass-edge: rgb(255 255 255 / 0.9);
+  --glass-shadow: 0 1px 2px rgb(0 0 0 / 0.05), 0 6px 22px rgb(0 0 0 / 0.08);
+  --menu: rgb(255 255 255 / 0.84);
+  --scrim: rgb(0 0 0 / 0.2);
+
+  --radius: 20px;
+  --margin: 16px;
+  --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Segoe UI", Roboto, system-ui, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --accent: #0a84ff;
+    --red: #ff453a;
+    --green: #30d158;
+    --yellow: #ffd60a;
+    --label: #fff;
+    --label-2: rgb(235 235 245 / 0.6);
+    --label-3: rgb(235 235 245 / 0.3);
+    --separator: rgb(84 84 88 / 0.65);
+    --fill: rgb(120 120 128 / 0.36);
+    --fill-3: rgb(118 118 128 / 0.24);
+    --fill-4: rgb(118 118 128 / 0.18);
+    --bg: #000;
+    --surface: #1c1c1e;
+    --elevated: #2c2c2e;
+    --highlight: #3a3a3c;
+    --glass: rgb(44 44 46 / 0.62);
+    --glass-edge: rgb(255 255 255 / 0.14);
+    --glass-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 6px 22px rgb(0 0 0 / 0.4);
+    --menu: rgb(44 44 46 / 0.86);
+    --scrim: rgb(0 0 0 / 0.48);
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --accent: #0040dd;
+    --red: #d70015;
+    --green: #248a3d;
+    --yellow: #a05a00;
+    --label-2: rgb(60 60 67 / 0.82);
+    --label-3: rgb(60 60 67 / 0.6);
+    --separator: rgb(60 60 67 / 0.6);
+    --glass: rgb(255 255 255 / 0.94);
+    --glass-edge: rgb(0 0 0 / 0.3);
+  }
+}
+
+@media (prefers-color-scheme: dark) and (prefers-contrast: more) {
+  :root {
+    --accent: #409cff;
+    --red: #ff6961;
+    --green: #30db5b;
+    --yellow: #ffd426;
+    --label-2: rgb(235 235 245 / 0.82);
+    --label-3: rgb(235 235 245 / 0.6);
+    --separator: rgb(235 235 245 / 0.45);
+    --glass: rgb(44 44 46 / 0.96);
+    --glass-edge: rgb(255 255 255 / 0.4);
+  }
+}
+
+/* biome-ignore lint/correctness/noUnknownMediaFeatureName: Reduce Transparency, read by Chrome and Safari */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --glass: var(--elevated);
+    --menu: var(--elevated);
+  }
+}
+
+@media (min-width: 700px) {
+  :root {
+    --margin: 20px;
+  }
+}
+
+/* Body at 17pt, the browser's text size setting scaling it (106.25% of the
+   default 16px). On iPhone and iPad, Safari's body text style follows the
+   Dynamic Type setting instead. Every size below is in rem. */
+html {
+  font-size: 106.25%;
+}
+
+/* biome-ignore lint/a11y/useGenericFontNames: Safari's body text style is the system font, sized by Dynamic Type */
+/* biome-ignore lint/suspicious/noShorthandPropertyOverrides: the condition is a feature test, not a declaration */
+@supports (font: -apple-system-body) and (-webkit-touch-callout: default) {
+  html {
+    /* biome-ignore lint/a11y/useGenericFontNames: Safari's body text style is the system font, sized by Dynamic Type */
+    font: -apple-system-body;
+  }
 }
 
 * {
@@ -45,10 +141,25 @@
 
 body {
   margin: 0;
+  min-height: 100vh;
+  font-family: var(--font);
+  font-size: 1rem;
+  line-height: 1.3;
+  color: var(--label);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
 }
 
 a {
-  color: inherit;
+  color: var(--accent);
+  text-decoration: none;
 }
 
 h1,
@@ -57,328 +168,528 @@ p {
   margin: 0;
 }
 
-md-icon {
-  flex: none;
+/* Keyboard focus (Full Keyboard Access): a clear ring, never colour alone. */
+:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
 }
 
-/* Top app bar (small). */
-.top {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  height: 64px;
-  padding: 0 24px;
-  background: var(--md-sys-color-surface-container);
-}
-
-.brand {
-  text-decoration: none;
-}
-
-.who {
-  color: var(--md-sys-color-on-surface-variant);
-}
-
-main {
-  max-width: 1040px;
-  margin: 0 auto;
-  padding: 24px 24px 120px;
-}
-
-.notice {
-  color: var(--md-sys-color-on-surface-variant);
-}
-
-.notice md-linear-progress {
-  display: block;
-  margin-top: 8px;
-}
-
-/* The project list: one row per project, the whole row a link, a handle at
-   its left to drag it up or down. */
-.list-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin: 8px 0 24px;
-}
-
-.projects {
-  list-style: none;
-  margin: 16px 0 0;
-  padding: 8px;
-  border-radius: 16px;
-  background: var(--md-sys-color-surface-container-low);
-}
-
-.projects li {
-  display: grid;
-  grid-template-columns: 48px minmax(0, 1fr);
-  align-items: center;
-  gap: 4px;
-}
-
-.projects li + li {
-  border-top: 1px solid var(--md-sys-color-outline-variant);
-}
-
-.projects li.dragging {
-  border-radius: 12px;
-  background: var(--md-sys-color-secondary-container);
-}
-
-.project-row {
-  position: relative;
-  display: grid;
-  grid-template-columns: 96px minmax(0, 1fr) auto 24px;
-  align-items: center;
-  gap: 16px;
-  padding: 10px 12px 10px 4px;
-  border-radius: 12px;
-  text-decoration: none;
+input.input:focus-visible {
   outline: none;
 }
 
-.project-row img,
-.cover.empty {
-  display: block;
-  width: 96px;
-  height: 64px;
-  object-fit: cover;
-  border-radius: 8px;
-  background: var(--md-sys-color-surface-container-high);
+.icon {
+  display: inline-block;
+  flex: none;
+  /* biome-ignore lint/a11y/useGenericFontNames: an icon font; a fallback would show the icon's name as text */
+  font-family: "Material Symbols Rounded";
+  font-size: 1.3em;
+  font-style: normal;
+  font-weight: normal;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  direction: ltr;
+  font-feature-settings: "liga";
+  font-variation-settings:
+    "FILL" 0,
+    "wght" 450,
+    "GRAD" 0,
+    "opsz" 24;
+  user-select: none;
+}
+
+.icon.fill {
+  font-variation-settings:
+    "FILL" 1,
+    "wght" 450,
+    "GRAD" 0,
+    "opsz" 24;
+}
+
+/* Navigation bar: the controls float on Liquid Glass above the content; the
+   title appears in the bar once the large title has scrolled under it, and a
+   soft edge keeps the bar legible over what scrolls beneath. */
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: max(8px, env(safe-area-inset-top)) max(var(--margin), env(safe-area-inset-right), calc((100% - 720px) / 2))
+    8px max(var(--margin), env(safe-area-inset-left), calc((100% - 720px) / 2));
+}
+
+/* A wide page's bar spans the window, and its edge doesn't fall on the video. */
+.navbar.wide {
+  padding-inline: max(var(--margin), env(safe-area-inset-left)) max(var(--margin), env(safe-area-inset-right));
+}
+
+.navbar.wide::before {
+  inset: 0;
+}
+
+.navbar::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 -20px;
+  z-index: -1;
+  background: linear-gradient(var(--bg) 55%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s var(--ease);
+}
+
+.navbar.scrolled::before {
+  opacity: 1;
+}
+
+.navbar-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.navbar-side.end {
+  justify-content: flex-end;
+}
+
+.navbar-title {
+  max-width: 50vw;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0;
+  transition: opacity 0.2s var(--ease);
+}
+
+.navbar.scrolled .navbar-title {
+  opacity: 1;
+}
+
+/* A Liquid Glass control: navigation and toolbar only. */
+.glass {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  backdrop-filter: blur(16px) saturate(180%);
+  box-shadow:
+    inset 0 0 0 0.5px var(--glass-edge),
+    var(--glass-shadow);
+  color: var(--label);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    transform 0.2s var(--ease),
+    background-color 0.2s var(--ease);
+}
+
+.glass:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.glass .icon {
+  font-size: 1.45rem;
+}
+
+.glass.round {
+  width: 44px;
+  padding: 0;
+}
+
+.glass.back {
+  padding: 0 14px 0 6px;
+}
+
+.glass.back .icon {
+  font-size: 1.7rem;
+}
+
+.glass.prominent {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.glass:disabled {
+  color: var(--label-3);
+  cursor: default;
+}
+
+.glass.prominent:disabled {
+  background: var(--glass);
+}
+
+/* The page: a readable width, inside the safe areas. */
+.page {
+  max-width: calc(720px + 2 * var(--margin));
+  margin: 0 auto;
+  padding: 0 max(var(--margin), env(safe-area-inset-right)) calc(110px + env(safe-area-inset-bottom))
+    max(var(--margin), env(safe-area-inset-left));
+}
+
+.page.wide {
+  max-width: none;
+  padding-bottom: max(var(--margin), env(safe-area-inset-bottom));
+}
+
+/* Large Title, 34pt bold. */
+.large-title {
+  margin: 2px 4px 22px;
+  font-size: 2rem;
+  line-height: 1.2;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+/* Grouped lists, as Settings: a header (Footnote, uppercase), the rows on a
+   rounded surface with hairlines between them, a footer. */
+.group {
+  margin-bottom: 34px;
+}
+
+.group-header {
+  margin: 0 var(--margin) 7px;
+  font-size: 0.765rem;
+  line-height: 1.35;
+  font-weight: 400;
+  text-transform: uppercase;
+  color: var(--label-2);
+}
+
+.group-body {
+  position: relative;
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.group-body > :first-child,
+.group-body > ul > :first-child {
+  border-top-left-radius: inherit;
+  border-top-right-radius: inherit;
+}
+
+.group-body > :last-child,
+.group-body > ul > :last-child {
+  border-bottom-left-radius: var(--radius);
+  border-bottom-right-radius: var(--radius);
+}
+
+.group-body > ul,
+.group-body > ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.group-footer {
+  margin: 7px var(--margin) 0;
+  font-size: 0.765rem;
+  line-height: 1.35;
+  color: var(--label-2);
+}
+
+.group-body.over {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+
+/* A row: at least 44pt, its separator inset to where its text starts. */
+.row {
+  --inset: var(--margin);
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px var(--margin);
+  border: 0;
+  background: none;
+  color: var(--label);
+  text-align: start;
+  text-decoration: none;
+}
+
+/* Hairlines between the rows of a group (rows in a list count as rows). */
+.group-body > *,
+.group-body > ul > li,
+.group-body > ol > li {
+  position: relative;
+}
+
+.group-body > * + *::before,
+.group-body > ul > li + li::before,
+.group-body > ol > li + li::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: var(--inset, var(--margin));
+  border-top: 0.5px solid var(--separator);
+  pointer-events: none;
+}
+
+.group-body > :empty::before {
+  display: none;
+}
+
+button.row,
+.row.link {
+  cursor: pointer;
+  transition: background-color 0.15s var(--ease);
+}
+
+@media (hover: hover) {
+  button.row:hover:not(:disabled),
+  .row.link:hover {
+    background: var(--fill-4);
+  }
+}
+
+button.row:active:not(:disabled),
+.row.link:active {
+  background: var(--highlight);
+}
+
+/* An action row: blue, with its symbol leading. */
+.row.action {
+  color: var(--accent);
+}
+
+.row.action .icon {
+  width: 1.2em;
+  font-size: 1.25rem;
+  text-align: center;
+}
+
+.row.action:disabled {
+  color: var(--label-3);
+  cursor: default;
+}
+
+.row.destructive {
+  justify-content: center;
+  color: var(--red);
 }
 
 .row-text {
   display: flex;
+  flex: 1;
   flex-direction: column;
+  gap: 1px;
   min-width: 0;
 }
 
-.row-text .name {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.row-title {
+  overflow-wrap: anywhere;
 }
 
-.meta {
-  color: var(--md-sys-color-on-surface-variant);
+/* Subheadline, secondary. */
+.row-subtitle {
+  font-size: 0.882rem;
+  color: var(--label-2);
 }
 
-.row-text .meta {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.detail {
+  flex: none;
+  color: var(--label-2);
 }
 
 .chevron {
-  color: var(--md-sys-color-on-surface-variant);
+  margin-inline-end: -6px;
+  font-size: 1.25rem;
+  color: var(--label-3);
+  font-variation-settings:
+    "FILL" 0,
+    "wght" 600,
+    "GRAD" 0,
+    "opsz" 20;
 }
 
-/* The editor: each section a filled card. */
-.editor > md-text-button {
-  margin-left: -12px;
+/* A field: its label, then the value; when text is large, the value wraps
+   under the label rather than being squeezed. */
+.field {
+  flex-wrap: wrap;
+  row-gap: 2px;
 }
 
-.publish {
-  display: flex;
-  align-items: center;
-  gap: 16px;
+.field-label {
+  flex: 0 0 8em;
 }
 
-.publish label {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  cursor: pointer;
-}
-
-.editor-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin: 8px 0 24px;
-}
-
-.card {
-  margin-bottom: 16px;
-  padding: 20px 24px 24px;
-  border-radius: 12px;
-  background: var(--md-sys-color-surface-container-low);
-}
-
-.card h2 {
-  margin-bottom: 16px;
-}
-
-.fields {
-  display: grid;
-  grid-template-columns: 2fr 1.4fr 1fr;
-  align-items: start;
-  gap: 16px;
-}
-
-md-outlined-text-field,
-md-outlined-select {
-  width: 100%;
-}
-
-.credits {
-  list-style: none;
-  margin: 0 0 8px;
+.input {
+  flex: 1 1 10em;
+  min-width: 0;
+  min-height: 24px;
   padding: 0;
-}
-
-.credits li {
-  display: grid;
-  grid-template-columns: 1fr 2fr 48px;
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-/* The Notion-style select: a text field with an M3 menu under it. */
-.combo {
-  position: relative;
-}
-
-.combo-menu {
-  position: absolute;
-  z-index: 3;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
-  max-height: 320px;
-  overflow-y: auto;
-  padding: 8px 0;
-  border-radius: 4px;
-  background: var(--md-sys-color-surface-container);
-  box-shadow:
-    0 1px 2px rgb(0 0 0 / 0.3),
-    0 2px 6px 2px rgb(0 0 0 / 0.15);
-}
-
-.combo-hint {
-  padding: 8px 16px;
-  color: var(--md-sys-color-on-surface-variant);
-}
-
-.combo-option {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  min-height: 48px;
-  padding: 0 16px;
   border: 0;
   background: none;
-  font: inherit;
-  font-size: 14px;
-  color: var(--md-sys-color-on-surface);
-  text-align: left;
+  color: var(--label);
+  font-size: 1rem;
+}
+
+.input::placeholder {
+  color: var(--label-3);
+}
+
+/* The switch. */
+.switch {
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: 51px;
+  height: 31px;
+  margin: 0;
+  margin-inline-start: auto;
+  border-radius: 999px;
+  background: var(--fill);
   cursor: pointer;
+  transition: background-color 0.25s var(--ease);
 }
 
-.combo-option.active {
-  background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent);
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow:
+    0 3px 8px rgb(0 0 0 / 0.15),
+    0 3px 1px rgb(0 0 0 / 0.06);
+  transition: translate 0.25s var(--ease);
 }
 
-.combo-option .check {
-  margin-left: auto;
-  color: var(--md-sys-color-primary);
+.switch:checked {
+  background: var(--green);
 }
 
-/* An option as a small tonal chip, as Notion shows its options as tags. */
-.option-chip {
-  display: inline-block;
-  padding: 4px 10px;
-  border-radius: 8px;
-  background: var(--md-sys-color-secondary-container);
-  color: var(--md-sys-color-on-secondary-container);
-  font-weight: 500;
+.switch:checked::after {
+  translate: 20px 0;
 }
 
-/* Images and videos. */
-.drop {
-  display: flex;
-  flex-direction: column;
+/* Buttons in the content: filled for the main action, gray, or plain. */
+.capsule {
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
-  width: 100%;
-  padding: 32px 16px;
-  border: 1px dashed var(--md-sys-color-outline);
-  border-radius: 12px;
-  background: var(--md-sys-color-surface-container-lowest);
-  color: var(--md-sys-color-on-surface-variant);
-  font: inherit;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 1.1em;
+  border: 0;
+  border-radius: 999px;
+  font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
+  transition: opacity 0.15s var(--ease);
 }
 
-.drop md-icon {
-  --md-icon-size: 32px;
-  color: var(--md-sys-color-primary);
+.capsule:active:not(:disabled) {
+  opacity: 0.7;
 }
 
-.drop.over {
-  border-color: var(--md-sys-color-primary);
-  background: var(--md-sys-color-primary-container);
-  color: var(--md-sys-color-on-primary-container);
+.capsule.filled {
+  background: var(--accent);
+  color: #fff;
 }
 
-.drop:disabled {
-  opacity: 0.38;
+.capsule.gray {
+  background: var(--fill-3);
+  color: var(--accent);
+}
+
+.capsule.destructive {
+  background: var(--red);
+  color: #fff;
+}
+
+.capsule:disabled {
+  background: var(--fill-3);
+  color: var(--label-3);
   cursor: default;
 }
 
-.hint {
-  display: flex;
+.plain {
+  display: inline-flex;
+  flex: none;
   align-items: center;
   gap: 4px;
-  color: var(--md-sys-color-on-surface-variant);
-}
-
-/* Under the drop zone: Choose a folder at the left, the reorder hint at the right. */
-.under-drop {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  margin: 8px 0 0 -12px;
-}
-
-.hint md-icon {
-  --md-icon-size: 18px;
-}
-
-.items {
-  list-style: none;
-  margin: 8px 0 0;
+  min-height: 44px;
   padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  white-space: nowrap;
+  cursor: pointer;
 }
 
-/* One row per image or video: handle, number, picture, name with one line
-   under it, the preview button for a video, delete. */
-.items li {
-  display: grid;
-  grid-template-columns: 40px 20px 72px minmax(0, 1fr) auto 40px;
-  min-height: 72px;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+.plain:active:not(:disabled) {
+  opacity: 0.5;
 }
 
-.items li.dragging {
-  background: var(--md-sys-color-secondary-container);
-  border-radius: 8px;
+.plain:disabled {
+  color: var(--label-3);
+  cursor: default;
 }
 
+.plain .icon {
+  font-size: 1.2rem;
+}
+
+.icon-button {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: -8px -10px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--label-2);
+  cursor: pointer;
+}
+
+.icon-button .icon {
+  font-size: 1.3rem;
+}
+
+.icon-button:active:not(:disabled) {
+  background: var(--fill-3);
+}
+
+.icon-button.remove {
+  color: var(--red);
+}
+
+.icon-button:disabled {
+  color: var(--label-3);
+  cursor: default;
+}
+
+/* The reorder control, at the row's end, as in iOS. */
 .handle {
+  color: var(--label-3);
   cursor: grab;
   touch-action: none;
 }
@@ -387,159 +698,75 @@ md-outlined-select {
   cursor: grabbing;
 }
 
-.number {
-  color: var(--md-sys-color-on-surface-variant);
-  text-align: right;
+/* A row being moved lifts off the list. */
+li.dragging {
+  z-index: 2;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.2);
 }
 
-.thumb {
+li.dragging::before,
+li.dragging + li::before {
+  display: none;
+}
+
+.progress {
+  appearance: none;
   display: block;
-  width: 72px;
-  height: 54px;
-  object-fit: cover;
-  border-radius: 8px;
-  background: var(--md-sys-color-surface-container-high);
-}
-
-/* A video's picture carries a small play mark. */
-.thumb-wrap {
-  position: relative;
-  display: block;
-}
-
-.thumb-wrap .badge {
-  position: absolute;
-  left: 4px;
-  bottom: 4px;
-  --md-icon-size: 16px;
-  border-radius: 50%;
-  background: rgb(0 0 0 / 0.6);
-  color: #fff;
-}
-
-.file {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.file .name {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.file md-linear-progress {
-  display: block;
+  width: 100%;
   max-width: 240px;
+  height: 4px;
   margin-top: 6px;
-}
-
-/* The line under the name: kind and size, then where the item stands. */
-.file .meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  white-space: nowrap;
-  color: var(--md-sys-color-on-surface-variant);
-}
-
-.file .state {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
+  border: 0;
+  border-radius: 2px;
+  background: var(--fill-3);
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.file .state::before {
-  content: "·";
-  margin-right: 2px;
+.progress::-webkit-progress-bar {
+  background: var(--fill-3);
 }
 
-.file .state md-icon {
-  --md-icon-size: 16px;
+.progress::-webkit-progress-value {
+  background: var(--accent);
+  transition: width 0.2s linear;
 }
 
-.file .state-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.progress::-moz-progress-bar {
+  background: var(--accent);
 }
 
-:is(.file, .splash-row) .state.busy,
-:is(.file, .splash-row) .state.wait {
-  color: var(--md-sys-color-primary);
-}
-
-:is(.file, .splash-row) .state.busy md-icon {
-  animation: spin 1.4s linear infinite;
-}
-
-:is(.file, .splash-row) .state.error {
-  color: var(--md-sys-color-error);
-}
-
-/* The splash video, under the projects: the one on the site, and Replace (a
-   video dropped on the row does the same). */
-.splash {
-  margin-top: 40px;
-}
-
-.splash h2 {
-  margin: 0 0 16px;
-}
-
-.splash-row {
-  display: grid;
-  grid-template-columns: 96px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 16px;
-  padding: 12px 16px 12px 12px;
-  border-radius: 16px;
-  background: var(--md-sys-color-surface-container-low);
-}
-
-.splash-row.over {
-  outline: 1px dashed var(--md-sys-color-primary);
-  background: var(--md-sys-color-primary-container);
-}
-
-.splash-row video {
-  display: block;
-  width: 96px;
-  height: 64px;
-  object-fit: cover;
-  border-radius: 8px;
-  background: #000;
-}
-
-.splash-row .meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  white-space: nowrap;
-}
-
-.splash-row .state {
-  display: flex;
+/* Where an item stands: always a word, with an icon while something is
+   happening or went wrong, not colour alone. */
+.state {
+  display: inline-flex;
   align-items: center;
   gap: 4px;
   min-width: 0;
 }
 
-.splash-row .state md-icon {
-  --md-icon-size: 16px;
+.state .icon {
+  font-size: 1.1em;
 }
 
-.splash-row md-linear-progress {
-  display: block;
-  max-width: 240px;
-  margin-top: 6px;
+.state.tone-busy,
+.state.tone-wait {
+  color: var(--accent);
+}
+
+.state.tone-error {
+  color: var(--red);
+}
+
+.state.tone-busy .icon {
+  animation: spin 1.2s linear infinite;
+}
+
+.state-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 @keyframes spin {
@@ -548,253 +775,359 @@ md-outlined-select {
   }
 }
 
-.action {
-  display: flex;
-  justify-content: flex-end;
+.notice {
+  display: block;
+  margin: 0 var(--margin) 16px;
+  color: var(--label-2);
 }
 
-/* Deleting the project: a text button under the cards. */
-.danger {
-  margin-top: 8px;
+.notice.error {
+  color: var(--red);
 }
 
-/* The save bar, along the bottom. */
-.save {
-  position: fixed;
-  z-index: 2;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 16px;
-  padding: 12px max(24px, calc((100vw - 1040px) / 2 + 24px));
-  background: var(--md-sys-color-surface-container);
-}
-
-@media (max-width: 720px) {
-  main {
-    padding: 16px 16px 120px;
-  }
-
-  .top {
-    gap: 16px;
-    padding: 0 16px;
-  }
-
-  .who {
-    min-width: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .card {
-    padding: 16px 16px 20px;
-  }
-
-  .editor-head {
-    flex-wrap: wrap;
-  }
-
-  .fields {
-    grid-template-columns: 1fr;
-  }
-
-  /* A collaborator's role above their name, the × beside both. */
-  .credits li {
-    grid-template-columns: minmax(0, 1fr) 40px;
-    gap: 8px;
-    padding-bottom: 12px;
-    border-bottom: 1px solid var(--md-sys-color-outline-variant);
-  }
-
-  .credits li > md-icon-button {
-    grid-column: 2;
-    grid-row: 1 / span 2;
-  }
-
-  .items li {
-    grid-template-columns: 32px 56px minmax(0, 1fr) auto 40px;
-    gap: 8px;
-  }
-
-  .thumb {
-    width: 56px;
-    height: 42px;
-  }
-
-  .number {
-    display: none;
-  }
-
-  /* The preview button keeps only its icon, and so does Replace. */
-  .action .label,
-  .splash-row .label {
-    display: none;
-  }
-
-  .splash-row {
-    grid-template-columns: 72px minmax(0, 1fr) auto;
-    gap: 12px;
-  }
-
-  /* With its label gone, as much room right of the icon as left (the icon's
-     8px gap plus this). */
-  .splash-row md-outlined-button {
-    --md-outlined-button-with-leading-icon-trailing-space: 8px;
-  }
-
-  .splash-row video,
-  .splash-row .cover.empty {
-    width: 72px;
-    height: 48px;
-  }
-
-  .under-drop .hint {
-    display: none;
-  }
-
-  /* On a narrow row the line under the name is the item's state when it has
-     one, otherwise its kind and size. */
-  .file .meta:has(.state) > span:first-child {
-    display: none;
-  }
-
-  .file .state::before {
-    content: none;
-  }
-
-  .hidden-chip .label {
-    display: none;
-  }
-
-  .project-row {
-    grid-template-columns: 72px minmax(0, 1fr) auto;
-    gap: 12px;
-  }
-
-  .project-row img,
-  .cover.empty {
-    width: 72px;
-    height: 48px;
-  }
-
-  .project-row .chevron {
-    display: none;
-  }
-}
-
-/* Top bar navigation: Projects, Preview Cutter. */
-.nav {
-  display: flex;
-  gap: 4px;
-  margin-right: auto;
-  margin-left: 32px;
-}
-
-.nav a {
-  padding: 8px 14px;
-  border-radius: 20px;
-  text-decoration: none;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--md-sys-color-on-surface-variant);
-}
-
-.nav a.current {
-  background: var(--md-sys-color-secondary-container);
-  color: var(--md-sys-color-on-secondary-container);
-}
-
-main.wide {
-  max-width: none;
-  padding: 0;
-}
-
-/* Project rows: the handle at each row's left drags it. */
-.card-handle {
-  cursor: grab;
-  touch-action: none;
-}
-
-.dragging .card-handle {
-  cursor: grabbing;
-}
-
-.list > .hint {
-  margin: -8px 0 8px;
-}
-
-/* The Preview Cutter's queue. */
-.cutter-rows {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.cutter-rows a {
-  position: relative;
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 16px;
-  padding: 12px 8px;
-  border-radius: 8px;
-  text-decoration: none;
-}
-
-.cutter-rows .state {
-  color: var(--md-sys-color-on-surface-variant);
-}
-
-.cutter-rows .state.todo {
-  color: var(--md-sys-color-primary);
-}
-
-/* One video in the cutter, filling the window under the app bar. */
-.cutter {
-  --trim: var(--md-sys-color-primary);
-  --trim-ink: var(--md-sys-color-on-primary);
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  height: calc(100vh - 64px);
-  padding: 8px 16px 16px;
-}
-
-.cutter-top {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  min-height: 48px;
-}
-
-.cutter-title {
-  flex: 1;
-  min-width: 0;
+.footnote {
+  margin: 8px var(--margin) 0;
+  font-size: 0.765rem;
+  color: var(--label-2);
   text-align: center;
+  overflow-wrap: anywhere;
+}
+
+/* Pictures in rows. */
+.cover,
+.thumb {
+  display: block;
+  flex: none;
+  object-fit: cover;
+  background: var(--fill-3);
+}
+
+.cover {
+  width: 60px;
+  height: 45px;
+  border-radius: 8px;
+}
+
+.thumb {
+  width: 56px;
+  height: 42px;
+  border-radius: 6px;
+}
+
+.thumb-wrap {
+  position: relative;
+  display: block;
+  flex: none;
+}
+
+.thumb-wrap .badge {
+  position: absolute;
+  left: 3px;
+  bottom: 3px;
+  padding: 1px;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.55);
+  color: #fff;
+  font-size: 14px;
+}
+
+/* The project list. Its hairlines start where the text does. */
+li:has(> .project-row) {
+  --inset: calc(var(--margin) + 60px + 12px);
+}
+
+.project-row .row-title,
+.project-row .row-subtitle {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.cutter-status {
-  color: var(--md-sys-color-on-surface-variant);
+/* The project page's media: number, picture, name with one line under it,
+   the preview button, delete, the reorder control. */
+li:has(> .media-row) {
+  --inset: calc(var(--margin) + 0.882rem * 1.6 + 12px);
+}
+
+.media-row {
+  min-height: 62px;
+  padding-block: 8px;
+}
+
+.number {
+  flex: none;
+  min-width: 1.6em;
+  font-size: 0.882rem;
+  color: var(--label-2);
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.file-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 0.882rem;
+  color: var(--label-2);
+  white-space: nowrap;
+}
+
+.meta > span + .state::before {
+  content: "·";
+  margin-inline-end: 2px;
+  color: var(--label-2);
+}
+
+.media-row .plain {
+  font-size: 0.882rem;
+}
+
+/* A collaborator: role, name, remove. */
+.credit-row {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+.credit-row .combo {
+  flex: 0 1 11em;
+}
+
+.credit-row > .input {
+  flex: 1 1 9em;
+}
+
+/* The pick-or-create field (kind of work, role) and its menu. */
+.combo {
+  position: relative;
+  display: flex;
+  flex: 1 1 10em;
+  align-items: center;
+  min-width: 0;
+}
+
+.combo .input {
+  padding-inline-end: 1.6em;
+}
+
+.combo-indicator {
+  position: absolute;
+  right: 0;
+  font-size: 1.15rem;
+  color: var(--label-3);
+  pointer-events: none;
+}
+
+.menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 10px);
+  left: -10px;
+  width: max(100% + 20px, 250px);
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: 18px;
+  background: var(--menu);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  backdrop-filter: blur(30px) saturate(180%);
+  box-shadow:
+    inset 0 0 0 0.5px var(--glass-edge),
+    0 12px 40px rgb(0 0 0 / 0.22);
+  animation: menu-in 0.18s var(--ease);
+  transform-origin: top left;
+}
+
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 6px 0 10px;
+  border-radius: 12px;
+  color: var(--label);
+  cursor: pointer;
+}
+
+.menu-item.active {
+  background: var(--fill-3);
+}
+
+.menu-item .check {
+  width: 1.2em;
+  font-size: 1.1rem;
+}
+
+.menu-item .label {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.menu-item.create {
+  color: var(--accent);
+}
+
+.menu-note {
+  padding: 10px 12px;
+  font-size: 0.765rem;
+  color: var(--label-2);
+}
+
+.option-remove {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--label-3);
+  cursor: pointer;
+}
+
+.option-remove .icon {
+  font-size: 1.1rem;
+}
+
+@media (hover: hover) {
+  .menu-item:not(.active) .option-remove {
+    visibility: hidden;
+  }
+}
+
+.option-remove:hover {
+  background: var(--fill-3);
+  color: var(--label-2);
+}
+
+/* The splash video row. */
+.splash-row {
+  --inset: calc(var(--margin) + 60px + 12px);
+}
+
+/* The toolbar: one floating glass capsule along the bottom, saying how the
+   save stands. */
+.toolbar {
+  position: fixed;
+  z-index: 10;
+  left: 50%;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  translate: -50% 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 2 * var(--margin));
+  min-height: 44px;
+  padding: 0 20px;
+  border-radius: 999px;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  backdrop-filter: blur(16px) saturate(180%);
+  box-shadow:
+    inset 0 0 0 0.5px var(--glass-edge),
+    var(--glass-shadow);
+  font-size: 0.882rem;
+  color: var(--label-2);
+  text-align: center;
+}
+
+.toolbar .error {
+  color: var(--red);
+}
+
+/* An alert. */
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--scrim);
+  animation: fade-in 0.2s var(--ease);
+}
+
+.alert {
+  width: min(320px, 100%);
+  padding: 22px 18px 16px;
+  border-radius: 30px;
+  background: var(--elevated);
+  box-shadow: 0 20px 60px rgb(0 0 0 / 0.3);
+  text-align: center;
+  animation: alert-in 0.25s var(--ease);
+}
+
+.alert-title {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.alert-message {
+  margin-top: 6px;
+  font-size: 0.882rem;
+  color: var(--label-2);
+}
+
+.alert-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes alert-in {
+  from {
+    opacity: 0;
+    transform: scale(1.08);
+  }
+}
+
+/* The preview cutter: the video, then the strip in its own surface. Pieces
+   are marked in yellow, as Photos marks a trim. */
+.cutter {
+  --trim: var(--yellow);
+  --trim-ink: #000;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 12px;
+  height: calc(100dvh - 60px - max(8px, env(safe-area-inset-top)) - max(var(--margin), env(safe-area-inset-bottom)));
 }
 
 .cutter-status {
-  min-width: 220px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
+  font-size: 0.882rem;
+  color: var(--label-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .cutter-stage {
   position: relative;
   min-height: 0;
-  margin: 8px 0 12px;
+  border-radius: var(--radius);
   background: #000;
-  border-radius: 12px;
   overflow: hidden;
 }
 
@@ -816,7 +1149,9 @@ main.wide {
   inset: 0;
   display: grid;
   place-content: center;
-  color: var(--md-sys-color-on-surface-variant);
+  padding: 16px;
+  color: rgb(235 235 245 / 0.6);
+  text-align: center;
 }
 
 .cutter-bar {
@@ -824,23 +1159,9 @@ main.wide {
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 16px;
   align-items: center;
-  padding: 20px 16px 14px;
-  border-radius: 16px;
-  background: var(--md-sys-color-surface-container);
-}
-
-.cutter-bar button {
-  white-space: nowrap;
-  font: inherit;
-  font-size: 14px;
-  font-weight: 500;
-  border: 0;
-  cursor: pointer;
-}
-
-.cutter-bar button:disabled {
-  opacity: 0.38;
-  cursor: default;
+  padding: 22px var(--margin) 14px;
+  border-radius: var(--radius);
+  background: var(--surface);
 }
 
 .cutter-bar .play {
@@ -849,31 +1170,25 @@ main.wide {
   width: 44px;
   height: 44px;
   padding: 0;
+  border: 0;
   border-radius: 50%;
-  background: var(--md-sys-color-primary);
+  background: var(--accent);
+  cursor: pointer;
 }
 
 .cutter-bar .play svg {
   width: 18px;
   height: 18px;
-  fill: var(--md-sys-color-on-primary);
+  fill: #fff;
 }
 
-.cutter-bar .tonal,
-.cutter-bar .filled {
-  height: 40px;
-  padding: 0 20px;
-  border-radius: 20px;
+.cutter-bar .play:disabled {
+  background: var(--fill-3);
+  cursor: default;
 }
 
-.cutter-bar .tonal {
-  background: var(--md-sys-color-secondary-container);
-  color: var(--md-sys-color-on-secondary-container);
-}
-
-.cutter-bar .filled {
-  background: var(--md-sys-color-primary);
-  color: var(--md-sys-color-on-primary);
+.cutter-bar .play:disabled svg {
+  fill: var(--label-3);
 }
 
 .track-wrap {
@@ -896,7 +1211,7 @@ main.wide {
   inset: 0;
   width: 100%;
   height: 100%;
-  border-radius: 4px;
+  border-radius: 6px;
   background: #000;
 }
 
@@ -922,7 +1237,7 @@ main.wide {
   top: 0;
   width: 1px;
   height: 8px;
-  background: color-mix(in srgb, var(--md-sys-color-on-surface) 55%, transparent);
+  background: var(--label-3);
 }
 
 .tick.hot {
@@ -946,8 +1261,8 @@ main.wide {
 
 .piece.sel {
   box-shadow:
-    0 0 0 1px var(--trim-ink),
-    0 0 0 2px var(--trim);
+    0 0 0 1px var(--surface),
+    0 0 0 3px var(--trim);
 }
 
 .piece .h {
@@ -983,14 +1298,16 @@ main.wide {
   top: 3px;
   right: 3px;
   display: none;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   padding: 0;
+  border: 0;
   border-radius: 50%;
   background: var(--trim);
   color: var(--trim-ink);
   font-size: 13px;
-  line-height: 18px;
+  line-height: 20px;
+  cursor: pointer;
 }
 
 .piece.sel .del {
@@ -1010,7 +1327,7 @@ main.wide {
   display: none;
   width: 2px;
   margin-left: -1px;
-  background: var(--md-sys-color-on-surface);
+  background: var(--label);
   pointer-events: none;
 }
 
@@ -1020,12 +1337,12 @@ main.wide {
   bottom: calc(100% + 16px);
   display: none;
   padding: 3px 8px;
-  border-radius: 4px;
+  border-radius: 6px;
   translate: -50% 0;
-  background: var(--md-sys-color-inverse-surface);
-  color: var(--md-sys-color-inverse-on-surface);
+  background: var(--label);
+  color: var(--surface);
   white-space: nowrap;
-  font-size: 12px;
+  font-size: 0.706rem;
   font-variant-numeric: tabular-nums;
   pointer-events: none;
 }
@@ -1042,18 +1359,19 @@ main.wide {
 }
 
 .readout {
+  font-size: 0.882rem;
   white-space: nowrap;
-  color: var(--md-sys-color-on-surface-variant);
+  color: var(--label-2);
   font-variant-numeric: tabular-nums;
 }
 
 .readout b {
-  font-weight: 500;
-  color: var(--md-sys-color-on-surface);
+  font-weight: 600;
+  color: var(--label);
 }
 
 .readout .low {
-  color: var(--md-sys-color-error);
+  color: var(--red);
 }
 
 .side .buttons {
@@ -1062,31 +1380,65 @@ main.wide {
 }
 
 .side .hint {
-  max-width: 260px;
-  margin: 0;
-  text-align: right;
-  color: var(--md-sys-color-on-surface-variant);
+  max-width: 280px;
+  font-size: 0.765rem;
+  text-align: end;
+  color: var(--label-2);
 }
 
-/* The cutter on a phone: the video a 16:9 box, the side panel under the strip. */
-@media (max-width: 720px) {
+/* Compact width (phones). */
+@media (max-width: 600px) {
+  .glass .back-label {
+    display: none;
+  }
+
+  .glass.back {
+    width: 44px;
+    padding: 0;
+  }
+
+  .field-label {
+    flex-basis: 6.5em;
+  }
+
+  .media-row .number {
+    display: none;
+  }
+
+  .media-row {
+    gap: 10px;
+  }
+
+  li:has(> .media-row) {
+    --inset: calc(var(--margin) + 56px + 10px);
+  }
+
+  /* The preview button keeps only its symbol; the line under the name is
+     the item's state when it has one. */
+  .media-row .plain .label,
+  .splash-row .plain .label {
+    display: none;
+  }
+
+  .meta:has(.state) > span:first-child {
+    display: none;
+  }
+
+  .meta > span + .state::before {
+    content: none;
+  }
+
+  .project-row .detail .label {
+    display: none;
+  }
+
   .cutter {
     height: auto;
-    grid-template-rows: auto 56vw auto;
-    padding: 8px 12px 16px;
-  }
-
-  .cutter-top {
-    gap: 8px;
-  }
-
-  .cutter-status {
-    min-width: 0;
+    grid-template-rows: 56vw auto;
   }
 
   .cutter-bar {
     grid-template-columns: auto minmax(0, 1fr);
-    padding: 16px 12px 12px;
   }
 
   .cutter-bar .side {
@@ -1106,67 +1458,25 @@ main.wide {
   }
 }
 
-/* Taking an option off its list: a small × at the end of its row. */
-.option-remove {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  margin-left: auto;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: none;
-  color: var(--md-sys-color-on-surface-variant);
-  cursor: pointer;
-  --md-icon-size: 18px;
-}
+/* Reduce Motion: nothing slides, scales or spins; fades and colour changes
+   stay. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-property: opacity, background-color, color !important;
+  }
 
-.combo-option .check + .option-remove {
-  margin-left: 0;
-}
+  .state.tone-busy .icon {
+    animation: none;
+  }
 
-.option-remove:hover {
-  background: color-mix(in srgb, var(--md-sys-color-on-surface) 12%, transparent);
-  color: var(--md-sys-color-on-surface);
-}
+  .menu,
+  .alert {
+    animation: fade-in 0.2s var(--ease);
+  }
 
-/* Deleting a project. */
-.danger h2 {
-  margin-bottom: 8px;
-}
-
-.delete-start {
-  --md-text-button-label-text-color: var(--md-sys-color-error);
-  --md-text-button-icon-color: var(--md-sys-color-error);
-  margin-left: -12px;
-}
-
-.confirm {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-}
-
-.confirm span {
-  flex: 1 1 320px;
-  color: var(--md-sys-color-on-surface-variant);
-}
-
-.confirm .delete {
-  --md-filled-button-container-color: var(--md-sys-color-error);
-  --md-filled-button-label-text-color: var(--md-sys-color-on-error);
-}
-
-/* A project that isn't on the public site, marked on the list. */
-.hidden-chip {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  --md-icon-size: 16px;
-  padding: 2px 10px;
-  border: 1px solid var(--md-sys-color-outline-variant);
-  border-radius: 8px;
-  color: var(--md-sys-color-on-surface-variant);
+  .glass:active:not(:disabled) {
+    transform: none;
+  }
 }
