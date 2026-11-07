@@ -80,6 +80,10 @@ const FOLD_MS = 300;
 /** How tall a phone's strip of images is (style.module.css, .phoneStrip): the
  *  height the canvas drew it at. Each image's file is picked for it. */
 const STRIP_PX = 220;
+/** How long after a phone's strip last moved it counts as stopped: the playhead
+ *  is the triangle while the strip moves, under a finger or gliding on, and the
+ *  square again once it stops. */
+const STILL_MS = 150;
 
 /**
  * `?rows=40` repeats the projects to that many rows, to see how the index
@@ -773,8 +777,9 @@ function DesktopIndex({ leaving = false }: { leaving?: boolean }) {
  * on to the next project, no scrolling the page to the row. While a row above
  * folds shut, the one just tapped keeps its place on screen, as far as the page
  * can scroll back to hold it there. The playhead on the open row's line follows
- * the swipe, from the name's left edge at the strip's start to the year's right
- * edge at its end. A tap on the open row's line closes it. The laptop's version
+ * the swipe edge to edge, at the screen's left edge at the strip's start and its
+ * right edge at the end: the triangle while the strip moves, the square once it
+ * stops. A tap on the open row's line closes it. The laptop's version
  * needs a pointer (hover, scrubbing by cursor x, a centre line held while the
  * hand is still), so phones don't use it.
  */
@@ -787,8 +792,11 @@ function PhoneIndex({ leaving = false }: { leaving?: boolean }) {
   const rowsRef = React.useRef<(HTMLLIElement | null)[]>([]);
   const stripsRef = React.useRef<(HTMLDivElement | null)[]>([]);
   const playheadRef = React.useRef<HTMLSpanElement | null>(null);
+  /** The open row's strip is moving: the playhead is the triangle. */
+  const [moving, setMoving] = React.useState(false);
   const folding = React.useRef(0);
   const hold = React.useRef(0);
+  const still = React.useRef(0);
 
   // Holds row `row` where it is on screen while a row above it folds shut, so
   // the page doesn't seem to scroll: only the rows opening and closing move.
@@ -835,9 +843,19 @@ function PhoneIndex({ leaving = false }: { leaving?: boolean }) {
       main?.removeEventListener("touchstart", letGo);
       main?.removeEventListener("wheel", letGo);
       window.clearTimeout(folding.current);
+      window.clearTimeout(still.current);
       cancelAnimationFrame(hold.current);
     };
   }, []);
+
+  // The open row's strip scrolled: the playhead goes as far along the line,
+  // as the triangle until the strip has been still for STILL_MS.
+  const follow = (strip: HTMLElement) => {
+    playheadRef.current?.style.setProperty("--along", String(alongOf(strip)));
+    setMoving(true);
+    window.clearTimeout(still.current);
+    still.current = window.setTimeout(() => setMoving(false), STILL_MS);
+  };
 
   return (
     <main
@@ -874,7 +892,7 @@ function PhoneIndex({ leaving = false }: { leaving?: boolean }) {
                       const strip = stripsRef.current[row];
                       if (el && strip) el.style.setProperty("--along", String(alongOf(strip)));
                     }}
-                    className={`${styles.playhead} ${styles.stop}`}
+                    className={`${styles.playhead} ${moving ? styles.play : styles.stop}`}
                     aria-hidden="true"
                   />
                 )}
@@ -898,11 +916,7 @@ function PhoneIndex({ leaving = false }: { leaving?: boolean }) {
                           stripsRef.current[row] = el;
                         }}
                         className={styles.phoneStrip}
-                        onScroll={
-                          isOpen
-                            ? (e) => playheadRef.current?.style.setProperty("--along", String(alongOf(e.currentTarget)))
-                            : undefined
-                        }
+                        onScroll={isOpen ? (e) => follow(e.currentTarget) : undefined}
                       >
                         {project.images.map((url, i) => (
                           <StripImage key={url} url={url} first={i < 4} />

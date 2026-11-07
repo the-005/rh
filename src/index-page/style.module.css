@@ -545,7 +545,7 @@
    swiped by hand. The list starts under the nav rather than centred, so a row
    opening doesn't shift the rows around it. */
 .phoneList {
-  /* The rows' text inset, which the details, the strip and the playhead keep to. */
+  /* The rows' text inset, which the details and the strip keep to. */
   --inset: calc(var(--page-padding, 1.5rem) + 12px);
   padding: 6.5rem 0 5rem;
 }
@@ -556,13 +556,15 @@
   border-top-color: color-mix(in srgb, var(--ink, #eeeeee) calc(var(--playing-opacity) * 100%), transparent);
 }
 
-/* The playhead follows the strip: at the name's left edge while the strip is
-   at its start, at the year's right edge once it's swiped to its end (--along,
-   0 to 1, set from script as it scrolls). 8px is the square's width. */
+/* The playhead follows the strip edge to edge: against the screen's left edge
+   while the strip is at its start, against its right edge once it's swiped to
+   its end (--along, 0 to 1, set from script as it scrolls). Shifted back by its
+   own width as it goes, so the square and the triangle each stay whole at both
+   ends. */
 .phoneList .playhead {
   display: block;
-  left: calc(var(--inset) + var(--along, 0) * (100% - 2 * var(--inset) - 8px));
-  transform: none;
+  left: calc(var(--along, 0) * 100%);
+  transform: translateX(calc(var(--along, 0) * -100%));
 }
 
 /* Folding open and shut: the grid track eases between nothing and the row's
