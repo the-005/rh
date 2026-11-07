@@ -149,6 +149,9 @@ body {
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
   -webkit-text-size-adjust: 100%;
+  /* The rows and buttons show their own pressed state, as in iOS; no browser
+     tap box on top. */
+  -webkit-tap-highlight-color: transparent;
 }
 
 button,

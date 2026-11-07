@@ -89,6 +89,9 @@ body {
   font-size: var(--font-size);
   color: var(--color-text);
   background-color: var(--color-background);
+  /* No grey or blue box flashed over whatever a finger taps (the ×, the nav,
+     the index rows): mobile browsers draw one by default. */
+  -webkit-tap-highlight-color: transparent;
 }
 
 a {

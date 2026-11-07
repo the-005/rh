@@ -142,9 +142,14 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   // Images that started as their canvas copy and have since been swapped for
   // the full-size file.
   const [upgraded, setUpgraded] = React.useState<ReadonlySet<number>>(() => new Set());
-  // The arrival is under way, which the zoom counts from: at once from the
-  // canvas, and on a direct link once the row's images have loaded.
-  const [arriving, setArriving] = React.useState(flew);
+  // The wave is under way, which the zoom counts from: from the canvas once the
+  // plane has handed over to the page (which waits for the clicked image's
+  // file: 0.7s late on a phone over 4G), on a direct link once the row's images
+  // have loaded.
+  const [arriving, setArriving] = React.useState(false);
+  // The zoom has begun: images whose files arrive after it fade in where they
+  // are instead of rising.
+  const zoomStartedRef = React.useRef(false);
 
   const timersRef = React.useRef<number[]>([]);
   const after = (ms: number, fn: () => void) => {
@@ -378,26 +383,50 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
         closeBtn.style.opacity = "0";
       }
     };
-    // Each rises from below into its slot, in a wave left to right.
+    // Each rises from below into its slot, in a wave left to right, but never
+    // before its file has arrived and decoded: one still loading rose in empty
+    // and popped in after (8 of 23 on a phone over 4G, 7 Nov). A late one rises
+    // as soon as it's ready; one ready only once the zoom has begun fades in
+    // where it is. Each clears its own transition once it's done.
+    const riseTimers: number[] = [];
     const riseIn = (els: HTMLElement[]) => {
       const delays = riseDelays(els.length);
+      const t0 = performance.now();
       els.forEach((el, j) => {
-        const delay = `${Math.round(delays[j])}ms`;
-        el.style.transition = `opacity 0.45s ease ${delay}, transform ${RISE_MS}ms ${ENTRY_EASE} ${delay}`;
-        el.style.opacity = "";
-        el.style.transform = "";
+        const go = () => {
+          const late = zoomStartedRef.current;
+          const wait = late ? 0 : Math.max(0, delays[j] - (performance.now() - t0));
+          el.style.transition = late
+            ? "opacity 0.3s ease"
+            : `opacity 0.45s ease ${Math.round(wait)}ms, transform ${RISE_MS}ms ${ENTRY_EASE} ${Math.round(wait)}ms`;
+          el.style.opacity = "";
+          el.style.transform = "";
+          riseTimers.push(
+            window.setTimeout(
+              () => {
+                el.style.transition = "";
+              },
+              wait + RISE_MS + 100
+            )
+          );
+        };
+        const img = el as HTMLImageElement;
+        if (img.complete && img.naturalWidth > 0) go();
+        else img.decode().then(go, go);
       });
       if (closeBtn) {
         closeBtn.style.transition = "opacity 0.4s ease 0.3s";
         closeBtn.style.opacity = "";
+        riseTimers.push(
+          window.setTimeout(() => {
+            closeBtn.style.transition = "";
+          }, 900)
+        );
       }
-    };
-    const clearTransitions = (els: HTMLElement[]) => {
-      for (const el of els) el.style.transition = "";
-      if (closeBtn) closeBtn.style.transition = "";
     };
     // Undo every inline style a run set, so a re-run starts clean
     const restore = (els: HTMLElement[]) => {
+      for (const t of riseTimers) clearTimeout(t);
       for (const el of els) {
         el.style.transition = "";
         el.style.opacity = "";
@@ -438,6 +467,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
               overlay.style.background = "";
               hero.style.transition = "";
               riseIn(satellites);
+              setArriving(true);
               // The page covers the canvas from here until the exit.
               setCanvasPaused(true);
             });
@@ -465,18 +495,13 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
         hideTransitionSource(sourceKey);
         overlay.style.background = "";
         riseIn(satellites);
+        setArriving(true);
         setCanvasPaused(true);
       }, FLIGHT_MS + 800);
-
-      const cleanup = setTimeout(
-        () => clearTransitions(satellites),
-        FLIGHT_MS + (riseDelays(satellites.length).at(-1) ?? 0) + RISE_MS + 500
-      );
 
       return () => {
         canceled = true;
         clearTimeout(failSafe);
-        clearTimeout(cleanup);
         setCanvasPaused(false);
         overlay.style.background = "";
         hero.style.transition = "";
@@ -492,7 +517,6 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     // before the canvas had drawn.
     const imgs = Array.from(overlay.querySelectorAll<HTMLImageElement>("img[data-pos]"));
     let canceled = false;
-    let cleanup = 0;
     holdBelow(imgs);
     // The canvas never shows, so it doesn't run until the exit.
     setCanvasPaused(true);
@@ -507,11 +531,9 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       if (canceled) return;
       riseIn(imgs);
       setArriving(true);
-      cleanup = window.setTimeout(() => clearTransitions(imgs), (riseDelays(imgs.length).at(-1) ?? 0) + RISE_MS + 500);
     });
     return () => {
       canceled = true;
-      clearTimeout(cleanup);
       setCanvasPaused(false);
       restore(imgs);
     };
@@ -521,11 +543,11 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   // the image you clicked ending at the left edge.
   React.useEffect(() => {
     if (!arriving) return;
-    // From the canvas, counted from the click: the flight, then the others'
-    // wave. On a direct link, from when the row starts rising, all of it.
-    const settleAt = flew
-      ? FLIGHT_MS + (riseDelays(images.length - 1).at(-1) ?? 0) + RISE_MS + FUSE_PAUSE_MS
-      : (riseDelays(images.length).at(-1) ?? 0) + RISE_MS + FUSE_PAUSE_MS;
+    // Counted from when the wave starts: from the canvas, the others' wave (it
+    // used to count from the click, assuming the handover came at the flight's
+    // end; on a phone over 4G it came 0.7s later and the zoom began while the
+    // last images were still rising); on a direct link, the whole row's.
+    const settleAt = (riseDelays(flew ? images.length - 1 : images.length).at(-1) ?? 0) + RISE_MS + FUSE_PAUSE_MS;
     let canceled = false;
     // Run from script rather than as a CSS transition. A transition hands each
     // image to the compositor as its own layer, drawn once and then resized
@@ -535,11 +557,17 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     // at its real size each frame, and the last frame is the resting one.
     const zoom = () => {
       if (canceled) return;
+      zoomStartedRef.current = true;
       setPhase("strip");
       const slots = Array.from(rowRef.current?.children ?? []) as HTMLElement[];
-      const t0 = performance.now();
+      // The clock starts on the zoom's first drawn frame: React's re-render and
+      // the browser readying the big images can hold that frame back 150ms, and
+      // a clock started before it leapt a quarter of the zoom in one frame
+      // (seen on a laptop and on a phone, 7 Nov).
+      let t0 = 0;
       const frame = (now: number) => {
         if (canceled) return;
+        if (!t0) t0 = now;
         const p = Math.min(1, (now - t0) / ZOOM_MS);
         const e = zoomEase(p);
         const scale = shrink + (1 - shrink) * e;
@@ -821,6 +849,8 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
               alt=""
               draggable={false}
               decoding="async"
+              // On a slow connection the images that end up on screen come first.
+              fetchPriority={k === 0 || growsLarge[k] ? "high" : "low"}
               className={styles.image}
             />
             {img.type === "video" && (
