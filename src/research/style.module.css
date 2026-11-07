@@ -92,11 +92,19 @@
   background: #f2f2f2;
 }
 
-/* Phones get the waterfall only (the script narrows its gap) and no slider:
-   there's no room for it beside the nav. */
+/* Phones get the slider too (the owner, 7 Nov: it was hidden, so a phone only
+   ever had the waterfall), its line where it is on a computer and its box
+   taller, so it's easy to touch: tapping either half of the line picks that
+   view. The script gives the sheet fewer columns and the waterfall a narrower
+   gap. */
 @media screen and (max-width: 767px) {
   .scale {
-    display: none;
+    top: calc(1rem + 1.75rem - 8px);
+    height: calc(1.2em + 16px);
+  }
+
+  .slider {
+    height: calc(1.2em + 16px);
   }
 }
 
