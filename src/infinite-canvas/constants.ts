@@ -29,6 +29,10 @@ export const PARALLAX_AMOUNT = 8;
 // goes faster than the wheel's top speed (MAX_VELOCITY a frame), and the
 // fingers' moves are spread over TOUCH_SMOOTH_MS, since touch events don't
 // arrive in step with frames (some frames got none, some two: the stutter).
+// Then the glide "would come to a sudden stop": it ran on top of the gallery
+// still catching up with the finger, so it surged for a few frames and braked
+// by 40–67% within 80ms. Now it starts at the speed the gallery has when the
+// fingers lift and slows smoothly over the same distance.
 /** Depth units per pixel a finger swipes up or down. */
 export const TOUCH_DEPTH_PER_PX = 0.35;
 /** Gallery units per pixel a finger pans (about one to one for images at middle depth). */
@@ -43,14 +47,23 @@ export const TOUCH_SMOOTH_MS = 40;
 export const TOUCH_DEPTH_MAX = MAX_VELOCITY / (1000 / 60);
 /** How far a finger moves before its swipe counts as depth or pan. */
 export const TOUCH_AXIS_LOCK_PX = 8;
-/** The glide's speed after each millisecond: a little quicker to settle than
- *  UIScrollView's normal 0.998, which left a fast flick drifting for 2.4 s. */
-export const TOUCH_GLIDE_PER_MS = 0.997;
-/** The fastest glide, in units per millisecond: about the wheel's top speed, so
- *  a fling doesn't race through every image (0.8 felt too fast). */
+/** After the fingers lift, their speed carries the gallery on about as far as
+ *  it would go in this long at that speed (the reach of a glide slowing
+ *  ×0.997 a millisecond, a little shorter than an iPhone list's 0.998, which
+ *  left a fast flick drifting for 2.4 s). Added to what the fingers had moved
+ *  that the gallery hadn't shown yet, that's how far the glide goes. */
+export const TOUCH_GLIDE_REACH_MS = 333;
+/** The gentlest a glide slows: its speed falls by e every this many
+ *  milliseconds at most (an iPhone list's 0.998 a millisecond). A flick that
+ *  asks for more distance than that covers stops short of it. */
+export const TOUCH_GLIDE_TAU_MAX_MS = 500;
+/** The fingers' speed counts for the glide's reach up to this, in units per
+ *  millisecond: about the wheel's top speed, so a fling doesn't race through
+ *  every image (0.8 felt too fast). */
 export const TOUCH_GLIDE_MAX = 0.2;
-/** Below this speed (units per millisecond) the glide ends. */
-export const TOUCH_GLIDE_END = 0.01;
+/** Below this speed (units per millisecond) the glide ends: a tenth of a unit
+ *  a frame, too slow to see stop. */
+export const TOUCH_GLIDE_END = 0.006;
 /** The glide's speed is the fingers' over their last this many milliseconds… */
 export const TOUCH_FLING_WINDOW_MS = 80;
 /** …unless they had been still for this long before lifting: then there's no glide. */
