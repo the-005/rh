@@ -77,6 +77,25 @@ const DECODE_WAIT_MS = 1000;
 /** On a direct link the page stays blank until the row's images have loaded,
  *  but no longer than this; any still missing appear as they arrive. */
 const ROW_LOAD_MAX_MS = 8000;
+/**
+ * Holding the strip, or pinching it, zooms out to all of it, as it arrived,
+ * with a mask over the part that was on screen; moving moves the mask, and
+ * letting go zooms back in wherever it is. One move from start to finish (the
+ * owner, 8 Nov: "reveal the strip again and where I am on the strip (a mask
+ * over it) and I can drag and drop where I want to move to", "one consistent
+ * move to zoom out and move and release").
+ */
+/** A press held still this long opens it (the owner said "a couple seconds";
+ *  half a second is the usual long press). */
+const HOLD_MS = 500;
+/** A press that moves further than this first is a drag, not a hold. */
+const HOLD_SLOP_PX = 8;
+/** Two fingers pinching in to this share of their first distance open it too. */
+const PINCH_IN = 0.8;
+/** The zoom out to all of the strip, and back in; the curve every row move uses. */
+const OVERVIEW_MS = 450;
+/** The mask stands this far out from the row across it, at all of the strip. */
+const MASK_PAD_PX = 6;
 
 /**
  * arrive  — flat row, manifest rotated so the clicked image leads (part 1).
@@ -139,6 +158,8 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   // The image you're on: it drives the counter and is the one that goes home.
   const [current, setCurrent] = React.useState(0);
   const [dragging, setDragging] = React.useState(false);
+  // All of the strip is showing (held or pinched), with the mask on it.
+  const [overview, setOverview] = React.useState(false);
   // Images that started as their canvas copy and have since been swapped for
   // the full-size file.
   const [upgraded, setUpgraded] = React.useState<ReadonlySet<number>>(() => new Set());
@@ -164,6 +185,8 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       timersRef.current = [];
       cancelAnimationFrame(rafRef.current);
       cancelAnimationFrame(scrollRef.current.raf);
+      cancelAnimationFrame(ovRef.current.raf);
+      if (holdRef.current) clearTimeout(holdRef.current.timer);
     },
     []
   );
@@ -248,10 +271,10 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   // ---- scrolling ------------------------------------------------------------
 
   // The scroll loop runs outside React, so it reads the layout from here.
-  const layoutRef = React.useRef({ starts, lengths, maxScroll, mainLen, vertical });
+  const layoutRef = React.useRef({ starts, lengths, maxScroll, mainLen, vertical, rowStarts, shrink, stripSize, crossLen });
   const currentRef = React.useRef(0);
   React.useLayoutEffect(() => {
-    layoutRef.current = { starts, lengths, maxScroll, mainLen, vertical };
+    layoutRef.current = { starts, lengths, maxScroll, mainLen, vertical, rowStarts, shrink, stripSize, crossLen };
   });
 
   /** The image taking up most of the screen; when two are about even, the one
@@ -324,7 +347,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   const videos = useStripVideos({
     items: images,
     current,
-    active: phase === "strip" && !busy,
+    active: phase === "strip" && !busy && !overview,
     centre: (k) => {
       const L = layoutRef.current;
       const target = clamp(L.starts[k] + L.lengths[k] / 2 - L.mainLen / 2, 0, L.maxScroll);
@@ -335,6 +358,161 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   // Where a press began, to tell a click on a video from a drag.
   const pressRef = React.useRef<{ k: number; x: number; y: number } | null>(null);
 
+  // ---- all of the strip (held or pinched) ------------------------------------
+
+  const maskRef = React.useRef<HTMLDivElement>(null);
+  // The fingers (or the mouse) on the page, for pinches and the overview.
+  const pointersRef = React.useRef(new Map<number, { x: number; y: number }>());
+  const holdRef = React.useRef<{ id: number; x: number; y: number; timer: number } | null>(null);
+  const pinchRef = React.useRef<{ d0: number } | null>(null);
+  // e: 1 is the strip as it scrolls, 0 all of it as it arrived. S: where the
+  // strip is scrolled to (the mask's part of it), S0 where it was when it
+  // opened. M: the mask's start in the arrival row. anchor: where the hand was
+  // along the strip, so the mask moves as far as the hand does.
+  const ovRef = React.useRef({ on: false, closing: false, e: 1, S: 0, S0: 0, M: 0, anchor: 0, raf: 0 });
+
+  // Where a point along the strip sits in the arrival row: images shrink into
+  // it, and the gaps between them stay GAP. stripAt is the way back.
+  const rowAt = (x: number) => {
+    const L = layoutRef.current;
+    const n = L.starts.length;
+    if (x <= 0) return L.rowStarts[0] + x * L.shrink;
+    for (let k = 0; k < n; k++) {
+      if (x > L.starts[k] + L.lengths[k]) continue;
+      return x >= L.starts[k] ? L.rowStarts[k] + (x - L.starts[k]) * L.shrink : L.rowStarts[k] - (L.starts[k] - x);
+    }
+    return L.rowStarts[n - 1] + (x - L.starts[n - 1]) * L.shrink;
+  };
+  const stripAt = (r: number) => {
+    const L = layoutRef.current;
+    const n = L.starts.length;
+    if (r <= L.rowStarts[0]) return (r - L.rowStarts[0]) / L.shrink;
+    for (let k = 0; k < n; k++) {
+      if (r > L.rowStarts[k] + L.lengths[k] * L.shrink) continue;
+      return r >= L.rowStarts[k] ? L.starts[k] + (r - L.rowStarts[k]) / L.shrink : L.starts[k] - (L.rowStarts[k] - r);
+    }
+    return L.starts[n - 1] + (r - L.rowStarts[n - 1]) / L.shrink;
+  };
+
+  // The strip at e between scrolling (1) and all of it (0), scrolled to S, as
+  // the arrival's zoom places it, with the mask over the part that's on screen
+  // at e = 1: the whole window then, nothing to see, and as it zooms out the
+  // window closes onto that part of the row while the rest dims.
+  const pose = (e: number, S: number) => {
+    const L = layoutRef.current;
+    const at = (v: number) => (L.vertical ? `translate(0, ${v}px)` : `translate(${v}px, 0)`);
+    const scale = L.shrink + (1 - L.shrink) * e;
+    const slots = Array.from(rowRef.current?.children ?? []) as HTMLElement[];
+    slots.forEach((el, k) => {
+      el.style.transform = `${at(L.rowStarts[k] + (L.starts[k] - L.rowStarts[k]) * e)} scale(${scale})`;
+    });
+    if (rowRef.current)
+      rowRef.current.style.transform = L.vertical ? `translate3d(0, ${-S * e}px, 0)` : `translate3d(${-S * e}px, 0, 0)`;
+    const mask = maskRef.current;
+    if (!mask) return;
+    const from = rowAt(S) * (1 - e);
+    const to = rowAt(S + L.mainLen) * (1 - e) + L.mainLen * e;
+    const thick = L.stripSize * scale + 2 * MASK_PAD_PX * (1 - e);
+    const across = (L.crossLen - thick) / 2;
+    mask.style.left = `${L.vertical ? across : from}px`;
+    mask.style.top = `${L.vertical ? from : across}px`;
+    mask.style.width = `${L.vertical ? thick : to - from}px`;
+    mask.style.height = `${L.vertical ? to - from : thick}px`;
+    mask.style.opacity = String(1 - e);
+  };
+
+  // Runs e to `to` on the curve every row move uses, from wherever it is.
+  const zoomOverview = (to: number, done?: () => void) => {
+    const o = ovRef.current;
+    cancelAnimationFrame(o.raf);
+    const from = o.e;
+    const ms = OVERVIEW_MS * Math.abs(to - from);
+    let t0 = 0;
+    const frame = (now: number) => {
+      if (!t0) t0 = now;
+      const p = ms > 0 ? Math.min(1, (now - t0) / ms) : 1;
+      o.e = from + (to - from) * zoomEase(p);
+      pose(o.e, o.S);
+      if (p < 1) o.raf = requestAnimationFrame(frame);
+      else {
+        o.raf = 0;
+        done?.();
+      }
+    };
+    o.raf = requestAnimationFrame(frame);
+  };
+
+  // Along the strip, where the hand is: one finger or the mouse, or the middle of two.
+  const handAlong = () => {
+    const ps = [...pointersRef.current.values()];
+    if (!ps.length) return ovRef.current.anchor;
+    return ps.reduce((sum, p) => sum + (layoutRef.current.vertical ? p.y : p.x), 0) / ps.length;
+  };
+  const pinchSpan = () => {
+    const [a, b] = [...pointersRef.current.values()];
+    return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
+  };
+  const clearHold = () => {
+    if (holdRef.current) clearTimeout(holdRef.current.timer);
+    holdRef.current = null;
+  };
+
+  const openOverview = () => {
+    const o = ovRef.current;
+    if (o.on || phase !== "strip" || busy) return;
+    clearHold();
+    pinchRef.current = null;
+    stopScroll();
+    dragRef.current = null;
+    pressRef.current = null;
+    const S = scrollRef.current.pos;
+    Object.assign(o, { on: true, closing: false, e: 1, S, S0: S, M: rowAt(S), anchor: handAlong() });
+    setOverview(true);
+    setDragging(true);
+    zoomOverview(0);
+  };
+
+  // The mask goes as far along the row as the hand does, and the counter follows it.
+  const moveOverview = () => {
+    const o = ovRef.current;
+    if (!o.on || o.closing) return;
+    const L = layoutRef.current;
+    const at = handAlong();
+    o.M = clamp(o.M + (at - o.anchor), rowAt(0), rowAt(L.maxScroll));
+    o.anchor = at;
+    o.S = clamp(stripAt(o.M), 0, L.maxScroll);
+    if (!o.raf) pose(o.e, o.S);
+    const k = imageAt(o.S);
+    if (k !== currentRef.current) {
+      currentRef.current = k;
+      setCurrent(k);
+    }
+  };
+
+  // Letting go zooms back in to the mask's part of the strip (or, on Escape,
+  // to where it was), and hands the slots back as React has them.
+  const closeOverview = (back = false) => {
+    const o = ovRef.current;
+    if (!o.on || o.closing) return;
+    o.closing = true;
+    if (back) o.S = o.S0;
+    const finish = () => {
+      const L = layoutRef.current;
+      const at = (v: number) => (L.vertical ? `translate(0, ${v}px)` : `translate(${v}px, 0)`);
+      const slots = Array.from(rowRef.current?.children ?? []) as HTMLElement[];
+      slots.forEach((el, k) => {
+        el.style.transform = `${at(L.starts[k])} scale(1)`;
+      });
+      if (maskRef.current) maskRef.current.style.opacity = "0";
+      Object.assign(o, { on: false, closing: false, e: 1 });
+      scrollRef.current.target = o.S;
+      applyScroll(o.S, true);
+      setOverview(false);
+      setDragging(false);
+    };
+    zoomOverview(1, finish);
+  };
+
   // A resize can shorten the strip; keep the scroll inside it. Turning the
   // screen mid-strip lays it out the other way round: it carries on from the
   // image you were on, centred in the window, so it stays the current one
@@ -344,6 +522,20 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     const turned = wasVertical.current !== vertical;
     wasVertical.current = vertical;
     if (phase !== "strip") return;
+    // Turned or resized while showing all of it: back to the strip where it was.
+    const o = ovRef.current;
+    if (o.on) {
+      cancelAnimationFrame(o.raf);
+      o.raf = 0;
+      o.S = Math.min(o.S0, maxScroll);
+      for (const [k, el] of (Array.from(rowRef.current?.children ?? []) as HTMLElement[]).entries())
+        el.style.transform = `${along2d(starts[k])} scale(1)`;
+      if (maskRef.current) maskRef.current.style.opacity = "0";
+      Object.assign(o, { on: false, closing: false, e: 1 });
+      pointersRef.current.clear();
+      setOverview(false);
+      setDragging(false);
+    }
     const s = scrollRef.current;
     if (turned) {
       stopScroll();
@@ -731,6 +923,11 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Showing all of the strip, Escape goes back to where it was.
+      if (ovRef.current.on) {
+        if (e.key === "Escape") closeOverview(true);
+        return;
+      }
       // Escape is a bail-out, so it stays live even mid-move — the choreographed
       // exit needs a settled strip to work from, so interrupt with a plain fade.
       if (e.key === "Escape") (busy ? fadeClose : runExit)();
@@ -750,7 +947,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
       // Nothing behind the page should scroll, and a sideways trackpad swipe
       // must not turn into the browser's back gesture.
       e.preventDefault();
-      if (phase !== "strip" || busy) return;
+      if (phase !== "strip" || busy || ovRef.current.on) return;
       // Either axis moves the strip, so a mouse wheel works as well as a trackpad.
       const raw = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
       const px = e.deltaMode === 1 ? raw * 16 : e.deltaMode === 2 ? raw * mainLen : raw;
@@ -767,17 +964,50 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   const onPointerDown = (e: React.PointerEvent) => {
     if (phase !== "strip" || busy || (e.pointerType === "mouse" && e.button !== 0)) return;
     if ((e.target as HTMLElement).closest("button, [data-vui]")) return;
-    const slot = (e.target as HTMLElement).closest<HTMLElement>("[data-slot]");
-    pressRef.current = { k: slot ? Number(slot.dataset.slot) : -1, x: e.clientX, y: e.clientY };
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    // Another finger on all of the strip: the mask carries on from where the hand is now.
+    if (ovRef.current.on) {
+      ovRef.current.anchor = handAlong();
+      return;
+    }
+    // A second finger: the strip stops, and pinching in shows all of it.
+    if (pointersRef.current.size === 2) {
+      clearHold();
+      dragRef.current = null;
+      pressRef.current = null;
+      pinchRef.current = { d0: pinchSpan() };
+      return;
+    }
+    if (pointersRef.current.size > 2) return;
+    const slot = (e.target as HTMLElement).closest<HTMLElement>("[data-slot]");
+    pressRef.current = { k: slot ? Number(slot.dataset.slot) : -1, x: e.clientX, y: e.clientY };
     stopScroll();
     const pos = scrollRef.current.pos;
     const at = alongPointer(e);
     dragRef.current = { id: e.pointerId, x: at, from: pos, lastX: at, lastT: e.timeStamp, v: 0 };
     setDragging(true);
+    // Held still, it shows all of the strip.
+    clearHold();
+    holdRef.current = { id: e.pointerId, x: e.clientX, y: e.clientY, timer: window.setTimeout(openOverview, HOLD_MS) };
   };
   const onPointerMove = (e: React.PointerEvent) => {
+    const hand = pointersRef.current.get(e.pointerId);
+    if (hand) {
+      hand.x = e.clientX;
+      hand.y = e.clientY;
+    }
+    if (ovRef.current.on) {
+      moveOverview();
+      return;
+    }
+    if (pinchRef.current) {
+      if (pointersRef.current.size >= 2 && pinchSpan() < pinchRef.current.d0 * PINCH_IN) openOverview();
+      return;
+    }
+    const h = holdRef.current;
+    if (h && h.id === e.pointerId && Math.hypot(e.clientX - h.x, e.clientY - h.y) > HOLD_SLOP_PX) clearHold();
     const d = dragRef.current;
     if (!d || d.id !== e.pointerId) return;
     const at = alongPointer(e);
@@ -790,8 +1020,20 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     applyScroll(pos);
   };
   const onPointerUp = (e: React.PointerEvent) => {
+    pointersRef.current.delete(e.pointerId);
+    if (holdRef.current?.id === e.pointerId) clearHold();
+    // Letting go of all of the strip zooms back in where the mask is.
+    if (ovRef.current.on) {
+      if (pointersRef.current.size === 0) closeOverview();
+      else ovRef.current.anchor = handAlong();
+      return;
+    }
+    if (pinchRef.current && pointersRef.current.size < 2) pinchRef.current = null;
     const d = dragRef.current;
-    if (!d || d.id !== e.pointerId) return;
+    if (!d || d.id !== e.pointerId) {
+      if (!pointersRef.current.size) setDragging(false);
+      return;
+    }
     dragRef.current = null;
     setDragging(false);
     const v = e.timeStamp - d.lastT > FLING_STALE_MS ? 0 : d.v;
@@ -872,6 +1114,8 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
           </div>
         ))}
       </div>
+
+      <div className={styles.mask} ref={maskRef} aria-hidden="true" />
     </div>
   );
 }

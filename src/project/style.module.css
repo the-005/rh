@@ -11,6 +11,9 @@
   cursor: grab;
   /* Drags and touch move the strip, never the page or the browser's history. */
   touch-action: none;
+  /* Holding the strip shows all of it: no iPhone menu for the image under the finger. */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
 }
 
 .dragging {
@@ -91,6 +94,21 @@
   /* Each image is masked to its own frame, so it rises into the row from its
      bottom edge instead of showing below it. */
   overflow: hidden;
+}
+
+/* Holding the strip (or pinching it) shows all of it, as it arrived: this is
+   the part that was on screen, the rest dimmed toward the page's ground by its
+   shadow. Placed and faded from script (pose in index.tsx). */
+.mask {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  box-shadow: 0 0 0 200vmax color-mix(in srgb, var(--site-bg, #ffffff) 75%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 10;
 }
 
 /* A window taller than it's wide: the strip on its side, a column centred
