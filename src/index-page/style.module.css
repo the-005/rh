@@ -434,6 +434,34 @@
   }
 }
 
+/* Phones: two columns, the name and the year, each on one line, the name cut
+   short with an ellipsis rather than wrapping (the owner, 7 Nov: "stick close
+   to the desktop experience. It should be one line but maybe we can cut down
+   the columns from 4 to 2 for now. Let's keep the title and the year"). The
+   year sits against the right edge. */
+@media screen and (max-width: 37.5em) {
+  .row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 1.5rem;
+  }
+
+  .title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .kind,
+  .credits {
+    display: none;
+  }
+
+  .year {
+    grid-column: 2;
+    text-align: right;
+  }
+}
+
 /* Fixed and centred on the screen, so it holds its place while the list scrolls
    under it. Layered between the rows: above every row but the one you're on.
    A one-cell grid, so the crossfade's layers stack centred on each other. */
