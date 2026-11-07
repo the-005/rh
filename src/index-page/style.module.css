@@ -538,3 +538,91 @@
     display: none;
   }
 }
+
+/* --- the phone's index (PhoneIndex in index.tsx) ----------------------------
+   Direction C of the Index Layouts canvas: a tapped row opens in place and
+   plays. The list starts under the nav rather than centred, so a row opening
+   doesn't shift the rows around it. */
+.phoneList {
+  padding: 6.5rem 0 5rem;
+}
+
+/* The open row's line along its top, with the playhead on it, as a played row
+   has on a laptop. */
+.phoneList .row[data-open] {
+  border-top-color: color-mix(in srgb, var(--ink, #eeeeee) calc(var(--playing-opacity) * 100%), transparent);
+}
+
+.phoneList .playhead {
+  display: block;
+}
+
+/* Folding open and shut: the grid track eases between nothing and the row's
+   picture and details (FOLD_MS in index.tsx). */
+.phoneOpen {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s cubic-bezier(0.42, 0, 0.58, 1);
+}
+
+.phoneOpen[data-open] {
+  grid-template-rows: 1fr;
+}
+
+.phoneFold {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* The picture: the screen's full width, as tall as the project's tallest shape
+   needs (at most 62% of the screen), so it doesn't change height as its images
+   change. Each image fits inside, never cropped. Up and down still scrolls the
+   list; a sideways swipe is the picture's. */
+.phonePicture {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: min(calc(100vw / var(--min-r, 0.8)), 62vh);
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  touch-action: pan-y;
+}
+
+.phonePicture .previewImg {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  object-fit: contain;
+}
+
+/* The kind, then one collaborator a line: the role at the left in the kind's
+   grey, the name at the right, as a played row's credits are on a laptop. Drawn
+   light and blended like the rows, so they read in dark mode too. */
+.phoneDetails {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 1.5rem;
+  padding: 14px calc(var(--page-padding, 1.5rem) + 12px) 26px;
+  font-size: var(--font-size);
+  color: var(--ink, #eeeeee);
+  mix-blend-mode: difference;
+}
+
+.phoneKind {
+  grid-column: 1 / -1;
+  margin-bottom: 8px;
+  color: #666666;
+}
+
+.phoneRole {
+  color: #666666;
+}
+
+.phoneName {
+  text-align: right;
+}
