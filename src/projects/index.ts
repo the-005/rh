@@ -136,6 +136,9 @@ export const ASPECTS: ReadonlyMap<string, number> = new Map(ALL_MEDIA.map((item)
 /** Each image's 1500px copy, keyed by its full-size url. */
 export const MID_COPIES: ReadonlyMap<string, string> = new Map(ALL_MEDIA.map((item) => [item.url, item.midUrl]));
 
+/** Each image's 1000px copy (the canvas's), keyed by its full-size url. */
+export const CANVAS_COPIES: ReadonlyMap<string, string> = new Map(ALL_MEDIA.map((item) => [item.url, item.canvasUrl]));
+
 /** Each video's looping preview, keyed by its still's full-size url (the
  *  index plays it where it would show the still). */
 export const PREVIEWS: ReadonlyMap<string, string> = new Map(

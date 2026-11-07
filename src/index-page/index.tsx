@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ASPECTS, type Credit, MID_COPIES, PREVIEWS, PROJECTS, type ProjectEntry } from "~/src/projects";
+import { ASPECTS, CANVAS_COPIES, type Credit, MID_COPIES, PREVIEWS, PROJECTS, type ProjectEntry } from "~/src/projects";
 import styles from "./style.module.css";
 
 /**
@@ -75,15 +75,11 @@ const NO_SPLIT = "(hover: none), (max-width: 53em)";
 /** Where the index is the phone's (PhoneIndex): the width at which the rows
  *  become one line of name and year (style.module.css). */
 const PHONE_INDEX = "(max-width: 37.5em)";
-/** How far a finger crosses a phone's picture before it counts as a swipe to
- *  the next or the previous image. */
-const SWIPE_PX = 40;
 /** How long a phone's row takes to fold open or shut (style.module.css, .phoneOpen). */
 const FOLD_MS = 300;
-/** Where a phone's opened row comes to rest: its line this far from the top of
- *  the window, where the row above it still reads clear of the nav (at 48px its
- *  name ran into the nav's). */
-const OPEN_TOP_PX = 80;
+/** How tall a phone's strip of images is (style.module.css, .phoneStrip): the
+ *  height the canvas drew it at. Each image's file is picked for it. */
+const STRIP_PX = 220;
 
 /**
  * `?rows=40` repeats the projects to that many rows, to see how the index
@@ -769,177 +765,77 @@ function DesktopIndex({ leaving = false }: { leaving?: boolean }) {
 }
 
 /**
- * The index on a phone (the owner, 7 Nov: direction C of the Index Layouts
- * canvas, built straight on the site, with the laptop's slideshow, which he
- * counts as core to the page). The same list, one line a project: its name and
- * year. A tap opens the row in place and plays it, as a click does on a laptop:
- * its images crossfade in a picture under its line, PLAY_MS each, the playhead
- * running along the line, and its kind and collaborators sit under the picture.
- * A tap on the picture pauses it and carries on; a swipe across it goes to the
- * next or the previous image. At the end of a project the next row opens and
- * plays and the list brings it up, as the laptop's reel does; the last project
- * stops at its end. A tap on the open row's line closes it. The laptop's
- * version needs a pointer (hover, scrubbing by cursor x, a centre line held
- * while the hand is still), so phones don't use it.
+ * The index on a phone: direction C of the Index Layouts canvas (the owner,
+ * 7 Nov). The same list, one line a project: its name and year. A tap opens the
+ * row in place: its kind and collaborators under its name, then a strip of all
+ * its images, each at its own shape, swiped sideways by hand. Nothing moves by
+ * itself (the owner: "let's not have it auto scroll"): no slideshow, no carrying
+ * on to the next project, no scrolling the page to the row. While a row above
+ * folds shut, the one just tapped keeps its place on screen, as far as the page
+ * can scroll back to hold it there. The playhead on the open row's line follows
+ * the swipe, from the name's left edge at the strip's start to the year's right
+ * edge at its end. A tap on the open row's line closes it. The laptop's version
+ * needs a pointer (hover, scrubbing by cursor x, a centre line held while the
+ * hand is still), so phones don't use it.
  */
 function PhoneIndex({ leaving = false }: { leaving?: boolean }) {
   const [projects] = React.useState(listedProjects);
   const [open, setOpen] = React.useState<number | null>(null);
-  /** The row folding shut as another opens or it's closed, and the image it was on. */
-  const [closing, setClosing] = React.useState<{ row: number; image: number } | null>(null);
-  const [shown, setShown] = React.useState(0);
-  const [playing, setPlaying] = React.useState(false);
-  /** The slideshow moved the picture on by itself: the long crossfade. A tap or a swipe gets the quick one. */
-  const [slow, setSlow] = React.useState(false);
-  const [spot, setSpot] = React.useState<Spot>({ pos: 0, transition: "none" });
+  /** The row folding shut as another opens or it's closed, drawn until it has folded. */
+  const [closing, setClosing] = React.useState<number | null>(null);
   const mainRef = React.useRef<HTMLElement>(null);
   const rowsRef = React.useRef<(HTMLLIElement | null)[]>([]);
-  // What the timers act on, kept current between renders.
-  const live = React.useRef<{ open: number | null; shown: number; playing: boolean }>({
-    open: null,
-    shown: 0,
-    playing: false,
-  });
-  // How long the image on show has played: `before` until this run, which began at `since`.
-  const clock = React.useRef({ since: 0, before: 0 });
-  const timer = React.useRef(0);
+  const stripsRef = React.useRef<(HTMLDivElement | null)[]>([]);
+  const playheadRef = React.useRef<HTMLSpanElement | null>(null);
   const folding = React.useRef(0);
-  const chase = React.useRef(0);
-  const spotRun = React.useRef(0);
-  const press = React.useRef<{ x: number; y: number } | null>(null);
-  const swipedAt = React.useRef(0);
+  const hold = React.useRef(0);
 
-  // The playhead: at `from` at once, then, given a time, on to `to` at a constant speed.
-  const runSpot = (from: number, to: number, ms: number) => {
-    const run = ++spotRun.current;
-    setSpot({ pos: from, transition: "none" });
-    if (ms <= 0) return;
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        if (run === spotRun.current) setSpot({ pos: to, transition: `${Math.round(ms)}ms linear` });
-      })
-    );
-  };
-
-  // Stopped where it is, the playhead a square at `pos`.
-  const stop = (pos: number) => {
-    window.clearTimeout(timer.current);
-    spotRun.current += 1;
-    live.current.playing = false;
-    setPlaying(false);
-    setSpot({ pos, transition: "none" });
-  };
-
-  // Brings a row's line up under the nav, as the laptop's list brings the
-  // playing row to its centre line. Followed every frame, since a row folding
-  // shut above it moves it as it folds; a touch or a wheel lets go of it.
-  const bringUp = (row: number) => {
+  // Holds row `row` where it is on screen while a row above it folds shut, so
+  // the page doesn't seem to scroll: only the rows opening and closing move.
+  // Near the top there's less to scroll back, and the row rises by the rest. A
+  // touch or a wheel lets go.
+  const holdStill = (row: number) => {
     const main = mainRef.current;
-    if (!main) return;
-    cancelAnimationFrame(chase.current);
+    const el = rowsRef.current[row];
+    if (!main || !el) return;
+    cancelAnimationFrame(hold.current);
+    const top = el.getBoundingClientRect().top;
     const start = performance.now();
     const frame = () => {
-      const el = rowsRef.current[row];
-      if (!el) return;
-      const target = main.scrollTop + el.getBoundingClientRect().top - main.getBoundingClientRect().top - OPEN_TOP_PX;
-      const goal = Math.max(0, Math.min(target, main.scrollHeight - main.clientHeight));
-      main.scrollTop += (goal - main.scrollTop) * 0.18;
-      // Not done while the rows are still folding: the page can only scroll
-      // as far as the open row has grown.
-      const elapsed = performance.now() - start;
-      if (elapsed < 1200 && (elapsed < FOLD_MS + 100 || Math.abs(goal - main.scrollTop) > 0.5)) {
-        chase.current = requestAnimationFrame(frame);
-      }
+      main.scrollTop += el.getBoundingClientRect().top - top;
+      if (performance.now() - start < FOLD_MS + 100) hold.current = requestAnimationFrame(frame);
     };
-    chase.current = requestAnimationFrame(frame);
+    hold.current = requestAnimationFrame(frame);
   };
 
-  // Folds a row shut, keeping its picture until it has folded.
+  // Folds a row shut, keeping it drawn until it has folded.
   const foldAway = (row: number) => {
-    setClosing({ row, image: live.current.shown });
+    setClosing(row);
     window.clearTimeout(folding.current);
     folding.current = window.setTimeout(() => setClosing(null), FOLD_MS + 50);
   };
 
-  // Plays image `image` of row `row`, `elapsed` into its stay; then the next
-  // image, the next project at the end of this one, or stops at the very end.
-  const play = (row: number, image: number, elapsed = 0, auto = false) => {
-    window.clearTimeout(timer.current);
-    const project = projects[row];
-    const left = PLAY_MS - elapsed;
-    clock.current = { since: performance.now(), before: elapsed };
-    live.current = { open: row, shown: image, playing: true };
-    setShown(image);
-    setPlaying(true);
-    setSlow(auto);
-    runSpot(image + elapsed / PLAY_MS, image + 1, left);
-    // The next picture, fetched while this one shows.
-    const next = project.images[image + 1] ?? projects[row + 1]?.images[0];
-    if (next) new Image().src = fileFor(next);
-    timer.current = window.setTimeout(() => {
-      if (image + 1 < project.images.length) play(row, image + 1, 0, true);
-      else if (row + 1 < projects.length) openRow(row + 1);
-      else stop(project.images.length);
-    }, left);
-  };
-
   const openRow = (row: number) => {
-    const was = live.current.open;
-    if (was !== null && was !== row) foldAway(was);
+    if ((open !== null && open < row) || (closing !== null && closing < row)) holdStill(row);
+    if (open !== null) foldAway(open);
     setOpen(row);
-    play(row, 0);
-    bringUp(row);
   };
 
   const closeRow = () => {
-    const was = live.current.open;
-    window.clearTimeout(timer.current);
-    if (was !== null) foldAway(was);
-    live.current = { open: null, shown: 0, playing: false };
+    if (open !== null) foldAway(open);
     setOpen(null);
-    setPlaying(false);
-  };
-
-  const pause = () => {
-    const { since, before } = clock.current;
-    const elapsed = Math.min(PLAY_MS, before + performance.now() - since);
-    clock.current = { since: 0, before: elapsed };
-    stop(live.current.shown + elapsed / PLAY_MS);
-  };
-
-  const resume = () => {
-    const { open: row, shown: image } = live.current;
-    if (row !== null) play(row, image, clock.current.before);
-  };
-
-  // A swipe: the next or the previous image, playing on if it was playing.
-  const step = (by: number) => {
-    const { open: row, shown: image, playing: on } = live.current;
-    if (row === null) return;
-    const to = Math.max(0, Math.min(image + by, projects[row].images.length - 1));
-    if (to === image) return;
-    if (on) {
-      play(row, to);
-      return;
-    }
-    clock.current = { since: 0, before: 0 };
-    live.current.shown = to;
-    setShown(to);
-    setSlow(false);
-    stop(to);
   };
 
   React.useEffect(() => {
     const main = mainRef.current;
-    const letGo = () => cancelAnimationFrame(chase.current);
+    const letGo = () => cancelAnimationFrame(hold.current);
     main?.addEventListener("touchstart", letGo, { passive: true });
     main?.addEventListener("wheel", letGo, { passive: true });
     return () => {
       main?.removeEventListener("touchstart", letGo);
       main?.removeEventListener("wheel", letGo);
-      window.clearTimeout(timer.current);
       window.clearTimeout(folding.current);
-      cancelAnimationFrame(chase.current);
+      cancelAnimationFrame(hold.current);
     };
   }, []);
 
@@ -952,7 +848,6 @@ function PhoneIndex({ leaving = false }: { leaving?: boolean }) {
       <ul className={`${styles.list} ${styles.phoneList}`}>
         {projects.map((project, row) => {
           const isOpen = open === row;
-          const image = isOpen ? shown : closing?.row === row ? closing.image : null;
           return (
             <li
               key={`${project.id}-${row}`}
@@ -967,60 +862,27 @@ function PhoneIndex({ leaving = false }: { leaving?: boolean }) {
                 aria-expanded={isOpen}
                 data-open={isOpen ? "" : undefined}
                 data-quiet={isOpen ? "" : undefined}
-                onClick={() => (live.current.open === row ? closeRow() : openRow(row))}
+                onClick={() => (isOpen ? closeRow() : openRow(row))}
               >
                 <span className={styles.title}>{project.title}</span>
                 <span className={`${styles.meta} ${styles.year}`}>{project.year}</span>
-                {isOpen && <Playhead count={project.images.length} spot={spot} playing={playing} />}
+                {isOpen && (
+                  <span
+                    ref={(el) => {
+                      playheadRef.current = el;
+                      // A row opened again while it was folding shut keeps its strip as it was swiped.
+                      const strip = stripsRef.current[row];
+                      if (el && strip) el.style.setProperty("--along", String(alongOf(strip)));
+                    }}
+                    className={`${styles.playhead} ${styles.stop}`}
+                    aria-hidden="true"
+                  />
+                )}
               </button>
               <div className={styles.phoneOpen} data-open={isOpen ? "" : undefined}>
                 <div className={styles.phoneFold}>
-                  {image !== null && (
+                  {(isOpen || closing === row) && (
                     <>
-                      <button
-                        type="button"
-                        className={`${styles.phonePicture} ${isOpen && playing && slow ? styles.previewPlaying : ""}`}
-                        style={
-                          {
-                            "--min-r": Math.min(...project.images.map((url) => ASPECTS.get(url) ?? 0.8)),
-                          } as React.CSSProperties
-                        }
-                        aria-label={playing ? "Pause" : "Play"}
-                        tabIndex={isOpen ? 0 : -1}
-                        onPointerDown={(e) => {
-                          press.current = { x: e.clientX, y: e.clientY };
-                        }}
-                        onPointerUp={(e) => {
-                          const from = press.current;
-                          press.current = null;
-                          if (!from) return;
-                          const dx = e.clientX - from.x;
-                          const dy = e.clientY - from.y;
-                          if (Math.abs(dx) > SWIPE_PX && Math.abs(dx) > Math.abs(dy) * 1.5) {
-                            swipedAt.current = performance.now();
-                            step(dx < 0 ? 1 : -1);
-                          }
-                        }}
-                        onPointerCancel={() => {
-                          press.current = null;
-                        }}
-                        onClick={() => {
-                          if (performance.now() - swipedAt.current < 400) return;
-                          if (live.current.playing) pause();
-                          else resume();
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-                            e.preventDefault();
-                            step(e.key === "ArrowRight" ? 1 : -1);
-                          }
-                        }}
-                      >
-                        <Crossfade
-                          src={project.images[Math.min(image, project.images.length - 1)]}
-                          playing={isOpen && playing && slow}
-                        />
-                      </button>
                       <div className={styles.phoneDetails}>
                         {project.kind && <span className={styles.phoneKind}>{project.kind}</span>}
                         {project.credits.map((credit, i) => (
@@ -1029,6 +891,21 @@ function PhoneIndex({ leaving = false }: { leaving?: boolean }) {
                             <span className={styles.phoneRole}>{credit.role}</span>
                             <span className={styles.phoneName}>{credit.name}</span>
                           </React.Fragment>
+                        ))}
+                      </div>
+                      <div
+                        ref={(el) => {
+                          stripsRef.current[row] = el;
+                        }}
+                        className={styles.phoneStrip}
+                        onScroll={
+                          isOpen
+                            ? (e) => playheadRef.current?.style.setProperty("--along", String(alongOf(e.currentTarget)))
+                            : undefined
+                        }
+                      >
+                        {project.images.map((url, i) => (
+                          <StripImage key={url} url={url} first={i < 4} />
                         ))}
                       </div>
                     </>
@@ -1040,6 +917,73 @@ function PhoneIndex({ leaving = false }: { leaving?: boolean }) {
         })}
       </ul>
     </main>
+  );
+}
+
+/** How far a strip has been swiped, from 0 at its start to 1 at its end. */
+function alongOf(strip: HTMLElement) {
+  const room = strip.scrollWidth - strip.clientWidth;
+  return room > 0 ? Math.min(1, Math.max(0, strip.scrollLeft / room)) : 0;
+}
+
+/**
+ * One image in a phone's strip, at the strip's height and its own shape. Its
+ * file is the 1000px canvas copy, or the 1500px one where the strip shows it
+ * wider than the small one has pixels (a wide landscape on a 3x screen): the
+ * browser picks by the image's width on screen. The first few, which show as
+ * the row opens, load first. A video shows its still, and its looping preview
+ * while it's on screen.
+ */
+function StripImage({ url, first }: { url: string; first: boolean }) {
+  const r = ASPECTS.get(url) ?? 0.8;
+  const small = `/${CANVAS_COPIES.get(url) ?? url}`;
+  const style = { "--r": r } as React.CSSProperties;
+  const preview = PREVIEWS.get(url);
+  if (preview) return <StripVideo src={`/${preview}`} poster={small} style={style} />;
+  // A copy's width in pixels: its long side, or less for an upright image.
+  const across = (long: number) => Math.round(r >= 1 ? long : long * r);
+  return (
+    <img
+      className={styles.phoneStripItem}
+      style={style}
+      src={small}
+      srcSet={`${small} ${across(1000)}w, /${MID_COPIES.get(url) ?? url} ${across(1500)}w`}
+      sizes={`${Math.round(STRIP_PX * r)}px`}
+      alt=""
+      decoding="async"
+      fetchPriority={first ? "auto" : "low"}
+    />
+  );
+}
+
+/** A video in a phone's strip: its still, and its preview playing only while it's on screen. */
+function StripVideo({ src, poster, style }: { src: string; poster: string; style: React.CSSProperties }) {
+  const ref = React.useRef<HTMLVideoElement>(null);
+  React.useEffect(() => {
+    const video = ref.current;
+    if (!video) return;
+    const seen = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) video.play().catch(() => {});
+        else video.pause();
+      },
+      { threshold: 0.5 }
+    );
+    seen.observe(video);
+    return () => seen.disconnect();
+  }, []);
+  return (
+    <video
+      ref={ref}
+      className={styles.phoneStripItem}
+      style={style}
+      src={src}
+      poster={poster}
+      muted
+      loop
+      playsInline
+      preload="none"
+    />
   );
 }
 

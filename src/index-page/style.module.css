@@ -540,10 +540,13 @@
 }
 
 /* --- the phone's index (PhoneIndex in index.tsx) ----------------------------
-   Direction C of the Index Layouts canvas: a tapped row opens in place and
-   plays. The list starts under the nav rather than centred, so a row opening
-   doesn't shift the rows around it. */
+   Direction C of the Index Layouts canvas: a tapped row opens in place, its
+   kind and collaborators under its name and a strip of its images below,
+   swiped by hand. The list starts under the nav rather than centred, so a row
+   opening doesn't shift the rows around it. */
 .phoneList {
+  /* The rows' text inset, which the details, the strip and the playhead keep to. */
+  --inset: calc(var(--page-padding, 1.5rem) + 12px);
   padding: 6.5rem 0 5rem;
 }
 
@@ -553,51 +556,34 @@
   border-top-color: color-mix(in srgb, var(--ink, #eeeeee) calc(var(--playing-opacity) * 100%), transparent);
 }
 
+/* The playhead follows the strip: at the name's left edge while the strip is
+   at its start, at the year's right edge once it's swiped to its end (--along,
+   0 to 1, set from script as it scrolls). 8px is the square's width. */
 .phoneList .playhead {
   display: block;
+  left: calc(var(--inset) + var(--along, 0) * (100% - 2 * var(--inset) - 8px));
+  transform: none;
 }
 
 /* Folding open and shut: the grid track eases between nothing and the row's
-   picture and details (FOLD_MS in index.tsx). */
+   details and strip (FOLD_MS in index.tsx). Open, it also rises into the row's
+   bottom padding, so the kind sits straight under the name, as on the canvas. */
 .phoneOpen {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows 0.3s cubic-bezier(0.42, 0, 0.58, 1);
+  transition:
+    grid-template-rows 0.3s cubic-bezier(0.42, 0, 0.58, 1),
+    margin-top 0.3s cubic-bezier(0.42, 0, 0.58, 1);
 }
 
 .phoneOpen[data-open] {
   grid-template-rows: 1fr;
+  margin-top: -20px;
 }
 
 .phoneFold {
   min-height: 0;
   overflow: hidden;
-}
-
-/* The picture: the screen's full width, as tall as the project's tallest shape
-   needs (at most 62% of the screen), so it doesn't change height as its images
-   change. Each image fits inside, never cropped. Up and down still scrolls the
-   list; a sideways swipe is the picture's. */
-.phonePicture {
-  appearance: none;
-  display: grid;
-  place-items: center;
-  width: 100%;
-  height: min(calc(100vw / var(--min-r, 0.8)), 62vh);
-  margin: 0;
-  padding: 0;
-  border: none;
-  background: none;
-  cursor: pointer;
-  touch-action: pan-y;
-}
-
-.phonePicture .previewImg {
-  grid-area: 1 / 1;
-  width: 100%;
-  height: 100%;
-  aspect-ratio: auto;
-  object-fit: contain;
 }
 
 /* The kind, then one collaborator a line: the role at the left in the kind's
@@ -607,7 +593,7 @@
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   column-gap: 1.5rem;
-  padding: 14px calc(var(--page-padding, 1.5rem) + 12px) 26px;
+  padding: 0 var(--inset);
   font-size: var(--font-size);
   color: var(--ink, #eeeeee);
   mix-blend-mode: difference;
@@ -615,7 +601,7 @@
 
 .phoneKind {
   grid-column: 1 / -1;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
   color: #666666;
 }
 
@@ -625,4 +611,35 @@
 
 .phoneName {
   text-align: right;
+}
+
+/* Every image of the project in one row, at one height (STRIP_PX in index.tsx)
+   and each at its own shape, starting and ending at the text's inset. Swiped
+   sideways by hand, with the phone's own momentum; nothing moves it by itself.
+   Up and down still scrolls the list. */
+.phoneStrip {
+  display: flex;
+  gap: 4px;
+  height: 220px;
+  margin: 16px 0 24px;
+  padding: 0 var(--inset);
+  overflow-x: auto;
+  /* Swiping past either end doesn't carry on into the page or a back gesture. */
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.phoneStrip::-webkit-scrollbar {
+  display: none;
+}
+
+/* Sized by its shape (--r, set on each), so the strip is laid out before its
+   images arrive. */
+.phoneStripItem {
+  flex: none;
+  display: block;
+  height: 100%;
+  width: auto;
+  aspect-ratio: var(--r);
+  object-fit: cover;
 }
