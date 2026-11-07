@@ -48,6 +48,7 @@ import {
 import styles from "./style.module.css";
 import { decidePreviews, previewTexture, wantPreview } from "./previews";
 import { getTexture, uploadTextures } from "./texture-manager";
+import { askTilt, readTilt, startTilt } from "./tilt";
 import type { ChunkData, InfiniteCanvasProps, MediaItem, PlaneData } from "./types";
 import { tuning } from "./tuning";
 import {
@@ -945,6 +946,12 @@ function SceneController({
   const isTouchDevice = useIsTouchDevice();
   const [, getKeys] = useKeyboardControls<keyof KeyboardKeys>();
 
+  // On a touch screen the phone's turn leans the camera (tilt.ts): straight
+  // away where no permission is needed, after the first swipe on an iPhone.
+  React.useEffect(() => {
+    if (isTouchDevice) startTilt();
+  }, [isTouchDevice]);
+
   const state = React.useRef<ControllerState>(createInitialState(INITIAL_CAMERA_Z));
   const cameraGridRef = React.useRef<CameraGridState>({
     cx: 0,
@@ -1130,6 +1137,9 @@ function SceneController({
       if (touches.length === 0) {
         s.glide = releaseGlide();
         s.touchSteering = false;
+        // An iPhone asks once for the phone's motion (tilt.ts), at the end of
+        // the first swipe: the prompt needs a touch, and a tap opens a project.
+        if (s.touchAxis) askTilt();
       }
       restartTouch(touches);
       setCursor("grab");
@@ -1199,6 +1209,9 @@ function SceneController({
 
     const zoomFactor = clamp(s.basePos.z / 50, 0.3, 2.0);
     const driftAmount = PARALLAX_AMOUNT * zoomFactor;
+    // What the camera leans toward: the cursor on a laptop, the phone's own
+    // turn on a touch screen (tilt.ts; nothing until it's allowed or moved).
+    const lean = isTouchDevice ? readTilt() : s.mouse;
 
     if (frozen) {
       // Kill all motion the moment a transition starts — the hero plane's
@@ -1227,8 +1240,8 @@ function SceneController({
         // base makes up the difference so the camera still ends on the spot.
         // Unwinding the tilt to land centred left it to catch up after the
         // landing, sliding the gallery and the image off-centre.
-        const tiltX = isTouchDevice ? 0 : s.mouse.x * driftAmount;
-        const tiltY = isTouchDevice ? 0 : s.mouse.y * driftAmount;
+        const tiltX = lean.x * driftAmount;
+        const tiltY = lean.y * driftAmount;
         const camX = lerp(goal.from.x + goal.from.driftX, goal.x, ge);
         const camY = lerp(goal.from.y + goal.from.driftY, goal.y, ge);
         s.drift.x = lerp(goal.from.driftX, tiltX, ge);
@@ -1253,12 +1266,9 @@ function SceneController({
 
     if (s.isDragging || frozen) {
       // Freeze drift during drag and while a transition holds the canvas
-    } else if (isTouchDevice) {
-      s.drift.x = lerp(s.drift.x, 0, driftLerp);
-      s.drift.y = lerp(s.drift.y, 0, driftLerp);
     } else {
-      s.drift.x = lerp(s.drift.x, s.mouse.x * driftAmount, driftLerp);
-      s.drift.y = lerp(s.drift.y, s.mouse.y * driftAmount, driftLerp);
+      s.drift.x = lerp(s.drift.x, lean.x * driftAmount, driftLerp);
+      s.drift.y = lerp(s.drift.y, lean.y * driftAmount, driftLerp);
     }
 
     s.targetVel.x = clamp(s.targetVel.x, -MAX_VELOCITY, MAX_VELOCITY);
