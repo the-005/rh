@@ -19,24 +19,57 @@ const PHONE_TEXTURE_PX = 512;
 const PHONE =
   (window.matchMedia?.("(pointer: coarse)").matches ?? false) && Math.min(window.screen.width, window.screen.height) < 600;
 
+type Source = HTMLImageElement | HTMLCanvasElement | ImageBitmap;
+
 const textureCache = new Map<string, THREE.Texture>();
 const loadCallbacks = new Map<string, Set<(tex: THREE.Texture) => void>>();
 const loader = new THREE.ImageLoader();
-const ready: { key: string; texture: THREE.Texture; image: HTMLImageElement }[] = [];
+const ready: { key: string; texture: THREE.Texture; image: Source; bitmap?: boolean }[] = [];
 
 const isTextureLoaded = (tex: THREE.Texture) => tex.userData.uploaded === true;
 
-// On a phone, the image redrawn at PHONE_TEXTURE_PX on its long side.
-const forScreen = (image: HTMLImageElement): HTMLImageElement | HTMLCanvasElement => {
-  const scale = PHONE_TEXTURE_PX / Math.max(image.naturalWidth, image.naturalHeight);
-  if (!PHONE || scale >= 1) return image;
+// The size a phone draws an image at: PHONE_TEXTURE_PX on its long side, never enlarged.
+const phoneSize = (item: MediaItem) => {
+  const long = Math.max(item.width, item.height);
+  const scale = Math.min(PHONE_TEXTURE_PX, long) / long;
+  return { width: Math.max(1, Math.round(item.width * scale)), height: Math.max(1, Math.round(item.height * scale)) };
+};
+
+// On a phone, the file is decoded straight to that size off the main thread
+// (createImageBitmap from the downloaded file) and sent to the GPU as it is.
+// Shrinking it in a canvas from the loaded image, as it was, decoded it again
+// on the main thread inside a frame, ~7ms each with the CPU slowed to a
+// phone's, and copying a bitmap into a canvas cost ~9ms more: the dropped
+// frames in the flight into a project (the owner, 7 Nov: "a slight
+// jitteriness during the movement from gallery to project"). A bitmap goes up
+// as stored, top row first, whatever flipY says (browsers differ on that), so
+// it's uploaded unflipped and turned the right way up by the texture's own
+// coordinates (uploadTextures). Checked in Chrome and WebKit (Safari 26.4):
+// the size asked for, the right way up.
+const loadSmall = async (src: string, item: MediaItem): Promise<ImageBitmap> => {
+  const response = await fetch(src);
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const { width, height } = phoneSize(item);
+  return createImageBitmap(await response.blob(), {
+    resizeWidth: width,
+    resizeHeight: height,
+    resizeQuality: "high",
+    colorSpaceConversion: "none",
+  });
+};
+
+// Where createImageBitmap is missing (iPhones before iOS 15): the image
+// shrunk in a canvas as it arrives, on the main thread but outside a frame.
+const shrink = (image: HTMLImageElement, item: MediaItem): Source => {
+  const { width, height } = phoneSize(item);
+  if (width >= image.naturalWidth) return image;
   const canvas = document.createElement("canvas");
-  canvas.width = Math.round(image.naturalWidth * scale);
-  canvas.height = Math.round(image.naturalHeight * scale);
+  canvas.width = width;
+  canvas.height = height;
   const ctx = canvas.getContext("2d");
   if (!ctx) return image;
   ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+  ctx.drawImage(image, 0, 0, width, height);
   return canvas;
 };
 
@@ -66,7 +99,13 @@ export const getTexture = (item: MediaItem, onLoad?: (texture: THREE.Texture) =>
   // The texture exists at once; its image arrives later, as with TextureLoader.
   // Under the intro splash the download waits for the video (src/splash/hold.ts).
   const texture = new THREE.Texture();
-  whenImagesMayLoad(() =>
+  whenImagesMayLoad(() => {
+    if (PHONE && typeof createImageBitmap === "function") {
+      loadSmall(src, item)
+        .then((image) => ready.push({ key, texture, image, bitmap: true }))
+        .catch((err) => console.error("Texture load failed:", key, err));
+      return;
+    }
     loader.load(
       src,
       (image) => {
@@ -75,12 +114,12 @@ export const getTexture = (item: MediaItem, onLoad?: (texture: THREE.Texture) =>
         image
           .decode()
           .catch(() => {})
-          .then(() => ready.push({ key, texture, image }));
+          .then(() => ready.push({ key, texture, image: PHONE ? shrink(image, item) : image }));
       },
       undefined,
       (err) => console.error("Texture load failed:", key, err)
-    )
-  );
+    );
+  });
 
   textureCache.set(key, texture);
   return texture;
@@ -92,8 +131,14 @@ export const getTexture = (item: MediaItem, onLoad?: (texture: THREE.Texture) =>
 export function uploadTextures(renderer: THREE.WebGLRenderer) {
   const start = performance.now();
   for (let first = true; ready.length && (first || performance.now() - start < UPLOAD_BUDGET_MS); first = false) {
-    const { key, texture, image } = ready.shift() as (typeof ready)[number];
-    texture.image = forScreen(image);
+    const { key, texture, image, bitmap } = ready.shift() as (typeof ready)[number];
+    texture.image = image;
+    if (bitmap) {
+      // Uploaded top row first (loadSmall), so read bottom to top.
+      texture.flipY = false;
+      texture.repeat.set(1, -1);
+      texture.offset.set(0, 1);
+    }
     texture.minFilter = THREE.LinearMipmapLinearFilter;
     texture.magFilter = THREE.LinearFilter;
     texture.generateMipmaps = true;
