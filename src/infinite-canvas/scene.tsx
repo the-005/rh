@@ -38,6 +38,7 @@ import {
   TOUCH_GLIDE_MAX_MS,
   TOUCH_GLIDE_MIN_MS,
   TOUCH_GLIDE_REACH_MS,
+  TOUCH_GLIDE_SHED_MS,
   TOUCH_PAN_PER_PX,
   TOUCH_PINCH_PER_PX,
   TOUCH_SMOOTH_MS,
@@ -852,6 +853,10 @@ type Vec3 = { x: number; y: number; z: number };
  *  along a smoothstep, which starts and ends without a jolt (no sudden
  *  slowing as the fingers lift, no sudden stop), and covers half. */
 const glideShare = (u: number) => u - u ** 3 + u ** 4 / 2;
+/** The same for a pan's speed above the wheel's top speed as the fingers
+ *  lift: it starts falling at once and settles gently (a cubic ease-out),
+ *  covering a quarter, so the pan calms within TOUCH_GLIDE_SHED_MS. */
+const shedShare = (u: number) => (1 - (1 - u) ** 4) / 4;
 
 type ControllerState = {
   /** The pointer is over the canvas itself (not the frame, a page or a panel). */
@@ -877,9 +882,10 @@ type ControllerState = {
   touchSamples: (Vec3 & { t: number; dt: number })[];
   lastTouchAt: number;
   /** The glide after the fingers lift: on each axis, the speed it starts at (gallery
-   *  units per millisecond) and how long it takes to come to rest (0: no glide on
-   *  that axis), and how far into it we are, in milliseconds; null when still. */
-  glide: { v: Vec3; ms: Vec3; t: number } | null;
+   *  units per millisecond, at most the wheel's top speed) and how long it takes to
+   *  come to rest (0: no glide on that axis), the speed above that which falls away
+   *  first (a fast pan's), and how far into it we are, in milliseconds; null when still. */
+  glide: { v: Vec3; ms: Vec3; shed: Vec3; t: number } | null;
   lastFrameAt: number;
   /** How long the last frame took, in milliseconds. */
   frameMs: number;
@@ -1039,20 +1045,24 @@ function SceneController({
     // Until 7 Nov the first part was paid out at full speed and the glide only
     // came in after it, so the gallery braked in a few frames and then crept:
     // "move nicely before coming in to a full stop with some drag" (the owner).
-    // Sideways there's no top speed after the lift, as there's none under the
-    // finger: a cap on the glide alone (the wheel's) cut a fast pan to a third
-    // of its speed as the finger lifted.
+    // Sideways the fingers can be far above that top speed: the part above it
+    // falls away first (shedShare, TOUCH_GLIDE_SHED_MS), at once but smoothly.
+    // Cutting the glide to it outright (until 7 Nov) braked a fast pan to a
+    // third of its speed as the finger lifted; carrying it on whole (7 Nov)
+    // flew off.
     const releaseGlide = (): ControllerState["glide"] => {
       const now = performance.now();
       const recent = s.touchSamples.filter((p) => now - p.t <= TOUCH_FLING_WINDOW_MS);
       const last = recent[recent.length - 1];
       const moving = !!last && now - last.t <= TOUCH_FLING_STALE_MS;
       const time = recent.reduce((sum, p) => sum + p.dt, 0);
-      const glide = { v: { x: 0, y: 0, z: 0 }, ms: { x: 0, y: 0, z: 0 }, t: 0 };
+      const glide = { v: { x: 0, y: 0, z: 0 }, ms: { x: 0, y: 0, z: 0 }, shed: { x: 0, y: 0, z: 0 }, t: 0 };
       for (const axis of ["x", "y", "z"] as const) {
-        const speed = s.velocity[axis] / s.frameMs;
+        const moved = s.velocity[axis] / s.frameMs;
         // Still on this axis: what the fingers moved reaches it the usual way.
-        if (Math.abs(speed) < 0.0001) continue;
+        if (Math.abs(moved) < 0.0001) continue;
+        const speed = clamp(moved, -TOUCH_DEPTH_MAX, TOUCH_DEPTH_MAX);
+        glide.shed[axis] = moved - speed;
         const fingers = moving ? recent.reduce((sum, p) => sum + p[axis], 0) / time : 0;
         const ask = s.touchMove[axis] + fingers * TOUCH_GLIDE_REACH_MS;
         glide.v[axis] = speed;
@@ -1285,9 +1295,14 @@ function SceneController({
           const ms = glide.ms[axis];
           if (ms > 0)
             s.velocity[axis] += glide.v[axis] * ms * (glideShare(Math.min(1, glide.t / ms)) - glideShare(Math.min(1, from / ms)));
+          const shed = TOUCH_GLIDE_SHED_MS;
+          if (glide.shed[axis])
+            s.velocity[axis] +=
+              glide.shed[axis] * shed * (shedShare(Math.min(1, glide.t / shed)) - shedShare(Math.min(1, from / shed)));
         }
         s.velocity.z = clamp(s.velocity.z, -capZ, capZ);
-        if (glide.t >= Math.max(glide.ms.x, glide.ms.y, glide.ms.z)) s.glide = null;
+        const shedding = glide.shed.x || glide.shed.y || glide.shed.z ? TOUCH_GLIDE_SHED_MS : 0;
+        if (glide.t >= Math.max(glide.ms.x, glide.ms.y, glide.ms.z, shedding)) s.glide = null;
       }
       s.targetVel.x = 0;
       s.targetVel.y = 0;

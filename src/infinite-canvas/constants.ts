@@ -62,6 +62,13 @@ export const TOUCH_GLIDE_REACH_MS = 333;
 export const TOUCH_GLIDE_MAX_MS = 1000;
 /** …and takes at least this long, so even a short one eases out. */
 export const TOUCH_GLIDE_MIN_MS = 120;
+/** Sideways the gallery goes as fast as the fingers (it follows them), so a
+ *  pan can be well above the wheel's top speed when they lift. Whatever is
+ *  above it falls away over this long, starting at once and settling gently,
+ *  and the rest glides out as depth does. Carried on at its own speed, a
+ *  fast pan flew off: "the side way pan glides too fast now" (the owner,
+ *  8 Nov, after 1500px/s went 220 units instead of ~85). */
+export const TOUCH_GLIDE_SHED_MS = 200;
 /** The fingers' speed is read over their last this many milliseconds… */
 export const TOUCH_FLING_WINDOW_MS = 80;
 /** …unless they had been still for this long before lifting: then it's none. */
