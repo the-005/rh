@@ -37,8 +37,7 @@ import {
   TOUCH_FLING_WINDOW_MS,
   TOUCH_GLIDE_END,
   TOUCH_GLIDE_MAX,
-  TOUCH_GLIDE_REACH_MS,
-  TOUCH_GLIDE_TAU_MAX_MS,
+  TOUCH_GLIDE_PER_MS,
   TOUCH_PAN_PER_PX,
   TOUCH_PINCH_PER_PX,
   TOUCH_SMOOTH_MS,
@@ -871,13 +870,9 @@ type ControllerState = {
   /** Their recent moves, each with the time it took, for the glide's speed. */
   touchSamples: (Vec3 & { t: number; dt: number })[];
   lastTouchAt: number;
-  /** The glide after the fingers lift: its speed on each axis, in gallery
-   *  units per millisecond, and how quickly that speed falls (it drops by e
-   *  every `tau` milliseconds); null when still. */
-  glide: { v: Vec3; tau: Vec3 } | null;
+  /** The glide after the fingers lift, in gallery units per millisecond; null when still. */
+  glide: Vec3 | null;
   lastFrameAt: number;
-  /** How long the last frame took, in milliseconds. */
-  frameMs: number;
   lastChunkKey: string;
   lastChunkUpdate: number;
   pendingChunk: { cx: number; cy: number; cz: number } | null;
@@ -903,7 +898,6 @@ const createInitialState = (camZ: number): ControllerState => ({
   lastTouchAt: 0,
   glide: null,
   lastFrameAt: 0,
-  frameMs: 16.7,
   lastChunkKey: "",
   lastChunkUpdate: 0,
   pendingChunk: null,
@@ -1026,37 +1020,17 @@ function SceneController({
       s.lastTouchAt = t;
     };
 
-    // The glide when the last finger lifts. It starts at the speed the gallery
-    // is moving (it follows the fingers a little behind), so lifting them
-    // doesn't jerk it, and slows smoothly from there, covering what the
-    // fingers had moved that the gallery hadn't shown yet plus their speed's
-    // reach (TOUCH_GLIDE_REACH_MS; none if they had stopped). Added on top of
-    // the catching up, as it was, the glide surged for a few frames and then
-    // braked by up to two thirds within 80ms: "like it would come to a sudden
-    // stop" (the owner, 7 Nov).
-    const releaseGlide = (): ControllerState["glide"] => {
+    // The glide when the last finger lifts: the fingers' speed over their last
+    // moments, or none if they had stopped.
+    const releaseGlide = (): Vec3 | null => {
       const now = performance.now();
       const recent = s.touchSamples.filter((p) => now - p.t <= TOUCH_FLING_WINDOW_MS);
       const last = recent[recent.length - 1];
-      const moving = !!last && now - last.t <= TOUCH_FLING_STALE_MS;
+      if (!last || now - last.t > TOUCH_FLING_STALE_MS) return null;
       const time = recent.reduce((sum, p) => sum + p.dt, 0);
-      const v = { x: 0, y: 0, z: 0 };
-      const tau = { x: TOUCH_SMOOTH_MS, y: TOUCH_SMOOTH_MS, z: TOUCH_SMOOTH_MS };
-      for (const axis of ["x", "y", "z"] as const) {
-        const fingers = moving
-          ? clamp(recent.reduce((sum, p) => sum + p[axis], 0) / time, -TOUCH_GLIDE_MAX, TOUCH_GLIDE_MAX)
-          : 0;
-        const distance = s.touchMove[axis] + fingers * TOUCH_GLIDE_REACH_MS;
-        if (Math.abs(distance) < 0.01) continue;
-        const cap = axis === "z" ? TOUCH_DEPTH_MAX : Number.POSITIVE_INFINITY;
-        let speed = clamp(s.velocity[axis] / s.frameMs, -cap, cap);
-        // Already going the other way, or not at all: just cover the distance.
-        if (speed * distance <= 0) speed = clamp(distance / TOUCH_SMOOTH_MS, -cap, cap);
-        // As slow as it may get, a flick's glide stops short of what it asked for.
-        tau[axis] = clamp(distance / speed, TOUCH_SMOOTH_MS, TOUCH_GLIDE_TAU_MAX_MS);
-        v[axis] = Math.abs(distance / tau[axis]) < Math.abs(speed) ? distance / tau[axis] : speed;
-      }
-      return Math.hypot(v.x, v.y, v.z) > TOUCH_GLIDE_END ? { v, tau } : null;
+      const speed = (axis: keyof Vec3) =>
+        clamp(recent.reduce((sum, p) => sum + p[axis], 0) / time, -TOUCH_GLIDE_MAX, TOUCH_GLIDE_MAX);
+      return { x: speed("x"), y: speed("y"), z: speed("z") };
     };
 
     // No preventDefault here: cancelling the start of a touch also cancels the
@@ -1114,8 +1088,6 @@ function SceneController({
       const touches = Array.from(e.touches) as Touch[];
       if (touches.length === 0) {
         s.glide = releaseGlide();
-        // What the fingers moved that hadn't been shown is in the glide now.
-        s.touchMove = { x: 0, y: 0, z: 0 };
         s.touchSteering = false;
       }
       restartTouch(touches);
@@ -1160,7 +1132,6 @@ function SceneController({
     // Time since the last frame, for the touch glide (capped, as after a pause).
     const dt = s.lastFrameAt ? clamp(now - s.lastFrameAt, 0, 50) : 16.7;
     s.lastFrameAt = now;
-    s.frameMs = Math.max(dt, 1);
     const frozen = isCanvasFrozen();
     // Which video previews play, from what the planes asked for last frame.
     decidePreviews(now);
@@ -1253,14 +1224,16 @@ function SceneController({
 
     // Touch steers directly (constants.ts): the fingers' moves reach the
     // gallery over a couple of frames (TOUCH_SMOOTH_MS, so uneven touch events
-    // don't jerk it), and once they lift it glides on from the speed it has,
-    // slowing smoothly as an iPhone list does (releaseGlide). None of the
-    // wheel's lag above applies. Through depth it never goes faster than the
-    // wheel's top speed; what a fast swipe asks for beyond that arrives over
-    // the next frames.
+    // don't jerk it), and once they lift it glides on at their speed, slowing
+    // as an iPhone list does. None of the wheel's lag above applies. Through
+    // depth it never goes faster than the wheel's top speed; what a fast swipe
+    // asks for beyond that arrives over the next frames.
     const m = s.touchMove;
     if (!frozen && (s.touchSteering || s.glide || Math.abs(m.x) + Math.abs(m.y) + Math.abs(m.z) > 0.001)) {
       const share = 1 - Math.exp(-dt / TOUCH_SMOOTH_MS);
+      const gliding = !s.touchSteering && s.glide;
+      // Through depth, the fingers' part comes first and the glide gets what's
+      // left under the cap; together they never pass the wheel's top speed.
       const capZ = TOUCH_DEPTH_MAX * dt;
       const take = { x: m.x * share, y: m.y * share, z: clamp(m.z * share, -capZ, capZ) };
       m.x -= take.x;
@@ -1269,15 +1242,13 @@ function SceneController({
       s.velocity.x = take.x;
       s.velocity.y = take.y;
       s.velocity.z = take.z;
-      const glide = s.glide;
-      if (glide && !s.touchSteering) {
-        // Exactly the distance its falling speed covers in this frame, however long the frame was.
-        for (const axis of ["x", "y", "z"] as const) {
-          const fade = Math.exp(-dt / glide.tau[axis]);
-          s.velocity[axis] += glide.v[axis] * glide.tau[axis] * (1 - fade);
-          glide.v[axis] *= fade;
-        }
-        if (Math.hypot(glide.v.x, glide.v.y, glide.v.z) < TOUCH_GLIDE_END) s.glide = null;
+      if (gliding && s.glide) {
+        s.velocity.x += s.glide.x * dt;
+        s.velocity.y += s.glide.y * dt;
+        s.velocity.z += clamp(s.glide.z * dt, -capZ - take.z, capZ - take.z);
+        const slow = TOUCH_GLIDE_PER_MS ** dt;
+        s.glide = { x: s.glide.x * slow, y: s.glide.y * slow, z: s.glide.z * slow };
+        if (Math.hypot(s.glide.x, s.glide.y, s.glide.z) < TOUCH_GLIDE_END) s.glide = null;
       }
       s.targetVel.x = 0;
       s.targetVel.y = 0;
