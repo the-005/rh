@@ -209,6 +209,7 @@ When `showDebug` is true:
 | Phone gallery texture size / upload budget | `PHONE_TEXTURE_PX` / `UPLOAD_BUDGET_MS` in `texture-manager.ts` | 512px / 4ms a frame |
 | Touch: glide speed read over / none if still for | `TOUCH_FLING_WINDOW_MS` / `TOUCH_FLING_STALE_MS` | 80ms / 50ms |
 | Touch: swipe direction decided after | `TOUCH_AXIS_LOCK_PX` | 8px |
+| Canvas pixel ratio | `dpr` in `InfiniteCanvasScene` (`scene.tsx`) | at most 2 on touch screens (1.25 until 7 Nov: a 3x phone drew the gallery at 42% of its pixels, softer than a computer), 1.5 otherwise |
 | Camera FOV | `cameraFov={48}` in `src/app/index.tsx` | 48° vertical at aspect ≥ 1; widens on narrower viewports (horizontal-coverage floor, capped 95°) via `AdaptiveFov` in `scene.tsx` |
 
 ### Path alias

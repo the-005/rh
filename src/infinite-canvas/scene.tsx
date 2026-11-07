@@ -1418,7 +1418,12 @@ export function InfiniteCanvasScene({
 }: InfiniteCanvasProps) {
   const debugElRef = React.useRef<HTMLDivElement>(null);
   const isTouchDevice = useIsTouchDevice();
-  const dpr = Math.min(window.devicePixelRatio || 1, isTouchDevice ? 1.25 : 1.5);
+  // At most 2 device pixels per CSS pixel on touch screens: 1.25, as it was,
+  // drew a phone's gallery at 42% of a 3x screen's pixels and stretched it,
+  // softer than on a computer (the owner, 7 Nov). At 2, a gallery image's
+  // ~250px at most is ~500 pixels, which its 512px texture holds
+  // (texture-manager.ts).
+  const dpr = Math.min(window.devicePixelRatio || 1, isTouchDevice ? 2 : 1.5);
   const [tuningGenVersion, setTuningGenVersion] = React.useState(0);
   const [panelOpen, setPanelOpen] = React.useState(false);
   const [showGuides, setShowGuides] = React.useState(false);
