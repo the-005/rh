@@ -369,25 +369,27 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
 
     const closeBtn = overlay.querySelector<HTMLElement>(`.${styles.close}`);
     // Images that rise into the row wait below it, hidden, with the × hidden
-    // too; in a column they wait to its left and slide in, the row's rise
-    // turned with it. The slots are shrunk into the row, so the rise is in
-    // their own units.
+    // too. In a column (a phone held upright) they wait in place and only
+    // fade in, top to bottom (the owner, 8 Nov: "get rid of the slide in
+    // effect"; they slid in from the left, the row's rise turned with it).
+    // The slots are shrunk into the row, so the rise is in their own units.
     const holdBelow = (els: HTMLElement[]) => {
       for (const el of els) {
         el.style.transition = "none";
         el.style.opacity = "0";
-        el.style.transform = vertical ? `translateX(${-RISE_PX / shrink}px)` : `translateY(${RISE_PX / shrink}px)`;
+        if (!vertical) el.style.transform = `translateY(${RISE_PX / shrink}px)`;
       }
       if (closeBtn) {
         closeBtn.style.transition = "none";
         closeBtn.style.opacity = "0";
       }
     };
-    // Each rises from below into its slot, in a wave left to right, but never
-    // before its file has arrived and decoded: one still loading rose in empty
-    // and popped in after (8 of 23 on a phone over 4G, 7 Nov). A late one rises
-    // as soon as it's ready; one ready only once the zoom has begun fades in
-    // where it is. Each clears its own transition once it's done.
+    // Each rises from below into its slot, in a wave left to right (in a
+    // column it fades in, top to bottom), but never before its file has
+    // arrived and decoded: one still loading rose in empty and popped in after
+    // (8 of 23 on a phone over 4G, 7 Nov). A late one rises as soon as it's
+    // ready; one ready only once the zoom has begun fades in where it is. Each
+    // clears its own transition once it's done.
     const riseTimers: number[] = [];
     const riseIn = (els: HTMLElement[]) => {
       const delays = riseDelays(els.length);
