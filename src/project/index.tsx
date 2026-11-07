@@ -23,13 +23,6 @@ const GAP = 4;
 /** The arrival row is never thicker than this fraction of the window across
  *  it (its height; a column's width) (small projects). */
 const MAX_ROW_HEIGHT_FRAC = 0.5;
-/** A column (a window taller than it's wide) is never thinner than this
- *  fraction of the window's width, running off the bottom of the window when
- *  the project is long: fitted to the height, as a row fits the width, its
- *  images came out ~20px wide on a phone, a line of specks the zoom then blew
- *  up 18 times (the owner, 7 Nov: the transition "looks bad"). At a third of a
- *  phone's width, four or five show, and the zoom grows them under 3 times. */
-const MIN_COLUMN_FRAC = 0.36;
 /** After arrival the whole row scales up to fill this fraction of the window
  *  across it (its height; a column's width) and becomes a strip you scroll through. */
 const STRIP_HEIGHT_FRAC = 1;
@@ -190,8 +183,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   const along = images.map((img) => (vertical ? img.height / img.width : img.width / img.height));
   const sumAlong = along.reduce((sum, a) => sum + a, 0);
   const availMain = mainLen - MARGIN * 2 - GAP * (count - 1);
-  const fitted = availMain / Math.max(sumAlong, 0.0001);
-  const rowSize = Math.min(crossLen * MAX_ROW_HEIGHT_FRAC, vertical ? Math.max(fitted, crossLen * MIN_COLUMN_FRAC) : fitted);
+  const rowSize = Math.min(crossLen * MAX_ROW_HEIGHT_FRAC, availMain / Math.max(sumAlong, 0.0001));
   const stripSize = crossLen * STRIP_HEIGHT_FRAC;
 
   // The strip is laid out at its final size from the start, as on
@@ -213,9 +205,6 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     rowAt += along[k] * rowSize + GAP;
   }
   const stripLen = count ? starts[count - 1] + lengths[count - 1] : 0;
-  // Which images the arrival shows: all of a row, the top of a column that runs
-  // off the window. Only those rise in a wave, and the zoom waits for them.
-  const onScreen = rowStarts.map((at) => at < mainLen);
   // The strip ends when its last image reaches the far edge.
   const maxScroll = inStrip ? Math.max(0, stripLen - mainLen) : 0;
   // A position along the strip as a transform.
@@ -225,7 +214,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
   // strip's thickness: full size if it ends on screen, otherwise its size as it
   // leaves the window.
   const peaks = starts.map((at, k) => {
-    const e = at < mainLen ? 1 : Math.max(0, Math.min(1, (mainLen - rowStarts[k]) / (at - rowStarts[k])));
+    const e = at < mainLen ? 1 : Math.min(1, (mainLen - rowStarts[k]) / (at - rowStarts[k]));
     return shrink + (1 - shrink) * e;
   });
   // Left to the zoom, the browser decodes the big ones mid-zoom, larger each
@@ -401,15 +390,12 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     // where it is. Each clears its own transition once it's done.
     const riseTimers: number[] = [];
     const riseIn = (els: HTMLElement[]) => {
-      // The wave runs over the images on screen; any below the window go at once.
-      const shown = els.filter((el) => onScreen[Number(el.dataset.pos)]);
-      const delays = riseDelays(shown.length);
+      const delays = riseDelays(els.length);
       const t0 = performance.now();
-      els.forEach((el) => {
-        const delay = delays[shown.indexOf(el)] ?? 0;
+      els.forEach((el, j) => {
         const go = () => {
           const late = zoomStartedRef.current;
-          const wait = late ? 0 : Math.max(0, delay - (performance.now() - t0));
+          const wait = late ? 0 : Math.max(0, delays[j] - (performance.now() - t0));
           el.style.transition = late
             ? "opacity 0.3s ease"
             : `opacity 0.45s ease ${Math.round(wait)}ms, transform ${RISE_MS}ms ${ENTRY_EASE} ${Math.round(wait)}ms`;
@@ -525,7 +511,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     }
 
     // Direct link (nothing flies in): the page is white from its first frame
-    // and stays empty until every image the row shows has loaded. Then the whole
+    // and stays empty until every image in the row has loaded. Then the whole
     // row rises in, the first image leading, and the zoom follows as usual.
     // It used to fade in from transparent over the canvas, which showed black
     // before the canvas had drawn.
@@ -541,11 +527,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
             el.addEventListener("load", () => resolve(), { once: true });
             el.addEventListener("error", () => resolve(), { once: true });
           });
-    const shownImgs = imgs.filter((el) => onScreen[Number(el.dataset.pos)]);
-    Promise.race([
-      Promise.all(shownImgs.map(loaded)),
-      new Promise((resolve) => setTimeout(resolve, ROW_LOAD_MAX_MS)),
-    ]).then(() => {
+    Promise.race([Promise.all(imgs.map(loaded)), new Promise((resolve) => setTimeout(resolve, ROW_LOAD_MAX_MS))]).then(() => {
       if (canceled) return;
       riseIn(imgs);
       setArriving(true);
@@ -565,8 +547,7 @@ export function ProjectPage({ id, onClose }: { id: string; onClose: () => void }
     // used to count from the click, assuming the handover came at the flight's
     // end; on a phone over 4G it came 0.7s later and the zoom began while the
     // last images were still rising); on a direct link, the whole row's.
-    const rising = onScreen.filter((shown, k) => shown && !(flew && k === 0)).length;
-    const settleAt = (riseDelays(rising).at(-1) ?? 0) + RISE_MS + FUSE_PAUSE_MS;
+    const settleAt = (riseDelays(flew ? images.length - 1 : images.length).at(-1) ?? 0) + RISE_MS + FUSE_PAUSE_MS;
     let canceled = false;
     // Run from script rather than as a CSS transition. A transition hands each
     // image to the compositor as its own layer, drawn once and then resized
